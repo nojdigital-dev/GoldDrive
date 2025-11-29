@@ -70,7 +70,8 @@ const AdminDashboard = () => {
     try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-            const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+            // Verifica se é admin sem travar se der erro
+            const { data } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
             setAdminProfile(data);
             if (data?.role !== 'admin') {
                 showError("Acesso restrito.");
@@ -79,23 +80,23 @@ const AdminDashboard = () => {
             }
         }
 
-        // 1. Buscar Corridas
-        const { data: ridesData } = await supabase
+        // 1. Buscar Corridas (Query direta para evitar complexidade excessiva de FK)
+        const { data: ridesData, error: rideError } = await supabase
             .from('rides')
             .select(`*, driver:profiles!public_rides_driver_id_fkey(*), customer:profiles!public_rides_customer_id_fkey(*)`)
             .order('created_at', { ascending: false });
 
+        if (rideError) throw rideError;
+
         const currentRides = ridesData || [];
         setRides(currentRides);
 
-        // 2. Buscar Perfis
-        const { data: profilesData, error: profileError } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
+        // 2. Buscar Perfis - Separando em queries para evitar timeout ou erro de RLS
+        const { data: clientsData } = await supabase.from('profiles').select('*').eq('role', 'client').order('created_at', { ascending: false });
+        const { data: driversData } = await supabase.from('profiles').select('*').eq('role', 'driver').order('created_at', { ascending: false });
         
-        if (profileError) console.error("Erro profiles:", profileError);
-
-        const allProfiles = profilesData || [];
-        setPassengers(allProfiles.filter((p: any) => p.role === 'client'));
-        setDrivers(allProfiles.filter((p: any) => p.role === 'driver'));
+        setPassengers(clientsData || []);
+        setDrivers(driversData || []);
 
         // 3. Calcular Estatísticas
         const today = new Date().toDateString();
@@ -130,19 +131,20 @@ const AdminDashboard = () => {
             activeRides: activeCount
         });
 
-        // Mock Transactions
+        // Mock Transactions baseadas nas corridas
         const recentTrans = currentRides.slice(0, 15).map(r => ({
             id: r.id, 
             date: r.created_at, 
             amount: Number(r.platform_fee || 0), 
-            description: `Taxa da Corrida`,
+            description: `Taxa Corrida #${r.id.substring(0,4)}`,
             status: 'completed',
             user: r.driver?.first_name || 'Motorista'
         }));
         setTransactions(recentTrans);
 
     } catch (e: any) {
-        showError("Erro ao carregar: " + e.message);
+        console.error(e);
+        showError("Erro ao carregar dados: " + e.message);
     } finally {
         setLoading(false);
     }
@@ -226,7 +228,6 @@ const AdminDashboard = () => {
               <div className="flex flex-col md:flex-row justify-between items-center bg-white/40 dark:bg-slate-900/40 p-4 rounded-2xl backdrop-blur-md gap-4">
                    <div className="flex gap-4 text-sm font-bold text-muted-foreground w-full md:w-auto">
                        <div className="flex items-center gap-2"><Users className="w-4 h-4"/> Total: <span className="text-foreground">{data.length}</span></div>
-                       <div className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-green-500"/> Ativos: <span className="text-foreground">{data.length}</span></div>
                    </div>
                    <div className="relative w-full md:w-64">
                        <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
@@ -370,16 +371,6 @@ const AdminDashboard = () => {
                                           </CardContent>
                                       </Card>
                                   </div>
-
-                                  <Card className="border-0 shadow-xl bg-slate-900 text-white rounded-[32px] overflow-hidden relative h-auto">
-                                      <div className="absolute top-0 right-0 w-64 h-64 bg-yellow-500 rounded-full blur-[80px] opacity-20" />
-                                      <CardHeader className="relative z-10 pb-2"><CardTitle>Status da Frota</CardTitle></CardHeader>
-                                      <CardContent className="relative z-10 space-y-6">
-                                          <div className="flex items-center justify-between"><div className="flex items-center gap-3"><div className="w-3 h-3 bg-green-500 rounded-full shadow-[0_0_10px_#22c55e]" /> <span>Em Corrida</span></div><span className="font-bold text-2xl">{stats.activeRides}</span></div>
-                                          <div className="flex items-center justify-between"><div className="flex items-center gap-3"><div className="w-3 h-3 bg-blue-500 rounded-full" /> <span>Disponíveis</span></div><span className="font-bold text-2xl">{Math.max(0, drivers.length - stats.activeRides)}</span></div>
-                                          <div className="pt-4 border-t border-white/10"><Button className="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold h-12 rounded-xl">Enviar Comunicado</Button></div>
-                                      </CardContent>
-                                  </Card>
                               </div>
                           </div>
                       </div>
@@ -391,7 +382,7 @@ const AdminDashboard = () => {
                            <CardHeader className="flex flex-row items-center justify-between px-8 pt-8"><div><CardTitle className="text-2xl">Gerenciamento de Corridas</CardTitle><CardDescription>Total de {rides.length} corridas</CardDescription></div><div className="flex items-center gap-3"><Select value={filterStatus} onValueChange={setFilterStatus}><SelectTrigger className="w-[180px] h-10 rounded-xl bg-white dark:bg-slate-800"><SelectValue placeholder="Status" /></SelectTrigger><SelectContent><SelectItem value="ALL">Todos os Status</SelectItem><SelectItem value="COMPLETED">Finalizadas</SelectItem><SelectItem value="CANCELLED">Canceladas</SelectItem><SelectItem value="IN_PROGRESS">Em Andamento</SelectItem></SelectContent></Select></div></CardHeader>
                            <CardContent className="p-0">
                                <Table>
-                                   <TableHeader className="bg-slate-50/50 dark:bg-slate-800/50"><TableRow><TableHead className="pl-8">ID</TableHead><TableHead>Passageiro</TableHead><TableHead>Motorista</TableHead><TableHead>Status</TableHead><TableHead className="text-right pr-8">Valor</TableHead></TableRow></TableHeader>
+                                   <TableHeader className="bg-slate-50/50 dark:bg-slate-800/50"><TableRow><TableHead className="pl-8">ID</TableHead><TableHead>Passageiro</TableHead><TableHead>Motorista</TableHead><TableHead>Status</TableHead><TableHead>Taxa App</TableHead><TableHead className="text-right pr-8">Valor Total</TableHead></TableRow></TableHeader>
                                    <TableBody>
                                        {rides.filter(r => filterStatus === 'ALL' ? true : r.status === filterStatus).map(r => (
                                            <TableRow key={r.id} onClick={()=>setSelectedRide(r)} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-border/50">
@@ -399,7 +390,8 @@ const AdminDashboard = () => {
                                                <TableCell><div className="flex items-center gap-3"><Avatar className="w-8 h-8"><AvatarImage src={r.customer?.avatar_url}/><AvatarFallback>{r.customer?.first_name?.[0]}</AvatarFallback></Avatar><span className="font-medium">{r.customer?.first_name || 'Usuário'}</span></div></TableCell>
                                                <TableCell>{r.driver ? <div className="flex items-center gap-3"><Avatar className="w-8 h-8"><AvatarImage src={r.driver?.avatar_url}/><AvatarFallback>{r.driver?.first_name?.[0]}</AvatarFallback></Avatar><div><p className="font-medium text-sm">{r.driver.first_name}</p></div></div> : <span className="text-muted-foreground text-sm italic">--</span>}</TableCell>
                                                <TableCell><Badge className={`rounded-lg px-3 py-1 ${r.status === 'COMPLETED' ? 'bg-green-100 text-green-700' : r.status === 'CANCELLED' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>{r.status}</Badge></TableCell>
-                                               <TableCell className="text-right pr-8 font-bold text-base">R$ {r.price}</TableCell>
+                                               <TableCell className="font-bold text-slate-500">R$ {Number(r.platform_fee || 0).toFixed(2)}</TableCell>
+                                               <TableCell className="text-right pr-8 font-bold text-base">R$ {Number(r.price).toFixed(2)}</TableCell>
                                            </TableRow>
                                        ))}
                                    </TableBody>
@@ -412,7 +404,7 @@ const AdminDashboard = () => {
                   {activeTab === 'users' && <UserManagementTable data={passengers} type="client" />}
                   {activeTab === 'drivers' && <UserManagementTable data={drivers} type="driver" />}
 
-                  {/* --- TAB: FINANCEIRO (Restaurado e Melhorado) --- */}
+                  {/* --- TAB: FINANCEIRO --- */}
                   {activeTab === 'finance' && (
                       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-8">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -438,24 +430,6 @@ const AdminDashboard = () => {
                                        </div>
                                    </div>
                               </div>
-
-                              <div className="space-y-4">
-                                  <div className="grid grid-cols-2 gap-4">
-                                      <Card className="rounded-[24px] border-0 shadow-lg bg-green-500 text-white p-6 flex flex-col justify-center items-center text-center">
-                                          <TrendingUp className="w-8 h-8 mb-2" />
-                                          <p className="font-bold text-sm uppercase opacity-90">Entradas (Mês)</p>
-                                          <p className="text-2xl font-black">+ R$ {stats.adminRevenue.toFixed(2)}</p>
-                                      </Card>
-                                      <Card className="rounded-[24px] border-0 shadow-lg bg-red-500 text-white p-6 flex flex-col justify-center items-center text-center">
-                                          <LogOut className="w-8 h-8 mb-2" />
-                                          <p className="font-bold text-sm uppercase opacity-90">Saídas (Mês)</p>
-                                          <p className="text-2xl font-black">- R$ 0.00</p>
-                                      </Card>
-                                  </div>
-                                  <Button className="w-full h-16 rounded-[24px] text-lg font-bold bg-white text-black hover:bg-gray-100 shadow-xl border border-gray-200">
-                                      <Wallet className="mr-2" /> Solicitar Saque
-                                  </Button>
-                              </div>
                           </div>
 
                           <Card className="border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] overflow-hidden">
@@ -479,7 +453,7 @@ const AdminDashboard = () => {
                       </div>
                   )}
 
-                  {/* --- TAB: CONFIGURAÇÕES (Restaurada e Completa) --- */}
+                  {/* --- TAB: CONFIGURAÇÕES --- */}
                   {activeTab === 'config' && (
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in fade-in slide-in-from-bottom-8">
                           <Card className="border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] h-fit">
@@ -494,49 +468,12 @@ const AdminDashboard = () => {
                                           <Input type="number" value={config.platformFee} onChange={e => setConfig({...config, platformFee: e.target.value})} className="rounded-xl h-12" />
                                           <span className="text-muted-foreground font-bold">%</span>
                                       </div>
-                                      <p className="text-xs text-muted-foreground">Porcentagem retida de cada corrida.</p>
-                                  </div>
-                                  <Separator />
-                                  <div className="space-y-2">
-                                      <Label>Preço Mínimo da Corrida (R$)</Label>
-                                      <Input type="number" value={config.minRidePrice} onChange={e => setConfig({...config, minRidePrice: e.target.value})} className="rounded-xl h-12" />
                                   </div>
                               </CardContent>
                               <CardFooter>
                                   <Button onClick={handleSaveConfig} className="w-full h-12 rounded-xl font-bold bg-slate-900 text-white"><Save className="w-4 h-4 mr-2" /> Salvar Alterações</Button>
                               </CardFooter>
                           </Card>
-
-                          <div className="space-y-6">
-                              <Card className="border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px]">
-                                  <CardHeader><CardTitle className="flex items-center gap-2"><Smartphone className="w-5 h-5" /> Controle do App</CardTitle></CardHeader>
-                                  <CardContent className="space-y-6">
-                                      <div className="flex items-center justify-between">
-                                          <div className="space-y-0.5">
-                                              <Label className="text-base">Modo Manutenção</Label>
-                                              <p className="text-xs text-muted-foreground">Bloqueia acesso de todos os usuários.</p>
-                                          </div>
-                                          <Switch checked={config.maintenanceMode} onCheckedChange={c => setConfig({...config, maintenanceMode: c})} />
-                                      </div>
-                                      <Separator />
-                                      <div className="flex items-center justify-between">
-                                          <div className="space-y-0.5">
-                                              <Label className="text-base">Permitir Novos Cadastros</Label>
-                                              <p className="text-xs text-muted-foreground">Aceitar novos motoristas e passageiros.</p>
-                                          </div>
-                                          <Switch checked={config.allowRegistrations} onCheckedChange={c => setConfig({...config, allowRegistrations: c})} />
-                                      </div>
-                                  </CardContent>
-                              </Card>
-
-                              <Card className="border-0 shadow-xl bg-slate-900 text-white rounded-[32px] overflow-hidden">
-                                  <CardHeader><CardTitle className="flex items-center gap-2 text-red-500"><AlertTriangle className="w-5 h-5" /> Zona de Perigo</CardTitle></CardHeader>
-                                  <CardContent className="space-y-4">
-                                      <p className="text-sm text-gray-400">Ações irreversíveis que afetam toda a base de dados.</p>
-                                      <Button variant="destructive" className="w-full h-12 rounded-xl font-bold">Limpar Cache de Sessões</Button>
-                                  </CardContent>
-                              </Card>
-                          </div>
                       </div>
                   )}
               </div>
@@ -557,7 +494,7 @@ const AdminDashboard = () => {
       </Dialog>
 
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-          <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir Usuário?</AlertDialogTitle><AlertDialogDescription>Isso removerá o perfil do sistema. A conta de login permanecerá mas sem acesso aos dados.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={handleDeleteUser} className="bg-red-600">Excluir</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+          <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir Usuário?</AlertDialogTitle><AlertDialogDescription>Isso removerá o perfil do sistema.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={handleDeleteUser} className="bg-red-600">Excluir</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
       </AlertDialog>
 
       {/* Detalhes da Corrida Modal */}
@@ -569,9 +506,16 @@ const AdminDashboard = () => {
                       <div><p className="text-xs font-bold text-muted-foreground uppercase">Origem</p><p className="font-medium text-lg">{selectedRide?.pickup_address}</p></div>
                       <div><p className="text-xs font-bold text-muted-foreground uppercase">Destino</p><p className="font-medium text-lg">{selectedRide?.destination_address}</p></div>
                   </div>
+                  
                   <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl flex items-center justify-between">
                        <div className="flex items-center gap-3"><Avatar><AvatarImage src={selectedRide?.driver?.avatar_url} /><AvatarFallback>DR</AvatarFallback></Avatar><div><p className="font-bold">{selectedRide?.driver?.first_name || 'Sem motorista'}</p></div></div>
-                       <div className="text-right"><p className="text-xs text-muted-foreground uppercase font-bold">Total</p><p className="text-2xl font-black text-green-600">R$ {selectedRide?.price}</p></div>
+                  </div>
+
+                  {/* Resumo Financeiro Admin */}
+                  <div className="space-y-2 border-t pt-4">
+                      <div className="flex justify-between"><span className="text-sm text-muted-foreground">Preço Total</span><span className="font-bold">R$ {Number(selectedRide?.price).toFixed(2)}</span></div>
+                      <div className="flex justify-between"><span className="text-sm text-muted-foreground">Ganho Motorista</span><span className="font-bold">R$ {Number(selectedRide?.driver_earnings).toFixed(2)}</span></div>
+                      <div className="flex justify-between text-green-600"><span className="text-sm font-bold uppercase">Taxa Admin (Lucro)</span><span className="font-black">R$ {Number(selectedRide?.platform_fee).toFixed(2)}</span></div>
                   </div>
               </div>
           </DialogContent>

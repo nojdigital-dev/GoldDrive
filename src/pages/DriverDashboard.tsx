@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Wallet, MapPin, Navigation, Shield, DollarSign, Star, Menu, History, CheckCircle, Car, Calendar, ArrowRight, AlertTriangle, ChevronRight, TrendingUp } from "lucide-react";
+import { Wallet, MapPin, Navigation, Shield, DollarSign, Star, Menu, History, CheckCircle, Car, Calendar, ArrowRight, AlertTriangle, ChevronRight, TrendingUp, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -28,6 +28,7 @@ const DriverDashboard = () => {
   const [incomingRide, setIncomingRide] = useState<RideData | null>(null);
   const [timer, setTimer] = useState(15);
   const [driverProfile, setDriverProfile] = useState<any>(null);
+  const [showChat, setShowChat] = useState(false);
   
   // Modals Control
   const [showCarForm, setShowCarForm] = useState(false);
@@ -220,8 +221,22 @@ const DriverDashboard = () => {
                         </div>
 
                         <div className="flex flex-col gap-3">
-                             {ride?.status === 'ACCEPTED' && (<div className="flex gap-3"><Button variant="outline" className="flex-1 border-red-200 text-red-600 hover:bg-red-50 h-14 rounded-xl font-bold" onClick={handleCancelClick}>Cancelar</Button><Button className="flex-[2] h-14 bg-black hover:bg-zinc-800 text-white font-bold rounded-xl" onClick={() => confirmArrival(ride!.id)}><MapPin className="mr-2 h-5 w-5" /> Confirmar Chegada</Button></div>)}
-                             {ride?.status === 'ARRIVED' && (<div className="flex gap-3"><Button variant="outline" className="flex-1 border-red-200 text-red-600 hover:bg-red-50 h-14 rounded-xl font-bold" onClick={handleCancelClick}>Cancelar</Button><Button className="flex-[2] h-14 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl animate-pulse" onClick={() => startRide(ride!.id)}><Navigation className="mr-2 h-5 w-5" /> Iniciar Corrida</Button></div>)}
+                             {/* BOTÃO DE CHAT EMBUTIDO */}
+                             <div 
+                                className="bg-gray-100 hover:bg-gray-200 p-3 rounded-2xl flex items-center gap-3 cursor-pointer transition-colors"
+                                onClick={() => setShowChat(true)}
+                             >
+                                <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-slate-900 shadow-sm">
+                                    <MessageCircle className="w-5 h-5" />
+                                </div>
+                                <div className="flex-1 text-left">
+                                    <p className="text-xs font-bold text-gray-500 uppercase">Mensagem para Passageiro</p>
+                                    <p className="text-sm font-medium text-slate-900">Abrir chat...</p>
+                                </div>
+                             </div>
+
+                             {ride?.status === 'ACCEPTED' && (<div className="flex gap-3"><Button variant="ghost" className="flex-1 text-red-500 hover:bg-red-50 h-14 rounded-xl font-bold" onClick={handleCancelClick}>Cancelar</Button><Button className="flex-[2] h-14 bg-black hover:bg-zinc-800 text-white font-bold rounded-xl" onClick={() => confirmArrival(ride!.id)}><MapPin className="mr-2 h-5 w-5" /> Confirmar Chegada</Button></div>)}
+                             {ride?.status === 'ARRIVED' && (<div className="flex gap-3"><Button variant="ghost" className="flex-1 text-red-500 hover:bg-red-50 h-14 rounded-xl font-bold" onClick={handleCancelClick}>Cancelar</Button><Button className="flex-[2] h-14 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl animate-pulse" onClick={() => startRide(ride!.id)}><Navigation className="mr-2 h-5 w-5" /> Iniciar Corrida</Button></div>)}
                              {ride?.status === 'IN_PROGRESS' && (<Button className="w-full h-14 text-xl bg-black hover:bg-zinc-800 text-white font-bold rounded-xl" onClick={handleFinish}><Shield className="mr-2 h-6 w-6" /> Finalizar Viagem</Button>)}
                         </div>
                      </div>
@@ -295,7 +310,7 @@ const DriverDashboard = () => {
       </Dialog>
 
       <AlertDialog open={showCancelAlert} onOpenChange={setShowCancelAlert}>
-          <AlertDialogContent className="rounded-3xl bg-white border-0"><AlertDialogHeader><AlertDialogTitle className="flex items-center gap-2 text-red-600"><AlertTriangle /> Cancelar Corrida?</AlertDialogTitle><AlertDialogDescription>Taxa de R$ 5,00 será cobrada e sua taxa de aceitação pode cair.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel className="rounded-xl h-12">Voltar</AlertDialogCancel><AlertDialogAction onClick={confirmCancel} className="bg-red-600 hover:bg-red-700 rounded-xl h-12 font-bold">Sim, Cancelar</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+          <AlertDialogContent className="rounded-3xl bg-white border-0"><AlertDialogHeader><AlertDialogTitle className="flex items-center gap-2 text-red-600"><AlertTriangle /> Cancelar Corrida?</AlertDialogTitle><AlertDialogDescription>Esta ação prejudica sua taxa de aceitação.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel className="rounded-xl h-12">Voltar</AlertDialogCancel><AlertDialogAction onClick={confirmCancel} className="bg-red-600 hover:bg-red-700 rounded-xl h-12 font-bold">Confirmar</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
       </AlertDialog>
 
       {/* MODAL DETALHES DA CORRIDA (HISTÓRICO) */}
@@ -369,13 +384,14 @@ const DriverDashboard = () => {
       )}
 
       {/* CHAT FLUTUANTE */}
-      {ride && ['ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(ride.status) && currentUserId && (
+      {showChat && ride && ['ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(ride.status) && currentUserId && (
           <RideChat 
             rideId={ride.id} 
             currentUserId={currentUserId} 
             role="driver"
             otherUserName={ride.client_details?.name || 'Passageiro'}
             otherUserAvatar={ride.client_details?.avatar_url}
+            onClose={() => setShowChat(false)}
           />
       )}
 

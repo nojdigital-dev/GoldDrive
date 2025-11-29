@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import MapComponent from "@/components/MapComponent";
 import { 
-  MapPin, Car, Navigation, Loader2, Star, AlertTriangle, XCircle, ChevronRight, Clock, Wallet, User, ArrowLeft, BellRing, History, X, Flag
+  MapPin, Car, Navigation, Loader2, Star, AlertTriangle, XCircle, ChevronRight, Clock, Wallet, User, ArrowLeft, BellRing, History, X, Flag, CreditCard, Banknote, MessageCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +39,8 @@ const ClientDashboard = () => {
   const [pickup, setPickup] = useState("");
   const [destinationId, setDestinationId] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("");
+  const [paymentMethod, setPaymentMethod] = useState<'WALLET' | 'CASH'>('WALLET');
+  
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [isRequesting, setIsRequesting] = useState(false);
   const [rating, setRating] = useState(0);
@@ -51,6 +53,7 @@ const ClientDashboard = () => {
   const [showCancelAlert, setShowCancelAlert] = useState(false);
   const [showArrivalPopup, setShowArrivalPopup] = useState(false);
   const [showStartPopup, setShowStartPopup] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   
   // Data
   const [historyItems, setHistoryItems] = useState<any[]>([]);
@@ -137,9 +140,18 @@ const ClientDashboard = () => {
     const cat = categories.find(c => c.id === selectedCategoryId);
     if (!dest || !cat) return;
     const price = parseFloat(getPrice(cat.id));
-    if ((userProfile?.balance || 0) < price) { setMissingAmount(price - (userProfile?.balance || 0)); setShowBalanceAlert(true); return; }
+    
+    // Verificação de saldo só se for WALLET
+    if (paymentMethod === 'WALLET' && (userProfile?.balance || 0) < price) { 
+        setMissingAmount(price - (userProfile?.balance || 0)); 
+        setShowBalanceAlert(true); 
+        return; 
+    }
+
     setIsRequesting(true);
-    try { await requestRide(pickup, dest.label, price, dest.distance, cat.name); } 
+    try { 
+        await requestRide(pickup, dest.label, price, dest.distance, cat.name, paymentMethod); 
+    } 
     catch (e: any) { showError(e.message); } 
     finally { setIsRequesting(false); }
   };
@@ -216,7 +228,7 @@ const ClientDashboard = () => {
                         {loadingCats ? <div className="py-10 text-center flex flex-col items-center gap-3"><Loader2 className="animate-spin text-yellow-500 w-8 h-8" /><p className="text-gray-400 text-sm">Buscando categorias...</p></div> : 
                          categories.length === 0 ? <div className="py-10 text-center"><p className="text-red-500 font-bold">Sem categorias.</p></div> : 
                         (
-                            <div className="space-y-3 mb-6 max-h-[35vh] overflow-y-auto pr-1 custom-scrollbar">
+                            <div className="space-y-3 mb-4 max-h-[30vh] overflow-y-auto pr-1 custom-scrollbar">
                                 {categories.map((cat) => (
                                     <div key={cat.id} onClick={() => setSelectedCategoryId(cat.id)} className={`relative flex items-center justify-between p-4 rounded-2xl border transition-all cursor-pointer overflow-hidden group ${selectedCategoryId === cat.id ? 'border-yellow-500 bg-yellow-50/50 shadow-md' : 'border-transparent bg-gray-50 hover:bg-white'}`}>
                                         <div className="flex items-center gap-4 z-10">
@@ -228,6 +240,21 @@ const ClientDashboard = () => {
                                 ))}
                             </div>
                         )}
+
+                        {/* Pagamento Seletor */}
+                        <div className="mb-4 bg-gray-50 p-3 rounded-2xl border border-gray-100 flex items-center justify-between cursor-pointer hover:bg-white" onClick={() => setPaymentMethod(prev => prev === 'WALLET' ? 'CASH' : 'WALLET')}>
+                             <div className="flex items-center gap-3">
+                                 <div className="w-10 h-10 bg-black text-white rounded-xl flex items-center justify-center">
+                                     {paymentMethod === 'WALLET' ? <Wallet className="w-5 h-5" /> : <Banknote className="w-5 h-5" />}
+                                 </div>
+                                 <div>
+                                     <p className="text-xs text-gray-400 font-bold uppercase">Pagamento</p>
+                                     <p className="font-bold text-slate-900">{paymentMethod === 'WALLET' ? 'Saldo da Carteira' : 'Dinheiro / PIX na hora'}</p>
+                                 </div>
+                             </div>
+                             <div className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">Trocar</div>
+                        </div>
+
                         <Button className="w-full h-14 text-lg font-bold rounded-2xl bg-black hover:bg-zinc-800" onClick={confirmRide} disabled={!selectedCategoryId || isRequesting || loadingCats}>{isRequesting ? <Loader2 className="animate-spin" /> : "Confirmar GoldDrive"}</Button>
                     </div>
                 )}
@@ -242,6 +269,21 @@ const ClientDashboard = () => {
                                     <div className="text-left flex-1"><h3 className="font-black text-xl text-slate-900 leading-tight">{ride.driver_details?.name}</h3><p className="text-sm text-gray-500">{ride.driver_details?.car_model} • {ride.driver_details?.car_color}</p><div className="bg-slate-900 text-white text-xs font-mono font-bold px-2 py-1 rounded-md inline-block mt-2">{ride.driver_details?.car_plate}</div></div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4"><div className="bg-blue-50 p-3 rounded-2xl text-center"><p className="text-xs text-blue-600 font-bold uppercase mb-1">Status</p><p className="font-black text-blue-900">{ride.status === 'ARRIVED' ? 'Chegou!' : ride.status === 'IN_PROGRESS' ? 'Em Viagem' : 'A Caminho'}</p></div><div className="bg-gray-50 p-3 rounded-2xl text-center"><p className="text-xs text-gray-500 font-bold uppercase mb-1">Chegada</p><p className="font-black text-gray-900">{ride.status === 'ACCEPTED' ? '2 min' : '--'}</p></div></div>
+                                
+                                {/* BOTÃO DE CHAT EMBUTIDO */}
+                                <div 
+                                    className="bg-gray-100 hover:bg-gray-200 p-3 rounded-2xl flex items-center gap-3 cursor-pointer transition-colors"
+                                    onClick={() => setShowChat(true)}
+                                >
+                                    <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-slate-900 shadow-sm">
+                                        <MessageCircle className="w-5 h-5" />
+                                    </div>
+                                    <div className="flex-1 text-left">
+                                        <p className="text-xs font-bold text-gray-500 uppercase">Mensagem para motorista</p>
+                                        <p className="text-sm font-medium text-slate-900">Enviar mensagem...</p>
+                                    </div>
+                                </div>
+
                                 {ride?.status !== 'IN_PROGRESS' && (
                                     <div className="pt-2">
                                         <Button variant="outline" className="border-red-200 text-red-600 hover:bg-red-50 font-bold w-full rounded-xl" onClick={() => setShowCancelAlert(true)}>
@@ -350,7 +392,7 @@ const ClientDashboard = () => {
 
       {/* MODAIS GERAIS */}
       <Dialog open={showBalanceAlert} onOpenChange={setShowBalanceAlert}><DialogContent className="sm:max-w-md bg-white rounded-3xl border-0"><DialogHeader><DialogTitle className="text-red-600 flex items-center gap-2"><Wallet /> Saldo Insuficiente</DialogTitle></DialogHeader><div className="text-center py-6"><p className="text-gray-500 mb-1">Faltam</p><h2 className="text-5xl font-black text-slate-900">R$ {missingAmount.toFixed(2)}</h2></div><DialogFooter><Button className="w-full rounded-xl h-12 font-bold" onClick={() => navigate('/wallet')}>Recarregar Agora</Button></DialogFooter></DialogContent></Dialog>
-      <AlertDialog open={showCancelAlert} onOpenChange={setShowCancelAlert}><AlertDialogContent className="rounded-3xl bg-white border-0"><AlertDialogHeader><AlertDialogTitle className="flex items-center gap-2 text-red-600"><AlertTriangle /> Cancelar Corrida?</AlertDialogTitle><AlertDialogDescription>Taxa de R$ 5,00 será cobrada se o motorista já estiver a caminho.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel className="rounded-xl h-12">Voltar</AlertDialogCancel><AlertDialogAction onClick={() => { cancelRide(ride!.id); setShowCancelAlert(false); }} className="bg-red-600 hover:bg-red-700 rounded-xl h-12 font-bold">Sim, Cancelar</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+      <AlertDialog open={showCancelAlert} onOpenChange={setShowCancelAlert}><AlertDialogContent className="rounded-3xl bg-white border-0"><AlertDialogHeader><AlertDialogTitle className="flex items-center gap-2 text-red-600"><AlertTriangle /> Cancelar Corrida?</AlertDialogTitle><AlertDialogDescription>Deseja realmente cancelar? Uma taxa pode ser cobrada.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel className="rounded-xl h-12">Voltar</AlertDialogCancel><AlertDialogAction onClick={() => { cancelRide(ride!.id); setShowCancelAlert(false); }} className="bg-red-600 hover:bg-red-700 rounded-xl h-12 font-bold">Sim, Cancelar</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
 
       {/* MODAL DETALHES HISTÓRICO */}
       <Dialog open={!!selectedHistoryItem} onOpenChange={(o) => !o && setSelectedHistoryItem(null)}>
@@ -377,13 +419,14 @@ const ClientDashboard = () => {
       </Dialog>
 
       {/* CHAT FLUTUANTE */}
-      {ride && ['ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(ride.status) && currentUserId && (
+      {showChat && ride && ['ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(ride.status) && currentUserId && (
           <RideChat 
             rideId={ride.id} 
             currentUserId={currentUserId} 
             role="client"
             otherUserName={ride.driver_details?.name || 'Motorista'}
             otherUserAvatar={ride.driver_details?.avatar_url}
+            onClose={() => setShowChat(false)}
           />
       )}
       
