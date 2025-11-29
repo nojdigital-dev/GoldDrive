@@ -7,7 +7,6 @@ import L from 'leaflet';
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
 
-// Configura o ícone padrão globalmente
 const DefaultIcon = L.icon({
     iconUrl: typeof icon === 'string' ? icon : (icon as any).src,
     shadowUrl: typeof iconShadow === 'string' ? iconShadow : (iconShadow as any).src,
@@ -17,11 +16,27 @@ const DefaultIcon = L.icon({
 
 L.Marker.prototype.options.icon = DefaultIcon;
 
-// Componente para atualizar o centro do mapa
+// Componente auxiliar para corrigir renderização ao redimensionar
+const MapResizer = () => {
+  const map = useMap();
+  useEffect(() => {
+    // Força o leaflet a recalcular o tamanho do container após montar
+    const timer = setTimeout(() => {
+        map.invalidateSize();
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [map]);
+  return null;
+};
+
+// Componente para atualizar o centro do mapa dinamicamente
 const MapUpdater = ({ center }: { center: [number, number] }) => {
   const map = useMap();
   useEffect(() => {
-    map.flyTo(center, 14);
+    map.flyTo(center, 14, {
+        animate: true,
+        duration: 1.5
+    });
   }, [center, map]);
   return null;
 };
@@ -42,23 +57,30 @@ const MapComponent = ({ className = "h-full w-full", showPickup = false, showDes
   }, []);
 
   if (!isMounted) {
-    return <div className="h-full w-full bg-gray-200 animate-pulse flex items-center justify-center text-gray-400">Carregando mapa...</div>;
+    return (
+        <div className="h-full w-full bg-gray-100 flex flex-col items-center justify-center text-gray-400 gap-2">
+            <div className="w-8 h-8 border-4 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
+            <span className="text-sm">Carregando mapa...</span>
+        </div>
+    );
   }
 
   return (
-    <div className={`relative z-0 ${className}`}>
+    <div className={`relative z-0 ${className} bg-gray-100`}>
       <MapContainer 
         center={centerPosition} 
         zoom={13} 
         scrollWheelZoom={true} 
-        className="h-full w-full"
+        className="h-full w-full isolate"
         zoomControl={false}
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
         />
         
+        <MapResizer />
+
         {showPickup && (
             <Marker position={centerPosition}>
               <Popup>Sua Localização</Popup>

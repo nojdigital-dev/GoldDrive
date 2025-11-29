@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
-import { ArrowLeft, Mail, Lock, User, KeyRound } from "lucide-react";
+import { ArrowLeft, Mail, Lock, User, KeyRound, Car, MapPin, Shield, Loader2 } from "lucide-react";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -24,6 +24,23 @@ const Login = () => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
 
+  // Cores dinâmicas baseadas no perfil
+  const getThemeColor = () => {
+    switch(activeTab) {
+        case 'driver': return 'bg-green-600 hover:bg-green-700 ring-green-600';
+        case 'admin': return 'bg-slate-900 hover:bg-slate-800 ring-slate-900';
+        default: return 'bg-blue-600 hover:bg-blue-700 ring-blue-600';
+    }
+  };
+
+  const getRoleName = () => {
+    switch(activeTab) {
+        case 'driver': return 'Motorista';
+        case 'admin': return 'Administrador';
+        default: return 'Passageiro';
+    }
+  };
+
   const resetForm = () => {
     setEmail("");
     setPassword("");
@@ -39,7 +56,6 @@ const Login = () => {
 
   const handleForgotPassword = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    
     if (!email) {
       showError("Digite seu email para recuperar a senha.");
       return;
@@ -50,7 +66,7 @@ const Login = () => {
         redirectTo: window.location.origin + '/update-password',
       });
       if (error) throw error;
-      showSuccess("Email de recuperação enviado! Verifique sua caixa de entrada.");
+      showSuccess("Email enviado! Verifique sua caixa de entrada.");
       setIsForgotPassword(false);
     } catch (e: any) {
       showError(e.message);
@@ -60,40 +76,26 @@ const Login = () => {
   };
 
   const handleAuth = async (e: React.FormEvent) => {
-    e.preventDefault(); // Impede o reload da página ao dar Enter
-    
+    e.preventDefault();
     setLoading(true);
+    
     try {
         if (isSignUp) {
-            // Validações de Cadastro
-            if (!email || !password || !fullName) {
-                showError("Preencha todos os campos.");
-                setLoading(false);
-                return;
-            }
-            if (password !== confirmPassword) {
-                showError("As senhas não coincidem.");
-                setLoading(false);
-                return;
-            }
-            if (password.length < 6) {
-                showError("A senha deve ter pelo menos 6 caracteres.");
-                setLoading(false);
-                return;
-            }
+            // Validações
+            if (!email || !password || !fullName) throw new Error("Preencha todos os campos.");
+            if (password !== confirmPassword) throw new Error("As senhas não coincidem.");
+            if (password.length < 6) throw new Error("Senha muito curta (mínimo 6 caracteres).");
 
-            // Separa nome e sobrenome
             const nameParts = fullName.trim().split(" ");
             const firstName = nameParts[0];
             const lastName = nameParts.slice(1).join(" ") || "";
 
-            // Cadastro
             const { error } = await supabase.auth.signUp({
                 email,
                 password,
                 options: {
                     data: {
-                        role: activeTab, // Usa a aba ativa como role (client, driver, admin)
+                        role: activeTab,
                         first_name: firstName,
                         last_name: lastName,
                         full_name: fullName
@@ -101,7 +103,7 @@ const Login = () => {
                 }
             });
             if (error) throw error;
-            showSuccess("Cadastro realizado! Verifique seu email para confirmar.");
+            showSuccess("Conta criada! Verifique seu email.");
             setIsSignUp(false);
         } else {
             // Login
@@ -114,23 +116,21 @@ const Login = () => {
             navigate(activeTab === 'admin' ? '/admin' : activeTab === 'driver' ? '/driver' : '/client');
         }
     } catch (e: any) {
-        if (e.message && e.message.includes("Invalid login")) {
+        if (e.message.includes("Invalid login")) {
             showError("Email ou senha incorretos.");
         } else {
-            showError(e.message || "Erro desconhecido ao tentar entrar.");
+            showError(e.message);
         }
     } finally {
-        // Garante que o loading pare, exceto se navegou (mas o unmount limpa o state)
-        if (window.location.pathname === '/login') {
-            setLoading(false);
-        }
+        // Delay visual pequeno para evitar flash
+        setTimeout(() => setLoading(false), 500);
     }
   };
 
   if (isForgotPassword) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
-        <Card className="w-full max-w-md shadow-xl">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <Card className="w-full max-w-md shadow-lg">
            <CardHeader>
               <div className="flex items-center gap-2 mb-2">
                  <Button variant="ghost" size="icon" onClick={() => setIsForgotPassword(false)} className="-ml-2">
@@ -138,25 +138,22 @@ const Login = () => {
                  </Button>
                  <CardTitle>Recuperar Senha</CardTitle>
               </div>
-              <CardDescription>Digite seu email para receber o link de redefinição.</CardDescription>
+              <CardDescription>Enviaremos um link para o seu email.</CardDescription>
            </CardHeader>
            <CardContent>
               <form onSubmit={handleForgotPassword} className="space-y-4">
                   <div className="space-y-2">
-                      <Label>Email</Label>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                        <Input 
-                            type="email" 
-                            placeholder="seu@email.com" 
-                            className="pl-9"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                        />
-                      </div>
+                      <Label>Email Cadastrado</Label>
+                      <Input 
+                          type="email" 
+                          placeholder="ex: joao@email.com" 
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          disabled={loading}
+                      />
                   </div>
-                  <Button type="submit" className="w-full" disabled={loading}>
-                      {loading ? "Enviando..." : "Enviar Email"}
+                  <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700" disabled={loading}>
+                      {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Enviar Email"}
                   </Button>
               </form>
            </CardContent>
@@ -166,37 +163,59 @@ const Login = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4 relative overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-900/20 to-purple-900/20 z-0" />
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4 relative overflow-hidden">
+      {/* Background Decorativo */}
+      <div className={`absolute top-0 left-0 right-0 h-1/2 transition-colors duration-500 ease-in-out -z-10 ${
+          activeTab === 'driver' ? 'bg-green-600' : activeTab === 'admin' ? 'bg-slate-900' : 'bg-blue-600'
+      }`} />
       
-      <Card className="w-full max-w-md z-10 shadow-2xl border-0">
-        <CardHeader className="text-center space-y-2 pb-2">
-          <div className="mx-auto w-12 h-12 bg-black rounded-xl flex items-center justify-center mb-2 shadow-lg">
-             <span className="text-white font-bold text-xl">Go</span>
-          </div>
-          <CardTitle className="text-2xl font-bold">{isSignUp ? "Crie sua Conta" : "Login"}</CardTitle>
-          <CardDescription>
-            {isSignUp ? "Junte-se a revolução da mobilidade" : "Bem-vindo de volta ao GoMove"}
-          </CardDescription>
+      <div className="mb-8 text-center text-white z-10">
+        <h1 className="text-4xl font-bold tracking-tight mb-2">GoMove</h1>
+        <p className="opacity-90">Sua plataforma de mobilidade urbana</p>
+      </div>
+
+      <Card className="w-full max-w-md z-10 shadow-xl border-0">
+        <CardHeader className="text-center pb-2">
+            <CardTitle className="text-xl">
+                {isSignUp ? "Criar Nova Conta" : "Acessar Plataforma"}
+            </CardTitle>
+            <CardDescription>
+                Selecione seu tipo de perfil abaixo
+            </CardDescription>
         </CardHeader>
         
         <CardContent>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-3 mb-6">
-              <TabsTrigger value="client">Passageiro</TabsTrigger>
-              <TabsTrigger value="driver">Motorista</TabsTrigger>
-              <TabsTrigger value="admin">Admin</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-3 mb-6 bg-gray-100 p-1 rounded-xl">
+              <TabsTrigger value="client" className="data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm rounded-lg transition-all">
+                <div className="flex flex-col items-center gap-1 py-1">
+                    <User className="w-4 h-4" />
+                    <span className="text-xs font-medium">Passageiro</span>
+                </div>
+              </TabsTrigger>
+              <TabsTrigger value="driver" className="data-[state=active]:bg-white data-[state=active]:text-green-600 data-[state=active]:shadow-sm rounded-lg transition-all">
+                <div className="flex flex-col items-center gap-1 py-1">
+                    <Car className="w-4 h-4" />
+                    <span className="text-xs font-medium">Motorista</span>
+                </div>
+              </TabsTrigger>
+              <TabsTrigger value="admin" className="data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm rounded-lg transition-all">
+                <div className="flex flex-col items-center gap-1 py-1">
+                    <Shield className="w-4 h-4" />
+                    <span className="text-xs font-medium">Admin</span>
+                </div>
+              </TabsTrigger>
             </TabsList>
 
             <form onSubmit={handleAuth} className="space-y-4">
                 {isSignUp && (
-                    <div className="space-y-2 animate-in slide-in-from-left-5 fade-in duration-300">
+                    <div className="space-y-2 animate-in slide-in-from-top-2 fade-in">
                         <Label>Nome Completo</Label>
                         <div className="relative">
                             <User className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                             <Input 
-                                placeholder="João da Silva" 
-                                className="pl-9"
+                                placeholder="Seu nome" 
+                                className="pl-9 bg-gray-50 focus:bg-white transition-colors"
                                 value={fullName}
                                 onChange={(e) => setFullName(e.target.value)}
                             />
@@ -211,7 +230,7 @@ const Login = () => {
                     <Input 
                         type="email" 
                         placeholder="seu@email.com" 
-                        className="pl-9"
+                        className="pl-9 bg-gray-50 focus:bg-white transition-colors"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                     />
@@ -223,11 +242,10 @@ const Login = () => {
                     <Label>Senha</Label>
                     {!isSignUp && (
                         <span 
-                            className="text-xs text-blue-600 cursor-pointer hover:underline"
-                            type="button"
+                            className="text-xs text-blue-600 cursor-pointer hover:underline font-medium"
                             onClick={() => setIsForgotPassword(true)}
                         >
-                            Esqueceu?
+                            Esqueceu a senha?
                         </span>
                     )}
                   </div>
@@ -235,7 +253,8 @@ const Login = () => {
                     <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                     <Input 
                         type="password" 
-                        className="pl-9"
+                        placeholder="••••••••"
+                        className="pl-9 bg-gray-50 focus:bg-white transition-colors"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                     />
@@ -243,13 +262,14 @@ const Login = () => {
                 </div>
 
                 {isSignUp && (
-                    <div className="space-y-2 animate-in slide-in-from-left-5 fade-in duration-300">
+                    <div className="space-y-2 animate-in slide-in-from-top-2 fade-in">
                         <Label>Confirmar Senha</Label>
                         <div className="relative">
                             <KeyRound className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                             <Input 
                                 type="password" 
-                                className="pl-9"
+                                placeholder="••••••••"
+                                className="pl-9 bg-gray-50 focus:bg-white transition-colors"
                                 value={confirmPassword}
                                 onChange={(e) => setConfirmPassword(e.target.value)}
                             />
@@ -259,29 +279,37 @@ const Login = () => {
                 
                 <Button 
                     type="submit"
-                    className={`w-full h-12 text-lg font-bold mt-2 ${
-                        activeTab === 'admin' ? 'bg-slate-900 hover:bg-slate-800' : 
-                        activeTab === 'driver' ? 'bg-green-600 hover:bg-green-700' : 
-                        'bg-blue-600 hover:bg-blue-700'
-                    }`}
+                    className={`w-full h-12 text-md font-bold mt-4 transition-all shadow-md ${getThemeColor()}`}
                     disabled={loading}
                 >
-                  {loading ? 'Processando...' : (isSignUp ? 'CADASTRAR' : 'ENTRAR')}
+                  {loading ? (
+                    <>
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                        Acessando...
+                    </>
+                  ) : (
+                    isSignUp ? `Cadastrar como ${getRoleName()}` : `Entrar como ${getRoleName()}`
+                  )}
                 </Button>
             </form>
           </Tabs>
         </CardContent>
         
-        <CardFooter className="flex justify-center text-sm text-muted-foreground pb-6">
-            {isSignUp ? "Já tem conta?" : "Não tem conta?"} 
-            <span 
-                className="text-primary font-bold ml-1 cursor-pointer hover:underline"
+        <CardFooter className="flex justify-center text-sm bg-gray-50/50 py-4 border-t">
+            {isSignUp ? "Já possui uma conta?" : "Novo por aqui?"} 
+            <button 
+                className="text-blue-600 font-bold ml-1 hover:underline focus:outline-none"
                 onClick={toggleMode}
+                type="button"
             >
-                {isSignUp ? "Fazer Login" : "Cadastre-se"}
-            </span>
+                {isSignUp ? "Fazer Login" : "Criar conta grátis"}
+            </button>
         </CardFooter>
       </Card>
+      
+      <div className="mt-8 text-xs text-gray-400 text-center">
+        &copy; 2024 GoMove. Todos os direitos reservados.
+      </div>
     </div>
   );
 };
