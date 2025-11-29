@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, CreditCard, QrCode, Wallet as WalletIcon, CheckCircle2, Loader2 } from "lucide-react";
+import { ArrowLeft, CreditCard, QrCode, Wallet as WalletIcon, CheckCircle2, Loader2, ArrowUpRight, ArrowDownLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useRide } from "@/context/RideContext";
 import { showSuccess, showError } from "@/utils/toast";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const Wallet = () => {
   const navigate = useNavigate();
@@ -37,137 +38,121 @@ const Wallet = () => {
   };
 
   const handleGeneratePIX = () => {
-      if (!amount || Number(amount) <= 0) {
-        showError("Digite um valor válido");
-        return;
-      }
+      if (!amount || Number(amount) <= 0) { showError("Digite um valor válido"); return; }
       setShowQR(true);
   };
 
   const handlePay = async () => {
       if (processing) return;
       setProcessing(true);
-      
       try {
-          // Simula delay de banco (2 segundos)
           await new Promise(resolve => setTimeout(resolve, 2000));
-          
           await addBalance(Number(amount));
-          
           setAmount("");
           setShowQR(false);
-          await fetchData(); // Atualiza saldo na tela
-          
+          await fetchData();
       } catch (error: any) {
-          showError("Erro ao processar pagamento: " + error.message);
+          showError(error.message);
       } finally {
           setProcessing(false);
       }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 pb-20">
-      <div className="flex items-center gap-2 mb-6">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-              <ArrowLeft className="w-6 h-6" />
-          </Button>
-          <h1 className="text-xl font-bold">Minha Carteira</h1>
-      </div>
+    <div className="min-h-screen bg-gray-50 pb-20 font-sans relative overflow-hidden">
+      {/* Background Decor */}
+      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-yellow-400/10 rounded-full blur-[100px] -z-0" />
+      <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-blue-400/10 rounded-full blur-[100px] -z-0" />
 
-      <div className="grid gap-6 max-w-md mx-auto">
-          {/* Card Saldo */}
-          <Card className="bg-black text-white border-0 shadow-xl">
-              <CardContent className="p-6">
-                  <div className="flex justify-between items-start mb-4">
-                      <div>
-                          <p className="text-gray-400 text-sm font-medium">Saldo Disponível</p>
-                          <h2 className="text-4xl font-bold mt-1">R$ {balance.toFixed(2)}</h2>
-                      </div>
-                      <div className="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center">
-                          <WalletIcon className="w-5 h-5 text-white" />
-                      </div>
-                  </div>
-                  <div className="text-xs text-gray-500">
-                      Use seu saldo para pagar corridas automaticamente.
-                  </div>
-              </CardContent>
-          </Card>
+      <div className="p-6 relative z-10 max-w-md mx-auto">
+          {/* Header */}
+          <div className="flex items-center gap-4 mb-8">
+              <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="bg-white hover:bg-white/80 rounded-full shadow-sm">
+                  <ArrowLeft className="w-5 h-5 text-slate-900" />
+              </Button>
+              <h1 className="text-2xl font-black text-slate-900">Carteira</h1>
+          </div>
 
-          {/* Adicionar Saldo */}
-          <Card>
-              <CardHeader>
-                  <CardTitle className="text-lg">Adicionar Créditos</CardTitle>
-                  <CardDescription>Pagamento instantâneo via PIX</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+          {/* Card de Saldo Premium */}
+          <div className="relative overflow-hidden bg-slate-900 rounded-[32px] p-8 text-white shadow-2xl mb-8 group transition-transform hover:scale-[1.02]">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-yellow-500/20 to-transparent rounded-full blur-2xl group-hover:bg-yellow-500/30 transition-colors" />
+              
+              <div className="relative z-10">
+                  <div className="flex justify-between items-start mb-8">
+                      <div className="p-3 bg-white/10 rounded-2xl backdrop-blur-md">
+                        <WalletIcon className="w-6 h-6 text-yellow-400" />
+                      </div>
+                      <span className="text-xs font-bold bg-yellow-500 text-black px-3 py-1 rounded-full uppercase tracking-wider">Gold</span>
+                  </div>
+                  <div>
+                      <p className="text-slate-400 font-medium mb-1">Saldo Total</p>
+                      <h2 className="text-5xl font-black tracking-tight">R$ {balance.toFixed(2)}</h2>
+                  </div>
+              </div>
+          </div>
+
+          {/* Actions */}
+          <div className="mb-8">
+             <div className="bg-white/80 backdrop-blur-xl border border-white/40 p-6 rounded-[32px] shadow-lg">
+                  <h3 className="font-bold text-slate-900 mb-4">Adicionar Créditos</h3>
+                  
                   {!showQR ? (
-                      <>
-                        <div className="relative">
-                            <span className="absolute left-3 top-3 text-gray-500">R$</span>
-                            <Input 
-                                type="number" 
-                                placeholder="0,00" 
-                                className="pl-9 text-lg" 
-                                value={amount}
-                                onChange={(e) => setAmount(e.target.value)}
-                            />
-                        </div>
-                        <div className="grid grid-cols-3 gap-2">
-                            {[20, 50, 100].map(val => (
-                                <Button key={val} variant="outline" onClick={() => setAmount(val.toString())}>
-                                    R$ {val}
-                                </Button>
-                            ))}
-                        </div>
-                        <Button className="w-full bg-green-600 hover:bg-green-700" onClick={handleGeneratePIX} disabled={!amount}>
-                            <QrCode className="mr-2 w-4 h-4" /> Gerar PIX
-                        </Button>
-                      </>
-                  ) : (
-                      <div className="text-center animate-in zoom-in">
-                          <div className="bg-white border-4 border-black p-4 inline-block rounded-xl mb-4">
-                              {/* QR Code Fake (imagem placeholder com estilo de pixel) */}
-                              <div className="w-48 h-48 bg-gray-900 flex items-center justify-center text-white text-xs">
-                                  [QR CODE PIX R$ {amount}]
-                              </div>
+                      <div className="space-y-4">
+                          <div className="relative">
+                              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">R$</span>
+                              <Input type="number" placeholder="0,00" className="pl-10 h-14 bg-gray-50 border-0 rounded-2xl text-lg font-bold" value={amount} onChange={(e) => setAmount(e.target.value)} />
                           </div>
-                          <p className="text-sm text-gray-500 mb-4">Escaneie para pagar ou simule abaixo</p>
-                          
                           <div className="flex gap-2">
-                              <Button variant="outline" className="flex-1" onClick={() => setShowQR(false)}>
-                                  Cancelar
-                              </Button>
-                              <Button className="flex-1 bg-green-600 hover:bg-green-700" onClick={handlePay} disabled={processing}>
-                                  {processing ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle2 className="mr-2 w-4 h-4" />}
-                                  {processing ? "Processando..." : "Simular Pagamento"}
+                              {[20, 50, 100].map(val => (
+                                  <button key={val} onClick={() => setAmount(val.toString())} className="flex-1 py-2 rounded-xl border border-gray-200 hover:border-black hover:bg-black hover:text-white transition-all font-bold text-sm">
+                                      +{val}
+                                  </button>
+                              ))}
+                          </div>
+                          <Button className="w-full h-14 bg-black text-white rounded-2xl font-bold hover:bg-zinc-800" onClick={handleGeneratePIX} disabled={!amount}>
+                              <QrCode className="mr-2 w-5 h-5" /> Gerar PIX
+                          </Button>
+                      </div>
+                  ) : (
+                      <div className="text-center animate-in zoom-in-95">
+                          <div className="bg-white p-4 rounded-2xl border-2 border-dashed border-gray-200 mb-4 inline-block">
+                             <div className="w-48 h-48 bg-slate-900 flex items-center justify-center text-white text-xs rounded-lg">[QR CODE PIX]</div>
+                          </div>
+                          <div className="flex gap-3">
+                              <Button variant="outline" className="flex-1 h-12 rounded-xl" onClick={() => setShowQR(false)}>Voltar</Button>
+                              <Button className="flex-1 h-12 rounded-xl bg-green-600 hover:bg-green-700 font-bold" onClick={handlePay} disabled={processing}>
+                                  {processing ? <Loader2 className="animate-spin" /> : "Pagar Agora"}
                               </Button>
                           </div>
                       </div>
                   )}
-              </CardContent>
-          </Card>
+             </div>
+          </div>
 
           {/* Histórico */}
           <div>
-              <h3 className="font-bold text-gray-900 mb-3">Histórico de Transações</h3>
+              <h3 className="font-bold text-slate-900 mb-4 ml-2">Últimas Transações</h3>
               <div className="space-y-3">
-                  {transactions.map((t) => (
-                      <div key={t.id} className="bg-white p-4 rounded-xl shadow-sm border flex justify-between items-center">
-                          <div className="flex items-center gap-3">
-                              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${t.amount > 0 ? 'bg-green-100' : 'bg-red-100'}`}>
-                                  {t.amount > 0 ? <CheckCircle2 className="w-5 h-5 text-green-600" /> : <CreditCard className="w-5 h-5 text-red-600" />}
+                  {transactions.length === 0 ? (
+                      <p className="text-center text-gray-400 py-6">Nenhuma movimentação.</p>
+                  ) : (
+                      transactions.map((t) => (
+                          <div key={t.id} className="bg-white p-4 rounded-2xl shadow-sm flex items-center justify-between border border-gray-100">
+                              <div className="flex items-center gap-4">
+                                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${t.amount > 0 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                                      {t.amount > 0 ? <ArrowDownLeft className="w-5 h-5" /> : <ArrowUpRight className="w-5 h-5" />}
+                                  </div>
+                                  <div>
+                                      <p className="font-bold text-slate-900 text-sm">{t.description}</p>
+                                      <p className="text-xs text-gray-400">{new Date(t.created_at).toLocaleDateString()}</p>
+                                  </div>
                               </div>
-                              <div>
-                                  <p className="font-medium text-sm text-gray-900">{t.description}</p>
-                                  <p className="text-xs text-gray-400">{new Date(t.created_at).toLocaleDateString()}</p>
-                              </div>
+                              <span className={`font-bold ${t.amount > 0 ? 'text-green-600' : 'text-slate-900'}`}>
+                                  {t.amount > 0 ? '+' : ''} R$ {Math.abs(t.amount).toFixed(2)}
+                              </span>
                           </div>
-                          <span className={`font-bold ${t.amount > 0 ? 'text-green-600' : 'text-gray-900'}`}>
-                              {t.amount > 0 ? '+' : ''} R$ {Math.abs(t.amount).toFixed(2)}
-                          </span>
-                      </div>
-                  ))}
-                  {transactions.length === 0 && <p className="text-gray-500 text-center text-sm py-4">Nenhuma transação ainda.</p>}
+                      ))
+                  )}
               </div>
           </div>
       </div>
