@@ -36,22 +36,41 @@ const Index = () => {
         </div>
 
         <div className="grid md:grid-cols-3 gap-6 pt-8">
-          {[
-             { title: "Passageiro", desc: "Viaje com padrão ouro", icon: User, color: "bg-white text-black", nav: '/client' },
-             { title: "Motorista", desc: "Maximize seus ganhos", icon: Car, color: "bg-yellow-500 text-black", nav: '/driver' },
-             { title: "Corporativo", desc: "Gestão completa de frota", icon: ShieldCheck, color: "bg-zinc-800 text-white", nav: '/admin' }
-          ].map((item, i) => (
-             <div key={i} onClick={() => navigate('/login')} className="group relative bg-white/5 border border-white/10 p-6 rounded-2xl hover:bg-white/10 transition-all cursor-pointer backdrop-blur-sm">
-                <div className={`w-12 h-12 ${item.color} rounded-xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform`}>
-                    <item.icon className="w-6 h-6" />
+           {/* Passageiro */}
+           <div onClick={() => navigate('/login')} className="group relative bg-white/5 border border-white/10 p-6 rounded-2xl hover:bg-white/10 transition-all cursor-pointer backdrop-blur-sm">
+                <div className="w-12 h-12 bg-white text-black rounded-xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform">
+                    <User className="w-6 h-6" />
                 </div>
-                <h3 className="text-xl font-bold text-white mb-2">{item.title}</h3>
-                <p className="text-gray-400">{item.desc}</p>
+                <h3 className="text-xl font-bold text-white mb-2">Passageiro</h3>
+                <p className="text-gray-400">Viaje com padrão ouro pela cidade.</p>
                 <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity">
                     <ArrowRight className="text-white w-6 h-6" />
                 </div>
-             </div>
-          ))}
+           </div>
+
+           {/* Motorista */}
+           <div onClick={() => navigate('/login/driver')} className="group relative bg-white/5 border border-white/10 p-6 rounded-2xl hover:bg-white/10 transition-all cursor-pointer backdrop-blur-sm">
+                <div className="w-12 h-12 bg-yellow-500 text-black rounded-xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform">
+                    <Car className="w-6 h-6" />
+                </div>
+                <h3 className="text-xl font-bold text-white mb-2">Motorista</h3>
+                <p className="text-gray-400">Maximize seus ganhos dirigindo.</p>
+                <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <ArrowRight className="text-white w-6 h-6" />
+                </div>
+           </div>
+
+           {/* Admin */}
+           <div onClick={() => navigate('/login/admin')} className="group relative bg-white/5 border border-white/10 p-6 rounded-2xl hover:bg-white/10 transition-all cursor-pointer backdrop-blur-sm">
+                <div className="w-12 h-12 bg-zinc-800 text-white rounded-xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform">
+                    <ShieldCheck className="w-6 h-6" />
+                </div>
+                <h3 className="text-xl font-bold text-white mb-2">Administrador</h3>
+                <p className="text-gray-400">Gestão completa da plataforma.</p>
+                <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <ArrowRight className="text-white w-6 h-6" />
+                </div>
+           </div>
         </div>
       </div>
       

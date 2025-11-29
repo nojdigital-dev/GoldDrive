@@ -7,7 +7,9 @@ import { RideProvider } from "@/context/RideContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 
 import Index from "./pages/Index";
-import Login from "./pages/Login";
+import LoginClient from "./pages/LoginClient";
+import LoginDriver from "./pages/LoginDriver";
+import LoginAdmin from "./pages/LoginAdmin";
 import ClientDashboard from "./pages/ClientDashboard";
 import DriverDashboard from "./pages/DriverDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -26,7 +28,11 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
-            <Route path="/login" element={<Login />} />
+            
+            {/* Rotas de Login Separadas */}
+            <Route path="/login" element={<LoginClient />} /> {/* Default / Passageiro */}
+            <Route path="/login/driver" element={<LoginDriver />} />
+            <Route path="/login/admin" element={<LoginAdmin />} />
             
             {/* Rotas Protegidas de Cliente */}
             <Route path="/client" element={
