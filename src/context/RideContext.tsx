@@ -12,14 +12,16 @@ export interface RideData {
   destination_address: string;
   price: number;
   distance: string;
+  category: string;
   status: RideStatus;
   created_at: string;
+  driver_name?: string; // Campo virtual (join)
 }
 
 interface RideContextType {
-  ride: RideData | null; // Corrida atual do usuário (seja passageiro ou motorista)
-  availableRides: RideData[]; // Lista de corridas disponíveis (para motoristas)
-  requestRide: (pickup: string, destination: string, price: number, distance: string) => Promise<void>;
+  ride: RideData | null;
+  availableRides: RideData[];
+  requestRide: (pickup: string, destination: string, price: number, distance: string, category: string) => Promise<void>;
   acceptRide: (rideId: string) => Promise<void>;
   startRide: (rideId: string) => Promise<void>;
   finishRide: (rideId: string) => Promise<void>;
@@ -37,19 +39,17 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // 1. Monitorar Autenticação e Perfil
+  // Monitorar Autenticação e Perfil
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         setUserId(session.user.id);
-        // Buscar role
         const { data: profile } = await supabase
           .from('profiles')
           .select('role')
           .eq('id', session.user.id)
           .single();
-        
         if (profile) setUserRole(profile.role);
       }
       setLoading(false);
@@ -76,13 +76,18 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
     return () => authListener.subscription.unsubscribe();
   }, []);
 
-  // 2. Monitorar Corridas (Realtime)
+  // Helpers para buscar dados extras do motorista
+  const fetchDriverInfo = async (driverId: string) => {
+      const { data } = await supabase.from('profiles').select('first_name, last_name').eq('id', driverId).single();
+      return data ? `${data.first_name} ${data.last_name || ''}` : 'Motorista';
+  };
+
+  // Monitorar Corridas (Realtime)
   useEffect(() => {
     if (!userId) return;
 
     // Buscar estado inicial
     const fetchCurrentRide = async () => {
-        // Se for cliente, busca sua corrida ativa
         if (userRole === 'client') {
              const { data } = await supabase
                 .from('rides')
@@ -92,9 +97,15 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
                 .order('created_at', { ascending: false })
                 .limit(1)
                 .single();
-             if (data) setRide(data as RideData);
+             
+             if (data) {
+                 let rideData = { ...data } as RideData;
+                 if (data.driver_id) {
+                     rideData.driver_name = await fetchDriverInfo(data.driver_id);
+                 }
+                 setRide(rideData);
+             }
         } 
-        // Se for motorista, busca se ele tem corrida aceita
         else if (userRole === 'driver') {
              const { data } = await supabase
                 .from('rides')
@@ -106,7 +117,6 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
                 .single();
              if (data) setRide(data as RideData);
              
-             // E busca corridas disponíveis
              const { data: available } = await supabase
                 .from('rides')
                 .select('*')
@@ -120,21 +130,25 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
     // Inscrever no Realtime
     const channel = supabase
       .channel('public:rides')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'rides' }, (payload) => {
-        console.log('Change received!', payload);
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'rides' }, async (payload) => {
         const newRide = payload.new as RideData;
         
         // Logica para Cliente
         if (userRole === 'client') {
             if (newRide.customer_id === userId) {
-                // Atualiza se for a corrida do usuário
                 if (['COMPLETED', 'CANCELLED'].includes(newRide.status)) {
                     setRide(null);
-                    if (newRide.status === 'COMPLETED') showSuccess("Corrida finalizada!");
+                    if (newRide.status === 'COMPLETED') showSuccess("Corrida finalizada com sucesso!");
                 } else {
-                    setRide(newRide);
+                    // Se foi aceita, busca nome do motorista
+                    let updatedRide = { ...newRide };
+                    if (newRide.driver_id) {
+                        updatedRide.driver_name = await fetchDriverInfo(newRide.driver_id);
+                    }
+                    setRide(updatedRide);
+                    
                     if (newRide.status === 'ACCEPTED' && payload.eventType === 'UPDATE') {
-                        showSuccess("Motorista aceitou sua corrida!");
+                        showSuccess("Motorista a caminho!");
                     }
                 }
             }
@@ -142,12 +156,11 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
         
         // Logica para Motorista
         if (userRole === 'driver') {
-            // Se nova corrida surge
             if (payload.eventType === 'INSERT' && newRide.status === 'SEARCHING') {
                 setAvailableRides(prev => [...prev, newRide]);
             }
-            // Se corrida for aceita por outro ou cancelada
             if (payload.eventType === 'UPDATE' && newRide.status !== 'SEARCHING') {
+                // Remove da lista de disponíveis se alguém pegou ou cancelou
                 setAvailableRides(prev => prev.filter(r => r.id !== newRide.id));
             }
             
@@ -169,8 +182,7 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
   }, [userId, userRole]);
 
 
-  // Actions
-  const requestRide = async (pickup: string, destination: string, price: number, distance: string) => {
+  const requestRide = async (pickup: string, destination: string, price: number, distance: string, category: string) => {
     if (!userId) return;
     try {
         const { error } = await supabase.from('rides').insert({
@@ -179,10 +191,12 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
             destination_address: destination,
             price,
             distance,
+            category,
             status: 'SEARCHING'
         });
         if (error) throw error;
-        showSuccess("Corrida solicitada!");
+        // Não precisamos setar o ride manualmente aqui, o realtime vai cuidar disso
+        showSuccess("Procurando motoristas próximos...");
     } catch (e: any) {
         showError(e.message);
     }
