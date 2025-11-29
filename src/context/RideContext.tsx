@@ -28,6 +28,7 @@ interface RideContextType {
   availableRides: RideData[];
   requestRide: (pickup: string, destination: string, price: number, distance: string, category: string) => Promise<void>;
   acceptRide: (rideId: string) => Promise<void>;
+  confirmArrival: (rideId: string) => Promise<void>;
   rejectRide: (rideId: string) => Promise<void>;
   startRide: (rideId: string) => Promise<void>;
   finishRide: (rideId: string) => Promise<void>;
@@ -89,6 +90,40 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
       return data ? `${data.first_name} ${data.last_name || ''}` : 'Motorista';
   };
 
+  // --- POLLING SYSTEM (Atualização a cada 3s) ---
+  useEffect(() => {
+    if (!userId || userRole !== 'driver') return;
+
+    const fetchAvailable = async () => {
+        // Se já estiver em corrida, não busca novas
+        if (ride && ride.status !== 'COMPLETED') return;
+
+        const { data: available } = await supabase
+        .from('rides')
+        .select('*')
+        .eq('status', 'SEARCHING');
+        
+        if (available) {
+            const filtered = available.filter((r: any) => 
+                !r.rejected_by || !r.rejected_by.includes(userId)
+            );
+            // Atualiza apenas se houver mudança para evitar re-render desnecessário visual
+            setAvailableRides(prev => {
+                if (JSON.stringify(prev) !== JSON.stringify(filtered)) {
+                    return filtered as RideData[];
+                }
+                return prev;
+            });
+        }
+    };
+
+    // Executa imediatamente e depois a cada 3s
+    fetchAvailable();
+    const interval = setInterval(fetchAvailable, 3000);
+
+    return () => clearInterval(interval);
+  }, [userId, userRole, ride]);
+
   // Realtime e Fetch Inicial
   useEffect(() => {
     if (!userId) return;
@@ -113,7 +148,6 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
              }
         } 
         else if (userRole === 'driver') {
-             // 1. Busca se o motorista JÁ ESTÁ em uma corrida
              const { data } = await supabase
                 .from('rides')
                 .select('*')
@@ -127,25 +161,12 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
                  else if (data.status === 'CANCELLED') { setRide(null); }
                  else { setRide(data as RideData); }
              }
-             
-             // 2. Busca corridas disponíveis
-             const { data: available } = await supabase
-                .from('rides')
-                .select('*')
-                .eq('status', 'SEARCHING');
-             
-             if (available) {
-                 const filtered = available.filter((r: any) => 
-                     !r.rejected_by || !r.rejected_by.includes(userId)
-                 );
-                 setAvailableRides(filtered as RideData[]);
-             }
         }
     };
 
     fetchCurrentRide();
 
-    // Configuração do Realtime
+    // Configuração do Realtime (Mantido como backup/trigger instantâneo)
     const channel = supabase
       .channel('public:rides')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rides' }, async (payload) => {
@@ -155,7 +176,7 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
         if (userRole === 'client' && newRide.customer_id === userId) {
             if (newRide.status === 'CANCELLED') {
                 setRide(null);
-                showError("Corrida cancelada ou nenhum motorista encontrado.");
+                showError("Corrida cancelada.");
             } else if (newRide.status === 'COMPLETED') {
                  let updatedRide = { ...newRide };
                  if (newRide.driver_id) updatedRide.driver_name = await fetchDriverInfo(newRide.driver_id);
@@ -166,36 +187,13 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
                 setRide(updatedRide);
                 
                 if (newRide.status === 'ACCEPTED' && payload.eventType === 'UPDATE') {
-                    showSuccess("Motorista aceitou! Chegada em aprox. 60 segundos.");
+                    showSuccess("Motorista aceitou e está a caminho!");
                 }
             }
         }
         
         // --- LÓGICA DO MOTORISTA ---
         if (userRole === 'driver') {
-            // Se a corrida foi rejeitada por este motorista, ignora
-            if (newRide.rejected_by && newRide.rejected_by.includes(userId)) {
-                setAvailableRides(prev => prev.filter(r => r.id !== newRide.id));
-                return; 
-            }
-
-            // Nova corrida ou atualização de corrida disponível
-            if (newRide.status === 'SEARCHING') {
-                // Se eu (motorista) não estou nela (driver_id nulo ou diferente de mim, mas status searching implica sem driver)
-                setAvailableRides(prev => {
-                    const exists = prev.find(r => r.id === newRide.id);
-                    if (exists) {
-                         // Atualiza dados se já existe
-                         return prev.map(r => r.id === newRide.id ? newRide : r);
-                    }
-                    return [...prev, newRide];
-                });
-            } else {
-                // Se não está mais procurando (foi aceita por outro ou cancelada), remove da lista
-                setAvailableRides(prev => prev.filter(r => r.id !== newRide.id));
-            }
-
-            // Atualização da MINHA corrida atual (se eu aceitei)
             if (newRide.driver_id === userId) {
                 if (newRide.status === 'CANCELLED') {
                     setRide(null);
@@ -242,7 +240,6 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
         throw new Error("Saldo insuficiente");
     }
 
-    // Insert e retorna DADOS IMEDIATAMENTE (.select().single())
     const { data, error } = await supabase.from('rides').insert({
         customer_id: userId,
         pickup_address: pickup,
@@ -255,8 +252,6 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
     }).select().single();
     
     if (error) throw error;
-    
-    // ATUALIZA ESTADO LOCAL IMEDIATAMENTE (Passageiro vê a tela mudar na hora)
     setRide(data as RideData);
   };
 
@@ -270,17 +265,25 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
           return;
       }
 
-      const { error } = await supabase.from('rides').update({
+      const { error, data } = await supabase.from('rides').update({
           status: 'ACCEPTED',
           driver_id: userId
-      }).eq('id', rideId);
+      }).eq('id', rideId).select().single();
       
       if (error) throw error;
+      setRide(data as RideData);
+      setAvailableRides([]); // Limpa lista de disponíveis pois agora está ocupado
+      showSuccess("Corrida aceita! Dirija até o passageiro.");
+  };
+
+  const confirmArrival = async (rideId: string) => {
+      const { error, data } = await supabase.from('rides').update({ 
+          status: 'ARRIVED' 
+      }).eq('id', rideId).select().single();
       
-      setTimeout(async () => {
-          await supabase.from('rides').update({ status: 'ARRIVED' }).eq('id', rideId);
-          showSuccess("Você chegou ao local de embarque!");
-      }, 60000); 
+      if (error) throw error;
+      setRide(data as RideData);
+      showSuccess("Passageiro notificado da sua chegada!");
   };
 
   const rejectRide = async (rideId: string) => {
@@ -302,8 +305,13 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const startRide = async (rideId: string) => {
-      const { error } = await supabase.from('rides').update({ status: 'IN_PROGRESS' }).eq('id', rideId);
+      const { error, data } = await supabase.from('rides').update({ 
+          status: 'IN_PROGRESS' 
+      }).eq('id', rideId).select().single();
+      
       if (error) throw error;
+      setRide(data as RideData);
+      showSuccess("Corrida iniciada! Boa viagem.");
   };
 
   const finishRide = async (rideId: string) => {
@@ -405,7 +413,7 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <RideContext.Provider value={{ ride, availableRides, requestRide, acceptRide, rejectRide, startRide, finishRide, cancelRide, rateRide, addBalance, userRole, loading }}>
+    <RideContext.Provider value={{ ride, availableRides, requestRide, acceptRide, confirmArrival, rejectRide, startRide, finishRide, cancelRide, rateRide, addBalance, userRole, loading }}>
       {children}
     </RideContext.Provider>
   );

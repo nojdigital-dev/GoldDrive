@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Wallet, User, MapPin, Navigation, Shield, DollarSign, Clock, Star, Menu, Home, List, History } from "lucide-react";
+import { Wallet, User, MapPin, Navigation, Shield, DollarSign, Clock, Star, Menu, Home, List, History, XCircle, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -12,7 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 const DriverDashboard = () => {
   const navigate = useNavigate();
-  const { ride, availableRides, acceptRide, rejectRide, finishRide, startRide, rateRide } = useRide();
+  const { ride, availableRides, acceptRide, rejectRide, confirmArrival, finishRide, startRide, cancelRide, rateRide } = useRide();
   const [activeTab, setActiveTab] = useState<'home' | 'history' | 'wallet'>('home');
   const [isOnline, setIsOnline] = useState(false);
   const [incomingRide, setIncomingRide] = useState<RideData | null>(null);
@@ -49,8 +49,8 @@ const DriverDashboard = () => {
   }, [activeTab]);
 
   useEffect(() => {
+    // Lógica para mostrar a corrida disponível
     if (isOnline && availableRides.length > 0 && !ride && activeTab === 'home') {
-        // Pega a primeira que não foi rejeitada (já filtrado no Context, mas segurança extra)
         setIncomingRide(availableRides[0]);
         setTimer(15);
     } else {
@@ -63,7 +63,7 @@ const DriverDashboard = () => {
         const interval = setInterval(() => setTimer(t => t - 1), 1000);
         return () => clearInterval(interval);
     } else if (timer === 0 && incomingRide) {
-        // Tempo acabou: rejeita automaticamente
+        // Tempo acabou: rejeita automaticamente apenas visualmente para passar para a próxima se houver
         handleReject();
     }
   }, [incomingRide, timer]);
@@ -71,15 +71,22 @@ const DriverDashboard = () => {
   const handleAccept = async () => {
     if (incomingRide) {
         await acceptRide(incomingRide.id);
-        showSuccess("Corrida aceita! Vá até o passageiro.");
         setIncomingRide(null);
     }
   };
 
   const handleReject = async () => {
       if (incomingRide) {
-          await rejectRide(incomingRide.id); // Chama a função que salva no banco
+          await rejectRide(incomingRide.id); 
           setIncomingRide(null);
+      }
+  };
+
+  const handleCancel = async () => {
+      if (ride) {
+          if (confirm("Tem certeza que deseja cancelar esta corrida?")) {
+            await cancelRide(ride.id, "Cancelado pelo motorista");
+          }
       }
   };
 
@@ -159,34 +166,90 @@ const DriverDashboard = () => {
                         </div>
                     )}
 
+                    {/* --- STATUS DA CORRIDA ATIVA (PAINEL INFERIOR) --- */}
                     {isOnTrip && !isRating && (
-                        <div className="absolute bottom-0 left-0 right-0 bg-white shadow-[0_-5px_30px_rgba(0,0,0,0.3)] z-20 animate-in slide-in-from-bottom duration-500">
+                        <div className="absolute bottom-0 left-0 right-0 bg-white shadow-[0_-5px_30px_rgba(0,0,0,0.3)] z-20 animate-in slide-in-from-bottom duration-500 rounded-t-3xl">
                             <div className="p-6 pb-8">
-                                <div className="flex justify-between items-center mb-6">
+                                {/* Header do Painel */}
+                                <div className="flex justify-between items-center mb-6 border-b pb-4">
                                     <div>
                                         <div className="flex items-center gap-2 mb-1">
-                                            <span className={`px-2 py-0.5 rounded text-xs font-bold text-white ${ride?.status === 'ACCEPTED' || ride?.status === 'ARRIVED' ? 'bg-blue-500' : 'bg-green-600'}`}>
-                                                {ride?.status === 'ACCEPTED' ? 'BUSCANDO' : ride?.status === 'ARRIVED' ? 'NO LOCAL' : 'EM VIAGEM'}
+                                            <span className={`px-2 py-0.5 rounded text-xs font-bold text-white ${
+                                                ride?.status === 'ACCEPTED' ? 'bg-blue-500' : 
+                                                ride?.status === 'ARRIVED' ? 'bg-orange-500' : 
+                                                'bg-green-600'
+                                            }`}>
+                                                {ride?.status === 'ACCEPTED' ? 'A CAMINHO' : 
+                                                 ride?.status === 'ARRIVED' ? 'AGUARDANDO' : 
+                                                 'EM CORRIDA'}
                                             </span>
                                         </div>
                                         <h3 className="text-xl font-bold text-gray-900">Passageiro</h3>
-                                        <p className="text-gray-500 text-sm truncate max-w-[200px]">{ride?.destination_address}</p>
                                     </div>
                                     <div className="text-right">
                                         <h3 className="text-2xl font-black text-green-600">R$ {(ride?.price || 0) * 0.8}</h3>
-                                        <p className="text-gray-400 text-xs uppercase font-bold">Seu ganho</p>
+                                        <p className="text-gray-400 text-xs uppercase font-bold">Ganho Estimado</p>
                                     </div>
                                 </div>
                                 
-                                {ride?.status === 'ACCEPTED' || ride?.status === 'ARRIVED' ? (
-                                     <Button className="w-full py-6 text-lg bg-blue-600 hover:bg-blue-700 font-bold rounded-xl shadow-lg shadow-blue-200" onClick={() => startRide(ride!.id)}>
-                                        <Navigation className="mr-2 h-5 w-5" /> Iniciar Corrida
-                                     </Button>
-                                ) : (
-                                     <Button className="w-full py-6 text-lg bg-green-600 hover:bg-green-700 font-bold rounded-xl shadow-lg shadow-green-200" onClick={() => finishRide(ride!.id)}>
-                                        <Shield className="mr-2 h-5 w-5" /> Finalizar & Receber
-                                     </Button>
-                                )}
+                                {/* Informações do Trajeto */}
+                                <div className="space-y-4 mb-6">
+                                    <div className="flex items-start gap-4">
+                                        <div className="w-3 h-3 rounded-full bg-blue-500 mt-2 shrink-0" />
+                                        <div>
+                                            <p className="text-xs text-gray-400 uppercase">Embarque</p>
+                                            <p className="text-sm font-medium leading-tight">{ride?.pickup_address}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-start gap-4">
+                                        <div className="w-3 h-3 rounded-full bg-green-500 mt-2 shrink-0" />
+                                        <div>
+                                            <p className="text-xs text-gray-400 uppercase">Destino</p>
+                                            <p className="text-sm font-medium leading-tight">{ride?.destination_address}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* BOTÕES DE AÇÃO DO ESTADO */}
+                                <div className="flex flex-col gap-3">
+                                    
+                                    {/* 1. ACEITO -> A CAMINHO DO EMBARQUE */}
+                                    {ride?.status === 'ACCEPTED' && (
+                                        <div className="flex gap-2">
+                                            <Button variant="outline" className="flex-1 border-red-200 text-red-600 hover:bg-red-50 h-14" onClick={handleCancel}>
+                                                <XCircle className="mr-2 w-5 h-5" /> Cancelar
+                                            </Button>
+                                            <Button 
+                                                className="flex-[2] h-14 text-lg bg-blue-600 hover:bg-blue-700 font-bold rounded-xl shadow-lg shadow-blue-200" 
+                                                onClick={() => confirmArrival(ride!.id)}
+                                            >
+                                                <MapPin className="mr-2 h-5 w-5" /> Cheguei no Local
+                                            </Button>
+                                        </div>
+                                    )}
+
+                                    {/* 2. CHEGOU -> AGUARDANDO PASSAGEIRO */}
+                                    {ride?.status === 'ARRIVED' && (
+                                        <div className="flex gap-2">
+                                            <Button variant="outline" className="flex-1 border-red-200 text-red-600 hover:bg-red-50 h-14" onClick={handleCancel}>
+                                                <XCircle className="mr-2 w-5 h-5" /> Cancelar
+                                            </Button>
+                                            <Button 
+                                                className="flex-[2] h-14 text-lg bg-green-600 hover:bg-green-700 font-bold rounded-xl shadow-lg shadow-green-200 animate-pulse" 
+                                                onClick={() => startRide(ride!.id)}
+                                            >
+                                                <Navigation className="mr-2 h-5 w-5" /> Iniciar Corrida
+                                            </Button>
+                                        </div>
+                                    )}
+
+                                    {/* 3. EM CORRIDA -> FINALIZAR */}
+                                    {ride?.status === 'IN_PROGRESS' && (
+                                         <Button className="w-full py-6 h-16 text-xl bg-red-600 hover:bg-red-700 font-bold rounded-xl shadow-lg shadow-red-200" onClick={() => finishRide(ride!.id)}>
+                                            <Shield className="mr-2 h-6 w-6" /> Finalizar Corrida
+                                         </Button>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     )}
