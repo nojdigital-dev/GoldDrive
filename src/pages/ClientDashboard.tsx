@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import MapComponent from "@/components/MapComponent";
 import { 
   MapPin, Clock, CreditCard, Star, Search, 
-  Menu, User, Zap, ArrowLeft
+  Menu, User, Zap, ArrowLeft, Car
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
