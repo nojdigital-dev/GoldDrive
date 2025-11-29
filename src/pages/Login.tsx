@@ -107,13 +107,27 @@ const Login = () => {
             setIsSignUp(false);
         } else {
             // Login
-            const { error } = await supabase.auth.signInWithPassword({
+            const { data, error } = await supabase.auth.signInWithPassword({
                 email,
                 password
             });
-            if (error) throw error;
             
-            navigate(activeTab === 'admin' ? '/admin' : activeTab === 'driver' ? '/driver' : '/client');
+            if (error) throw error;
+            if (!data.user) throw new Error("Erro ao autenticar");
+
+            // Buscar role correta no banco
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('role')
+                .eq('id', data.user.id)
+                .single();
+            
+            const role = profile?.role || 'client';
+            
+            // Redirecionar baseado na role real
+            if (role === 'admin') navigate('/admin');
+            else if (role === 'driver') navigate('/driver');
+            else navigate('/client');
         }
     } catch (e: any) {
         if (e.message.includes("Invalid login")) {
@@ -122,8 +136,7 @@ const Login = () => {
             showError(e.message);
         }
     } finally {
-        // Delay visual pequeno para evitar flash
-        setTimeout(() => setLoading(false), 500);
+        setLoading(false);
     }
   };
 

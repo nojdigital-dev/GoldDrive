@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { RideProvider } from "@/context/RideContext";
+import ProtectedRoute from "@/components/ProtectedRoute";
 
 import Index from "./pages/Index";
 import Login from "./pages/Login";
@@ -26,11 +27,41 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<Login />} />
-            <Route path="/client" element={<ClientDashboard />} />
-            <Route path="/driver" element={<DriverDashboard />} />
-            <Route path="/admin" element={<AdminDashboard />} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/wallet" element={<Wallet />} />
+            
+            {/* Rotas Protegidas de Cliente */}
+            <Route path="/client" element={
+              <ProtectedRoute allowedRoles={['client']}>
+                <ClientDashboard />
+              </ProtectedRoute>
+            } />
+
+            {/* Rotas Protegidas de Motorista */}
+            <Route path="/driver" element={
+              <ProtectedRoute allowedRoles={['driver']}>
+                <DriverDashboard />
+              </ProtectedRoute>
+            } />
+
+            {/* Rotas Protegidas de Admin */}
+            <Route path="/admin" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            } />
+
+            {/* Rotas Comuns (Acessíveis a todos os logados) */}
+            <Route path="/profile" element={
+              <ProtectedRoute allowedRoles={['client', 'driver', 'admin']}>
+                <Profile />
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/wallet" element={
+              <ProtectedRoute allowedRoles={['client', 'driver', 'admin']}>
+                <Wallet />
+              </ProtectedRoute>
+            } />
+
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
