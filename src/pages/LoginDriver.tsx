@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,15 @@ const LoginDriver = () => {
   const [password, setPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
   const [name, setName] = useState("");
+
+  // Auto-Redirect
+  useEffect(() => {
+    const checkUser = async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) navigate('/driver');
+    };
+    checkUser();
+  }, []);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();

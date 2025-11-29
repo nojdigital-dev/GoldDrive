@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import MapComponent from "@/components/MapComponent";
 import { 
-  MapPin, Car, Navigation, Loader2, Star, AlertTriangle, XCircle, ChevronRight, Clock, Wallet, User, ArrowLeft, Menu
+  MapPin, Car, Navigation, Loader2, Star, AlertTriangle, XCircle, ChevronRight, Clock, Wallet, User, ArrowLeft, Menu, BellRing
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,11 +47,11 @@ const ClientDashboard = () => {
   const [missingAmount, setMissingAmount] = useState(0);
   const [loadingCats, setLoadingCats] = useState(true);
   const [showCancelAlert, setShowCancelAlert] = useState(false);
+  const [showArrivalPopup, setShowArrivalPopup] = useState(false);
   
   // Data
   const [historyItems, setHistoryItems] = useState<any[]>([]);
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<any>(null);
-  // Histórico Sheet Control
   const [showHistorySheet, setShowHistorySheet] = useState(false);
 
   useEffect(() => {
@@ -63,15 +63,23 @@ const ClientDashboard = () => {
       if (ride.status === 'CANCELLED') setStep('cancelled');
       else if (ride.status === 'COMPLETED') setStep('rating');
       else if (['SEARCHING', 'ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(ride.status)) setStep('waiting');
+
+      // Pop-up de chegada
+      if (ride.status === 'ARRIVED') {
+          setShowArrivalPopup(true);
+      } else {
+          setShowArrivalPopup(false);
+      }
     } else {
       if (step !== 'search') setStep('search');
+      setShowArrivalPopup(false);
     }
   }, [ride]);
 
   const fetchInitialData = async () => {
     try {
         const { data: { user } } = await supabase.auth.getUser();
-        if(!user) return; // Se não tiver user, o finally roda de qualquer jeito
+        if(!user) return; 
 
         // Busca Perfil
         const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single(); 
@@ -80,10 +88,7 @@ const ClientDashboard = () => {
         // Busca Categorias (Apenas se estiver na home)
         if (activeTab === 'home') {
             const { data: cats, error } = await supabase.from('car_categories').select('*').order('base_fare', { ascending: true });
-            
-            if (error) {
-                console.error("Erro categorias:", error);
-            } else if (cats && cats.length > 0) {
+            if (cats && cats.length > 0) {
                 setCategories(cats); 
                 setSelectedCategoryId(cats[0].id);
             }
@@ -92,15 +97,14 @@ const ClientDashboard = () => {
         // Busca Histórico
         if (activeTab === 'history') {
             const { data: history } = await supabase.from('rides')
-                .select('*, driver:profiles!driver_id(first_name, last_name, car_model, car_plate)')
+                .select('*, driver:profiles!public_rides_driver_id_fkey(first_name, last_name, car_model, car_plate)')
                 .eq('customer_id', user.id)
                 .order('created_at', { ascending: false });
             setHistoryItems(history || []);
         }
     } catch (error) {
-        console.error("Erro no fetch inicial:", error);
+        console.error("Erro fetch:", error);
     } finally {
-        // GARANTE que o loading pare, independente de erro ou sucesso
         setLoadingCats(false);
     }
   };
@@ -141,18 +145,16 @@ const ClientDashboard = () => {
       } else setLoadingLocation(false);
   };
 
-  // Estilo base para todos os cards flutuantes
   const cardBaseClasses = "bg-white/90 backdrop-blur-xl border border-white/40 p-6 rounded-[32px] shadow-2xl animate-in slide-in-from-bottom duration-500 w-full";
 
   return (
     <div className="relative h-screen w-full overflow-hidden font-sans bg-gray-100">
       
-      {/* 1. MAPA DE FUNDO */}
       <div className="absolute inset-0 z-0">
          <MapComponent showPickup={step !== 'search'} showDestination={!!destinationId && step !== 'search'} />
       </div>
 
-      {/* 2. HEADER FLUTUANTE */}
+      {/* HEADER */}
       <div className="absolute top-0 left-0 right-0 p-6 z-20 flex justify-between items-start pointer-events-none">
           <div className="pointer-events-auto bg-white/90 backdrop-blur-xl border border-white/20 p-2 pr-4 rounded-full flex items-center gap-3 shadow-lg animate-in slide-in-from-top duration-500 cursor-pointer hover:scale-105 transition-transform" onClick={() => navigate('/profile')}>
              <Avatar className="h-10 w-10 ring-2 ring-gray-100">
@@ -171,14 +173,11 @@ const ClientDashboard = () => {
           </div>
       </div>
 
-      {/* 3. ÁREA PRINCIPAL */}
       <div className="absolute inset-0 z-10 flex flex-col justify-end pb-32 md:pb-10 md:justify-center items-center pointer-events-none p-4">
         
-        {/* VIEW: HOME */}
         {activeTab === 'home' && (
             <div className="w-full max-w-md pointer-events-auto transition-all duration-500">
-                
-                {/* BUSCA */}
+                {/* SEARCH */}
                 {step === 'search' && (
                     <div className={cardBaseClasses}>
                         <h2 className="text-2xl font-black text-slate-900 mb-6">Para onde vamos?</h2>
@@ -201,50 +200,33 @@ const ClientDashboard = () => {
                     </div>
                 )}
 
-                {/* CONFIRMAÇÃO */}
+                {/* CONFIRM */}
                 {step === 'confirm' && (
                     <div className={cardBaseClasses}>
                         <div className="flex items-center gap-3 mb-6 cursor-pointer" onClick={() => setStep('search')}>
                             <div className="p-2 bg-gray-100 rounded-full hover:bg-gray-200"><ArrowLeft className="w-5 h-5" /></div>
                             <h2 className="text-xl font-bold">Escolha a Categoria</h2>
                         </div>
-                        
-                        {loadingCats ? (
-                            <div className="py-10 text-center flex flex-col items-center gap-3">
-                                <Loader2 className="animate-spin text-yellow-500 w-8 h-8" />
-                                <p className="text-gray-400 text-sm">Buscando categorias...</p>
-                            </div>
-                        ) : categories.length === 0 ? (
-                            <div className="py-10 text-center">
-                                <p className="text-red-500 font-bold">Nenhuma categoria disponível.</p>
-                                <Button variant="link" onClick={() => fetchInitialData()}>Tentar novamente</Button>
-                            </div>
-                        ) : (
+                        {loadingCats ? <div className="py-10 text-center flex flex-col items-center gap-3"><Loader2 className="animate-spin text-yellow-500 w-8 h-8" /><p className="text-gray-400 text-sm">Buscando categorias...</p></div> : 
+                         categories.length === 0 ? <div className="py-10 text-center"><p className="text-red-500 font-bold">Sem categorias.</p></div> : 
+                        (
                             <div className="space-y-3 mb-6 max-h-[35vh] overflow-y-auto pr-1 custom-scrollbar">
                                 {categories.map((cat) => (
                                     <div key={cat.id} onClick={() => setSelectedCategoryId(cat.id)} className={`relative flex items-center justify-between p-4 rounded-2xl border transition-all cursor-pointer overflow-hidden group ${selectedCategoryId === cat.id ? 'border-yellow-500 bg-yellow-50/50 shadow-md' : 'border-transparent bg-gray-50 hover:bg-white'}`}>
                                         <div className="flex items-center gap-4 z-10">
-                                            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${selectedCategoryId === cat.id ? 'bg-yellow-500 text-black' : 'bg-white text-gray-500'}`}>
-                                                <Car className="w-6 h-6" />
-                                            </div>
-                                            <div>
-                                                <h4 className="font-bold text-lg text-slate-900">{cat.name}</h4>
-                                                <p className="text-xs text-gray-500 font-medium">{cat.description}</p>
-                                            </div>
+                                            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${selectedCategoryId === cat.id ? 'bg-yellow-500 text-black' : 'bg-white text-gray-500'}`}><Car className="w-6 h-6" /></div>
+                                            <div><h4 className="font-bold text-lg text-slate-900">{cat.name}</h4><p className="text-xs text-gray-500 font-medium">{cat.description}</p></div>
                                         </div>
                                         <span className="font-black text-lg text-slate-900 z-10">R$ {getPrice(cat.id)}</span>
                                     </div>
                                 ))}
                             </div>
                         )}
-                        
-                        <Button className="w-full h-14 text-lg font-bold rounded-2xl bg-black hover:bg-zinc-800" onClick={confirmRide} disabled={!selectedCategoryId || isRequesting || loadingCats}>
-                            {isRequesting ? <Loader2 className="animate-spin" /> : "Confirmar GoldDrive"}
-                        </Button>
+                        <Button className="w-full h-14 text-lg font-bold rounded-2xl bg-black hover:bg-zinc-800" onClick={confirmRide} disabled={!selectedCategoryId || isRequesting || loadingCats}>{isRequesting ? <Loader2 className="animate-spin" /> : "Confirmar GoldDrive"}</Button>
                     </div>
                 )}
 
-                {/* STATUS DA CORRIDA (Mesmo estilo de card) */}
+                {/* STATUS */}
                 {step === 'waiting' && (
                      <div className={`${cardBaseClasses} text-center`}>
                          {ride?.status === 'ACCEPTED' || ride?.status === 'IN_PROGRESS' || ride?.status === 'ARRIVED' ? (
@@ -262,65 +244,52 @@ const ClientDashboard = () => {
                      </div>
                 )}
                 
-                {/* AVALIAÇÃO */}
+                {/* RATING */}
                 {step === 'rating' && (
                      <div className={`${cardBaseClasses} text-center`}>
                          <div className="w-20 h-20 bg-green-100 rounded-full mx-auto flex items-center justify-center mb-6"><User className="w-10 h-10 text-green-600" /></div><h2 className="text-2xl font-black text-slate-900 mb-2">Chegamos!</h2><p className="text-gray-500 mb-8">Como foi sua experiência?</p><div className="flex justify-center gap-2 mb-8">{[1, 2, 3, 4, 5].map((star) => (<button key={star} onClick={() => setRating(star)} className="transition-transform hover:scale-125 focus:outline-none"><Star className={`w-10 h-10 ${rating >= star ? 'fill-yellow-400 text-yellow-400' : 'text-gray-200'}`} /></button>))}</div><Button className="w-full h-14 text-lg font-bold bg-black rounded-2xl" onClick={() => { rateRide(ride!.id, rating || 5, false); setStep('search'); }}>Enviar Avaliação</Button>
                      </div>
                 )}
 
-                {/* CANCELADO */}
+                {/* CANCELLED */}
                 {step === 'cancelled' && (
                      <div className={`${cardBaseClasses} text-center`}><div className="w-20 h-20 bg-red-100 rounded-full mx-auto flex items-center justify-center mb-6"><XCircle className="w-10 h-10 text-red-600" /></div><h2 className="text-2xl font-black text-slate-900 mb-2">Cancelado</h2><p className="text-gray-500 mb-8">A corrida foi cancelada.</p><Button className="w-full h-14 text-lg font-bold bg-black rounded-2xl" onClick={() => { clearRide(); setStep('search'); }}>Voltar</Button></div>
                 )}
             </div>
         )}
-
-        {/* --- VIEW: HISTÓRICO (CARD FLUTUANTE) --- */}
-        {activeTab === 'history' && (
-            <div className={`w-full max-w-md h-[65vh] ${cardBaseClasses} flex flex-col pointer-events-auto`}>
-                <h2 className="text-2xl font-black text-slate-900 mb-6 flex items-center gap-3">
-                    <div className="p-2 bg-slate-100 rounded-full"><Clock className="w-6 h-6" /></div> Suas Viagens
-                </h2>
-                <ScrollArea className="flex-1 -mr-2 pr-4 custom-scrollbar">
-                    {historyItems.length === 0 ? (
-                        <div className="h-full flex flex-col items-center justify-center text-gray-400 space-y-2">
-                            <Clock className="w-12 h-12 opacity-20" />
-                            <p className="font-medium">Nenhuma viagem ainda.</p>
-                        </div>
-                    ) : (
-                        historyItems.map(item => (
-                            <div key={item.id} onClick={() => setSelectedHistoryItem(item)} className="mb-4 p-4 bg-white/50 border border-white/60 rounded-2xl hover:bg-white hover:shadow-md transition-all cursor-pointer group">
-                                <div className="flex justify-between items-start mb-3">
-                                    <span className="font-bold text-slate-900 bg-white px-2 py-1 rounded-md text-sm shadow-sm border border-gray-100">{new Date(item.created_at).toLocaleDateString()}</span>
-                                    <Badge variant="outline" className={`${item.status === 'COMPLETED' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-red-50 text-red-600 border-red-100'}`}>
-                                        {item.status === 'COMPLETED' ? 'Concluída' : 'Cancelada'}
-                                    </Badge>
-                                </div>
-                                <div className="flex items-center gap-4">
-                                    <div className="w-10 h-10 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center shrink-0 border border-white shadow-sm"><MapPin className="w-5 h-5 text-gray-600" /></div>
-                                    <div className="flex-1 overflow-hidden">
-                                        <p className="font-bold text-slate-800 truncate text-sm">{item.destination_address}</p>
-                                        <p className="text-xs text-gray-500 font-medium">UberX</p>
-                                    </div>
-                                    <div className="flex flex-col items-end">
-                                        <span className="font-black text-slate-900">R$ {item.price}</span>
-                                        <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-black transition-colors" />
-                                    </div>
-                                </div>
-                            </div>
-                        ))
-                    )}
-                </ScrollArea>
-            </div>
-        )}
       </div>
 
-      {/* MODAIS */}
-      <Dialog open={showBalanceAlert} onOpenChange={setShowBalanceAlert}><DialogContent className="sm:max-w-md bg-white rounded-3xl border-0"><DialogHeader><DialogTitle className="text-red-600 flex items-center gap-2"><Wallet /> Saldo Insuficiente</DialogTitle></DialogHeader><div className="text-center py-6"><p className="text-gray-500 mb-1">Faltam</p><h2 className="text-5xl font-black text-slate-900">R$ {missingAmount.toFixed(2)}</h2></div><DialogFooter><Button className="w-full rounded-xl h-12 font-bold" onClick={() => navigate('/wallet')}>Recarregar Agora</Button></DialogFooter></DialogContent></Dialog>
-      <AlertDialog open={showCancelAlert} onOpenChange={setShowCancelAlert}><AlertDialogContent className="rounded-3xl bg-white border-0"><AlertDialogHeader><AlertDialogTitle className="flex items-center gap-2 text-red-600"><AlertTriangle /> Cancelar Corrida?</AlertDialogTitle><AlertDialogDescription>Deseja realmente cancelar? Uma taxa pode ser cobrada se o motorista já estiver próximo.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel className="rounded-xl h-12">Voltar</AlertDialogCancel><AlertDialogAction onClick={() => { cancelRide(ride!.id); setShowCancelAlert(false); }} className="bg-red-600 hover:bg-red-700 rounded-xl h-12 font-bold">Sim, Cancelar</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+      {/* POPUP: MOTORISTA CHEGOU */}
+      <Dialog open={showArrivalPopup} onOpenChange={setShowArrivalPopup}>
+          <DialogContent className="sm:max-w-md bg-white border-0 shadow-2xl rounded-[40px] p-0 overflow-hidden">
+              <div className="bg-yellow-400 h-32 relative flex items-center justify-center">
+                  <div className="absolute inset-0 bg-black/5 pattern-dots" />
+                  <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-lg animate-bounce">
+                      <BellRing className="w-10 h-10 text-black fill-black" />
+                  </div>
+              </div>
+              <div className="px-8 pb-8 pt-4 text-center">
+                  <h2 className="text-3xl font-black text-slate-900 mb-2">Motorista Chegou!</h2>
+                  <p className="text-gray-500 mb-6 text-lg">Seu motorista está aguardando no local de embarque.</p>
+                  
+                  <div className="bg-gray-50 p-4 rounded-3xl flex items-center gap-4 mb-6 text-left border border-gray-100">
+                       <Avatar className="w-14 h-14 border-2 border-white shadow-sm"><AvatarImage src={ride?.driver_details?.avatar_url} /><AvatarFallback>M</AvatarFallback></Avatar>
+                       <div>
+                           <p className="font-bold text-lg text-slate-900">{ride?.driver_details?.name}</p>
+                           <p className="text-sm text-gray-500">{ride?.driver_details?.car_model} • {ride?.driver_details?.car_plate}</p>
+                       </div>
+                  </div>
+                  
+                  <Button className="w-full h-14 rounded-2xl text-lg font-bold bg-black hover:bg-zinc-800" onClick={() => setShowArrivalPopup(false)}>Estou indo!</Button>
+              </div>
+          </DialogContent>
+      </Dialog>
 
-      {/* DETALHES DO HISTÓRICO */}
+      {/* MODAIS GERAIS */}
+      <Dialog open={showBalanceAlert} onOpenChange={setShowBalanceAlert}><DialogContent className="sm:max-w-md bg-white rounded-3xl border-0"><DialogHeader><DialogTitle className="text-red-600 flex items-center gap-2"><Wallet /> Saldo Insuficiente</DialogTitle></DialogHeader><div className="text-center py-6"><p className="text-gray-500 mb-1">Faltam</p><h2 className="text-5xl font-black text-slate-900">R$ {missingAmount.toFixed(2)}</h2></div><DialogFooter><Button className="w-full rounded-xl h-12 font-bold" onClick={() => navigate('/wallet')}>Recarregar Agora</Button></DialogFooter></DialogContent></Dialog>
+      <AlertDialog open={showCancelAlert} onOpenChange={setShowCancelAlert}><AlertDialogContent className="rounded-3xl bg-white border-0"><AlertDialogHeader><AlertDialogTitle className="flex items-center gap-2 text-red-600"><AlertTriangle /> Cancelar Corrida?</AlertDialogTitle><AlertDialogDescription>Deseja realmente cancelar? Uma taxa pode ser cobrada.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel className="rounded-xl h-12">Voltar</AlertDialogCancel><AlertDialogAction onClick={() => { cancelRide(ride!.id); setShowCancelAlert(false); }} className="bg-red-600 hover:bg-red-700 rounded-xl h-12 font-bold">Sim, Cancelar</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+
+      {/* MODAL DETALHES HISTÓRICO (Agora abre corretamente) */}
       <Dialog open={!!selectedHistoryItem} onOpenChange={(o) => !o && setSelectedHistoryItem(null)}>
           <DialogContent className="sm:max-w-md bg-white rounded-3xl border-0">
               <DialogHeader><DialogTitle>Detalhes da Viagem</DialogTitle></DialogHeader>
@@ -332,7 +301,7 @@ const ClientDashboard = () => {
                   </div>
                   {selectedHistoryItem?.driver && (
                       <div className="bg-gray-50 p-4 rounded-2xl flex items-center gap-3">
-                          <Avatar><AvatarFallback>{selectedHistoryItem.driver.first_name[0]}</AvatarFallback></Avatar>
+                          <Avatar><AvatarFallback>{selectedHistoryItem.driver.first_name?.[0]}</AvatarFallback></Avatar>
                           <div><p className="font-bold text-slate-900">{selectedHistoryItem.driver.first_name} {selectedHistoryItem.driver.last_name}</p><p className="text-xs text-gray-500">{selectedHistoryItem.driver.car_model} • {selectedHistoryItem.driver.car_plate}</p></div>
                       </div>
                   )}
@@ -344,7 +313,7 @@ const ClientDashboard = () => {
           </DialogContent>
       </Dialog>
       
-      {/* HISTÓRICO SHEET (MOBILE) */}
+      {/* SHEET HISTÓRICO */}
        <Sheet open={showHistorySheet} onOpenChange={setShowHistorySheet}>
           <SheetContent side="right" className="w-full sm:w-[400px]">
               <SheetHeader><SheetTitle>Histórico de Viagens</SheetTitle></SheetHeader>
@@ -369,7 +338,6 @@ const ClientDashboard = () => {
           </SheetContent>
       </Sheet>
 
-      {/* 5. MENU FLUTUANTE - SEMPRE VISÍVEL E NO TOPO */}
       <div className="relative z-[100]">
          <FloatingDock activeTab={activeTab} onTabChange={handleTabChange} role="client" />
       </div>

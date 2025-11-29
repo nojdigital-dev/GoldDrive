@@ -33,6 +33,7 @@ const DriverDashboard = () => {
   const [showCancelAlert, setShowCancelAlert] = useState(false);
   const [showFinishScreen, setShowFinishScreen] = useState(false);
   const [finishedRideData, setFinishedRideData] = useState<any>(null);
+  const [showHistoryDetail, setShowHistoryDetail] = useState(false);
   
   // Rating
   const [rating, setRating] = useState(0);
@@ -55,8 +56,12 @@ const DriverDashboard = () => {
           if (!data.car_model || !data.car_plate) { setShowCarForm(true); setIsOnline(false); }
 
           if (activeTab === 'history') {
+               // Agora busca usando a FK explicita do supabase que criamos para garantir acesso
                const { data: rides } = await supabase.from('rides')
-                .select('*, customer:profiles!customer_id(first_name, last_name, avatar_url, phone)')
+                .select(`
+                    *, 
+                    customer:profiles!public_rides_customer_id_fkey(first_name, last_name, avatar_url, phone)
+                `)
                 .eq('driver_id', user.id)
                 .order('created_at', { ascending: false });
                setHistory(rides || []);
@@ -134,17 +139,20 @@ const DriverDashboard = () => {
       };
   };
 
+  const openHistoryDetail = (item: any) => {
+      setSelectedHistoryItem(item);
+      setShowHistoryDetail(true);
+  };
+
   const cardBaseClasses = "bg-white/90 backdrop-blur-xl border border-white/40 p-6 rounded-[32px] shadow-2xl animate-in slide-in-from-bottom duration-500 w-full";
 
   return (
     <div className="h-screen flex flex-col bg-slate-50 relative overflow-hidden font-sans">
       
-      {/* 1. MAPA (Sempre no fundo) */}
       <div className="absolute inset-0 z-0">
           <MapComponent className="h-full w-full" showPickup={isOnTrip} />
       </div>
 
-      {/* 2. HEADER FLUTUANTE */}
       <div className="absolute top-0 left-0 right-0 p-6 z-20 flex justify-between items-start pointer-events-none">
           <div className={`pointer-events-auto backdrop-blur-xl border border-white/20 p-2 pr-4 rounded-full flex items-center gap-3 shadow-lg transition-all duration-300 ${isOnline ? 'bg-black/80' : 'bg-white/80'}`}>
              <Switch checked={isOnline} onCheckedChange={toggleOnline} className="data-[state=checked]:bg-green-500" />
@@ -159,14 +167,11 @@ const DriverDashboard = () => {
           </div>
       </div>
 
-      {/* 3. CONTEÚDO PRINCIPAL FLUTUANTE */}
       <div className="absolute inset-0 z-10 flex flex-col justify-end pb-32 md:pb-10 md:justify-center items-center pointer-events-none p-4">
 
-         {/* --- VIEW: HOME (Painel Online/Offline & Corrida) --- */}
+         {/* --- VIEW: HOME --- */}
          {activeTab === 'home' && (
             <div className="w-full max-w-md pointer-events-auto transition-all duration-500">
-                
-                {/* ESTADO: OFFLINE */}
                 {!isOnline && (
                     <div className="bg-white/90 backdrop-blur-xl border border-white/40 p-8 rounded-[32px] shadow-2xl text-center animate-in zoom-in-95">
                         <div className="w-24 h-24 bg-slate-100 rounded-full mx-auto flex items-center justify-center mb-6 relative">
@@ -174,24 +179,17 @@ const DriverDashboard = () => {
                         </div>
                         <h2 className="text-3xl font-black text-slate-900 mb-2">Vamos rodar?</h2>
                         <p className="text-gray-500 mb-8 max-w-xs mx-auto">Fique online para começar a receber chamadas na sua região.</p>
-                        <Button size="lg" className="w-full h-14 text-lg bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-2xl shadow-xl shadow-slate-200 transition-all hover:scale-105" onClick={() => toggleOnline(true)}>
-                            FICAR ONLINE
-                        </Button>
+                        <Button size="lg" className="w-full h-14 text-lg bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-2xl shadow-xl shadow-slate-200 transition-all hover:scale-105" onClick={() => toggleOnline(true)}>FICAR ONLINE</Button>
                     </div>
                 )}
 
-                {/* ESTADO: ONLINE (Aguardando) */}
                 {isOnline && !incomingRide && !isOnTrip && (
                     <div className="bg-black/60 backdrop-blur-xl border border-white/10 px-6 py-4 rounded-full shadow-2xl flex items-center justify-center gap-3 animate-in fade-in">
-                        <div className="relative">
-                            <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
-                            <div className="absolute inset-0 w-3 h-3 bg-green-500 rounded-full animate-ping opacity-75" />
-                        </div>
+                        <div className="relative"><div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" /><div className="absolute inset-0 w-3 h-3 bg-green-500 rounded-full animate-ping opacity-75" /></div>
                         <p className="text-white font-bold">Procurando passageiros...</p>
                     </div>
                 )}
 
-                {/* ESTADO: NOVA SOLICITAÇÃO (Popup) */}
                 {incomingRide && (
                     <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 p-6 rounded-[32px] shadow-2xl animate-in slide-in-from-bottom text-white">
                         <div className="flex justify-between items-center mb-6">
@@ -202,10 +200,7 @@ const DriverDashboard = () => {
                         <div className="text-center mb-8">
                             <p className="text-slate-400 text-xs uppercase font-bold mb-1">Ganho Estimado</p>
                             <h2 className="text-5xl font-black tracking-tighter text-white">R$ {(incomingRide.price * 0.8).toFixed(2)}</h2>
-                            <div className="flex justify-center gap-3 mt-4">
-                                <Badge variant="outline" className="border-white/20 text-slate-300">{incomingRide.distance}</Badge>
-                                <Badge variant="outline" className="border-white/20 text-slate-300">{incomingRide.category}</Badge>
-                            </div>
+                            <div className="flex justify-center gap-3 mt-4"><Badge variant="outline" className="border-white/20 text-slate-300">{incomingRide.distance}</Badge><Badge variant="outline" className="border-white/20 text-slate-300">{incomingRide.category}</Badge></div>
                         </div>
 
                         <div className="space-y-4 mb-8 bg-white/5 p-4 rounded-2xl border border-white/10">
@@ -213,49 +208,21 @@ const DriverDashboard = () => {
                              <div className="flex items-start gap-3"><div className="w-2 h-2 mt-2 bg-green-500 rounded-full"/><div><p className="text-xs text-slate-400 font-bold uppercase">Destino</p><p className="font-medium text-sm leading-tight">{incomingRide.destination_address}</p></div></div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                            <Button variant="ghost" className="h-14 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold" onClick={handleReject}>Recusar</Button>
-                            <Button className="h-14 rounded-xl bg-green-500 hover:bg-green-400 text-black font-black animate-pulse" onClick={handleAccept}>ACEITAR</Button>
-                        </div>
+                        <div className="grid grid-cols-2 gap-4"><Button variant="ghost" className="h-14 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold" onClick={handleReject}>Recusar</Button><Button className="h-14 rounded-xl bg-green-500 hover:bg-green-400 text-black font-black animate-pulse" onClick={handleAccept}>ACEITAR</Button></div>
                     </div>
                 )}
 
-                {/* ESTADO: EM CORRIDA */}
                 {isOnTrip && !showFinishScreen && (
                      <div className={cardBaseClasses}>
                         <div className="flex justify-between items-center mb-6">
-                            <div>
-                                <Badge className="mb-2 bg-black text-white hover:bg-black">{ride?.status === 'ACCEPTED' ? 'A CAMINHO' : ride?.status === 'ARRIVED' ? 'NO LOCAL' : 'EM VIAGEM'}</Badge>
-                                <h3 className="text-2xl font-bold text-slate-900">{ride?.client_details?.name}</h3>
-                            </div>
-                            <div className="text-right">
-                                <h3 className="text-3xl font-black text-slate-900">R$ {(ride?.price || 0) * 0.8}</h3>
-                                <p className="text-gray-400 text-xs uppercase font-bold tracking-wider">Ganhos</p>
-                            </div>
+                            <div><Badge className="mb-2 bg-black text-white hover:bg-black">{ride?.status === 'ACCEPTED' ? 'A CAMINHO' : ride?.status === 'ARRIVED' ? 'NO LOCAL' : 'EM VIAGEM'}</Badge><h3 className="text-2xl font-bold text-slate-900">{ride?.client_details?.name}</h3></div>
+                            <div className="text-right"><h3 className="text-3xl font-black text-slate-900">R$ {(ride?.price || 0) * 0.8}</h3><p className="text-gray-400 text-xs uppercase font-bold tracking-wider">Ganhos</p></div>
                         </div>
 
                         <div className="flex flex-col gap-3">
-                             {ride?.status === 'ACCEPTED' && (
-                                <div className="flex gap-3">
-                                    <Button variant="ghost" className="flex-1 text-red-500 hover:bg-red-50 h-14 rounded-xl font-bold" onClick={handleCancelClick}>Cancelar</Button>
-                                    <Button className="flex-[2] h-14 bg-black hover:bg-zinc-800 text-white font-bold rounded-xl" onClick={() => confirmArrival(ride!.id)}>
-                                        <MapPin className="mr-2 h-5 w-5" /> Confirmar Chegada
-                                    </Button>
-                                </div>
-                             )}
-                             {ride?.status === 'ARRIVED' && (
-                                <div className="flex gap-3">
-                                    <Button variant="ghost" className="flex-1 text-red-500 hover:bg-red-50 h-14 rounded-xl font-bold" onClick={handleCancelClick}>Cancelar</Button>
-                                    <Button className="flex-[2] h-14 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl animate-pulse" onClick={() => startRide(ride!.id)}>
-                                        <Navigation className="mr-2 h-5 w-5" /> Iniciar Corrida
-                                    </Button>
-                                </div>
-                             )}
-                             {ride?.status === 'IN_PROGRESS' && (
-                                <Button className="w-full h-14 text-xl bg-black hover:bg-zinc-800 text-white font-bold rounded-xl" onClick={handleFinish}>
-                                    <Shield className="mr-2 h-6 w-6" /> Finalizar Viagem
-                                </Button>
-                             )}
+                             {ride?.status === 'ACCEPTED' && (<div className="flex gap-3"><Button variant="ghost" className="flex-1 text-red-500 hover:bg-red-50 h-14 rounded-xl font-bold" onClick={handleCancelClick}>Cancelar</Button><Button className="flex-[2] h-14 bg-black hover:bg-zinc-800 text-white font-bold rounded-xl" onClick={() => confirmArrival(ride!.id)}><MapPin className="mr-2 h-5 w-5" /> Confirmar Chegada</Button></div>)}
+                             {ride?.status === 'ARRIVED' && (<div className="flex gap-3"><Button variant="ghost" className="flex-1 text-red-500 hover:bg-red-50 h-14 rounded-xl font-bold" onClick={handleCancelClick}>Cancelar</Button><Button className="flex-[2] h-14 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl animate-pulse" onClick={() => startRide(ride!.id)}><Navigation className="mr-2 h-5 w-5" /> Iniciar Corrida</Button></div>)}
+                             {ride?.status === 'IN_PROGRESS' && (<Button className="w-full h-14 text-xl bg-black hover:bg-zinc-800 text-white font-bold rounded-xl" onClick={handleFinish}><Shield className="mr-2 h-6 w-6" /> Finalizar Viagem</Button>)}
                         </div>
                      </div>
                 )}
@@ -264,18 +231,24 @@ const DriverDashboard = () => {
 
          {/* --- VIEW: HISTÓRICO --- */}
          {activeTab === 'history' && (
-            <div className={`w-full max-w-md h-[65vh] ${cardBaseClasses} flex flex-col`}>
+            <div className={`w-full max-w-md h-[65vh] ${cardBaseClasses} flex flex-col pointer-events-auto`}>
                  <h2 className="text-2xl font-black text-slate-900 mb-6 flex items-center gap-2">
                     <History className="w-6 h-6" /> Corridas Realizadas
                  </h2>
                  <ScrollArea className="flex-1 -mr-2 pr-4 custom-scrollbar">
                      {history.length === 0 ? <p className="text-center text-gray-400 py-10">Nenhuma corrida ainda.</p> : history.map(item => (
-                         <div key={item.id} onClick={() => setSelectedHistoryItem(item)} className="mb-3 p-4 bg-white/50 border border-white/60 rounded-2xl hover:bg-white transition-all cursor-pointer shadow-sm group">
+                         <div key={item.id} onClick={() => openHistoryDetail(item)} className="mb-3 p-4 bg-white/50 border border-white/60 rounded-2xl hover:bg-white transition-all cursor-pointer shadow-sm group">
                              <div className="flex justify-between items-start mb-2">
-                                <div className="flex items-center gap-2"><p className="font-bold text-slate-900">{formatDate(item.created_at).day}</p><p className="text-xs text-gray-500">{formatDate(item.created_at).time}</p></div>
+                                <div className="flex items-center gap-2">
+                                    <Avatar className="w-8 h-8 border border-white"><AvatarImage src={item.customer?.avatar_url} /><AvatarFallback>{item.customer?.first_name?.[0]}</AvatarFallback></Avatar>
+                                    <div>
+                                        <p className="font-bold text-slate-900 text-sm">{item.customer?.first_name || 'Passageiro'}</p>
+                                        <p className="text-xs text-gray-500">{formatDate(item.created_at).day} • {formatDate(item.created_at).time}</p>
+                                    </div>
+                                </div>
                                 <span className="font-black text-green-700">R$ {item.driver_earnings?.toFixed(2)}</span>
                              </div>
-                             <p className="text-sm text-gray-600 truncate">{item.destination_address}</p>
+                             <p className="text-xs text-gray-500 truncate mt-1">{item.destination_address}</p>
                          </div>
                      ))}
                  </ScrollArea>
@@ -299,7 +272,14 @@ const DriverDashboard = () => {
                      <ScrollArea className="flex-1">
                          {transactions.map(t => (
                              <div key={t.id} className="flex justify-between items-center py-3 border-b border-gray-100 last:border-0">
-                                 <div><p className="font-bold text-sm text-slate-900">{t.description}</p><p className="text-xs text-gray-400">{new Date(t.created_at).toLocaleDateString()}</p></div>
+                                 <div>
+                                     <p className="font-bold text-sm text-slate-900">{t.description}</p>
+                                     <p className="text-xs text-gray-400 flex items-center gap-1">
+                                         {new Date(t.created_at).toLocaleDateString()}
+                                         <span className="w-1 h-1 rounded-full bg-gray-300"/>
+                                         {new Date(t.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                     </p>
+                                 </div>
                                  <span className={`font-bold ${t.amount > 0 ? 'text-green-600' : 'text-slate-900'}`}>{t.amount > 0 ? '+' : ''} R$ {Math.abs(t.amount).toFixed(2)}</span>
                              </div>
                          ))}
@@ -310,25 +290,55 @@ const DriverDashboard = () => {
 
       </div>
 
-      {/* 4. MODAL CARRO & ALERTS */}
       <Dialog open={showCarForm} onOpenChange={(open) => !open && (!driverProfile?.car_model ? setShowCarForm(true) : setShowCarForm(false))}>
           <DialogContent className="sm:max-w-md bg-white rounded-3xl border-0"><DialogHeader><DialogTitle>Cadastro do Veículo</DialogTitle><DialogDescription>Dados obrigatórios para rodar.</DialogDescription></DialogHeader><div className="grid gap-4 py-4"><div className="grid gap-2"><Label>Modelo</Label><Input value={carData.model} onChange={e => setCarData({...carData, model: e.target.value})} className="rounded-xl" /></div><div className="grid gap-2"><Label>Placa</Label><Input value={carData.plate} onChange={e => setCarData({...carData, plate: e.target.value.toUpperCase()})} className="rounded-xl" /></div><div className="grid grid-cols-2 gap-4"><div className="grid gap-2"><Label>Ano</Label><Input value={carData.year} type="number" onChange={e => setCarData({...carData, year: e.target.value})} className="rounded-xl" /></div><div className="grid gap-2"><Label>Cor</Label><Input value={carData.color} onChange={e => setCarData({...carData, color: e.target.value})} className="rounded-xl" /></div></div></div><DialogFooter><Button onClick={handleSaveCar} className="w-full bg-black rounded-xl h-12 font-bold">Salvar Veículo</Button></DialogFooter></DialogContent>
       </Dialog>
 
       <AlertDialog open={showCancelAlert} onOpenChange={setShowCancelAlert}>
-          <AlertDialogContent className="rounded-3xl bg-white border-0">
-              <AlertDialogHeader>
-                  <AlertDialogTitle className="flex items-center gap-2 text-red-600"><AlertTriangle /> Cancelar Corrida?</AlertDialogTitle>
-                  <AlertDialogDescription>Esta ação prejudica sua taxa de aceitação.</AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                  <AlertDialogCancel className="rounded-xl h-12">Voltar</AlertDialogCancel>
-                  <AlertDialogAction onClick={confirmCancel} className="bg-red-600 hover:bg-red-700 rounded-xl h-12 font-bold">Confirmar</AlertDialogAction>
-              </AlertDialogFooter>
-          </AlertDialogContent>
+          <AlertDialogContent className="rounded-3xl bg-white border-0"><AlertDialogHeader><AlertDialogTitle className="flex items-center gap-2 text-red-600"><AlertTriangle /> Cancelar Corrida?</AlertDialogTitle><AlertDialogDescription>Esta ação prejudica sua taxa de aceitação.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel className="rounded-xl h-12">Voltar</AlertDialogCancel><AlertDialogAction onClick={confirmCancel} className="bg-red-600 hover:bg-red-700 rounded-xl h-12 font-bold">Confirmar</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
       </AlertDialog>
 
-      {/* TELA DE SUCESSO */}
+      {/* MODAL DETALHES DA CORRIDA (HISTÓRICO) */}
+      <Dialog open={showHistoryDetail} onOpenChange={setShowHistoryDetail}>
+          <DialogContent className="sm:max-w-md bg-white rounded-3xl border-0 shadow-2xl">
+              <DialogHeader><DialogTitle className="text-xl font-black">Detalhes da Corrida</DialogTitle></DialogHeader>
+              <div className="py-2 space-y-6">
+                  {/* Passageiro */}
+                  <div className="flex items-center gap-4 bg-gray-50 p-4 rounded-2xl">
+                      <Avatar className="w-14 h-14 border-2 border-white shadow-sm"><AvatarImage src={selectedHistoryItem?.customer?.avatar_url} /><AvatarFallback>{selectedHistoryItem?.customer?.first_name?.[0]}</AvatarFallback></Avatar>
+                      <div>
+                          <p className="font-bold text-lg text-slate-900">{selectedHistoryItem?.customer?.first_name} {selectedHistoryItem?.customer?.last_name}</p>
+                          <p className="text-sm text-gray-500">{selectedHistoryItem?.customer?.phone || 'Sem telefone'}</p>
+                      </div>
+                  </div>
+
+                  {/* Rota */}
+                  <div className="space-y-4 px-2">
+                       <div className="flex gap-4">
+                           <div className="flex flex-col items-center pt-1"><div className="w-3 h-3 bg-slate-900 rounded-full" /><div className="w-0.5 flex-1 bg-gray-200 my-1" /><div className="w-3 h-3 bg-green-500 rounded-full" /></div>
+                           <div className="space-y-6 flex-1">
+                               <div><p className="text-xs font-bold text-gray-400 uppercase">Origem</p><p className="font-medium text-slate-900 leading-tight">{selectedHistoryItem?.pickup_address}</p></div>
+                               <div><p className="text-xs font-bold text-gray-400 uppercase">Destino</p><p className="font-medium text-slate-900 leading-tight">{selectedHistoryItem?.destination_address}</p></div>
+                           </div>
+                       </div>
+                  </div>
+
+                  {/* Valores */}
+                  <div className="bg-slate-900 text-white p-6 rounded-2xl flex items-center justify-between">
+                       <div><p className="text-gray-400 text-xs font-bold uppercase">Seu Ganho</p><h3 className="text-3xl font-black">R$ {selectedHistoryItem?.driver_earnings?.toFixed(2)}</h3></div>
+                       <div className="text-right"><p className="text-gray-400 text-xs font-bold uppercase">Taxa App</p><p className="font-bold">R$ {selectedHistoryItem?.platform_fee?.toFixed(2)}</p></div>
+                  </div>
+                  
+                  {/* Infos Extras */}
+                  <div className="grid grid-cols-2 gap-4 text-center">
+                       <div className="bg-gray-50 p-3 rounded-xl"><p className="text-xs text-gray-400 font-bold uppercase">Avaliação</p><div className="flex items-center justify-center gap-1 font-bold text-slate-900"><Star className="w-4 h-4 fill-yellow-400 text-yellow-400" /> {selectedHistoryItem?.customer_rating || '-'}</div></div>
+                       <div className="bg-gray-50 p-3 rounded-xl"><p className="text-xs text-gray-400 font-bold uppercase">Data</p><p className="font-bold text-slate-900">{selectedHistoryItem ? new Date(selectedHistoryItem.created_at).toLocaleDateString() : '-'}</p></div>
+                  </div>
+              </div>
+          </DialogContent>
+      </Dialog>
+
+      {/* TELA DE SUCESSO (FINALIZAR CORRIDA) */}
       {showFinishScreen && finishedRideData && (
           <div className="absolute inset-0 z-50 bg-white/95 backdrop-blur-xl flex flex-col items-center justify-center p-6 animate-in fade-in slide-in-from-bottom duration-500">
               <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mb-6">
@@ -353,14 +363,11 @@ const DriverDashboard = () => {
                           </button>
                       ))}
                   </div>
-                  <Button className="w-full h-14 text-lg font-bold bg-slate-900 hover:bg-slate-800 rounded-2xl" onClick={() => handleSubmitRating(rating || 5)}>
-                      Receber Nova Corrida
-                  </Button>
+                  <Button className="w-full h-14 text-lg font-bold bg-slate-900 hover:bg-slate-800 rounded-2xl" onClick={() => handleSubmitRating(rating || 5)}>Receber Nova Corrida</Button>
               </div>
           </div>
       )}
 
-      {/* 5. MENU FLUTUANTE UNIFICADO */}
       <div className="relative z-[100]">
          <FloatingDock activeTab={activeTab} onTabChange={handleTabChange} role="driver" />
       </div>
