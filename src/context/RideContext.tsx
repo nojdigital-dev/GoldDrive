@@ -139,8 +139,6 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
         
         // Updates de Status (Ambos)
         if (ride) {
-            // Se já está finalizada/cancelada e o usuário ainda não limpou (está vendo o modal), não faz polling pra mudar nada
-            // A menos que queiramos pegar atualizações do outro lado
             const { data: updatedRide } = await supabase.from('rides').select('*').eq('id', ride.id).single();
             
             if (updatedRide) {
@@ -174,8 +172,6 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
         const { data } = await query.order('created_at', { ascending: false }).limit(1).single();
         
         if (data) {
-            // Se foi cancelada ou completada há muito tempo, ignora. Mas se for recente (ex: sem avaliação), mantém.
-            // Aqui simplificamos: se não está avaliada (completed) ou se é ativa, carrega.
             const isActive = ['SEARCHING', 'ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(data.status);
             const isPendingRating = data.status === 'COMPLETED' && (userRole === 'client' ? !data.customer_rating : !data.driver_rating);
             
@@ -238,6 +234,19 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
       if (error) throw error;
       setRide(prev => prev ? { ...prev, ...data } : null);
       showSuccess("Chegada confirmada!");
+  };
+
+  const rejectRide = async (rideId: string) => {
+      if (!userId) return;
+      setAvailableRides(prev => prev.filter(r => r.id !== rideId));
+      
+      const { data: currentRide } = await supabase.from('rides').select('rejected_by').eq('id', rideId).single();
+      if (currentRide) {
+          const currentRejected = currentRide.rejected_by || [];
+          if (!currentRejected.includes(userId)) {
+              await supabase.from('rides').update({ rejected_by: [...currentRejected, userId] }).eq('id', rideId);
+          }
+      }
   };
 
   const startRide = async (rideId: string) => {
