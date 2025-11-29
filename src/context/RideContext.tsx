@@ -20,6 +20,7 @@ export interface RideData {
   driver_rating?: number;
   driver_earnings?: number;
   platform_fee?: number;
+  rejected_by?: string[]; // Nova coluna
 }
 
 interface RideContextType {
@@ -27,9 +28,10 @@ interface RideContextType {
   availableRides: RideData[];
   requestRide: (pickup: string, destination: string, price: number, distance: string, category: string) => Promise<void>;
   acceptRide: (rideId: string) => Promise<void>;
+  rejectRide: (rideId: string) => Promise<void>; // Nova função
   startRide: (rideId: string) => Promise<void>;
   finishRide: (rideId: string) => Promise<void>;
-  cancelRide: (rideId: string) => Promise<void>;
+  cancelRide: (rideId: string, reason?: string) => Promise<void>;
   rateRide: (rideId: string, rating: number, isDriver: boolean) => Promise<void>;
   userRole: 'client' | 'driver' | 'admin' | null;
   loading: boolean;
@@ -87,22 +89,7 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
       return data ? `${data.first_name} ${data.last_name || ''}` : 'Motorista';
   };
 
-  // Simulação de chegada do motorista
-  useEffect(() => {
-      if (ride?.status === 'ACCEPTED' && userRole === 'client') {
-          // Cliente vê que motorista aceitou.
-          // Em um app real, isso seria via GPS. Aqui simulamos 60 segundos para mudar para ARRIVED
-          // Mas como o estado muda no banco via motorista ou sistema, aqui faremos visualmente
-          // O correto é o motorista mudar o status.
-          // Vamos fazer um "auto-update" se o motorista não fizer nada em 60s? 
-          // Melhor: O motorista aceita -> Cliente vê "Motorista a caminho" -> Motorista clica "Cheguei".
-          // O prompt pede "O motorista demora 60 segundos pra chegar".
-          // Vamos deixar o status visual no cliente.
-      }
-  }, [ride?.status]);
-
-
-  // Realtime
+  // Realtime e Fetch Inicial
   useEffect(() => {
     if (!userId) return;
 
@@ -126,6 +113,7 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
              }
         } 
         else if (userRole === 'driver') {
+             // 1. Busca se o motorista JÁ ESTÁ em uma corrida
              const { data } = await supabase
                 .from('rides')
                 .select('*')
@@ -140,8 +128,20 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
                  else { setRide(data as RideData); }
              }
              
-             const { data: available } = await supabase.from('rides').select('*').eq('status', 'SEARCHING');
-             if (available) setAvailableRides(available as RideData[]);
+             // 2. Busca corridas disponíveis (que não foram rejeitadas por este motorista)
+             // Nota: Filtro de array 'rejected_by' no client-side ou com RPC é mais fácil. 
+             // Vamos filtrar no client side após o fetch por simplicidade.
+             const { data: available } = await supabase
+                .from('rides')
+                .select('*')
+                .eq('status', 'SEARCHING');
+             
+             if (available) {
+                 const filtered = available.filter((r: any) => 
+                     !r.rejected_by || !r.rejected_by.includes(userId)
+                 );
+                 setAvailableRides(filtered as RideData[]);
+             }
         }
     };
 
@@ -152,11 +152,13 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rides' }, async (payload) => {
         const newRide = payload.new as RideData;
         
-        // Lógica de atualização (igual anterior)
+        // --- LÓGICA DO CLIENTE ---
         if (userRole === 'client' && newRide.customer_id === userId) {
             if (newRide.status === 'CANCELLED') {
                 setRide(null);
-                showError("Corrida cancelada.");
+                // Apenas mostra erro se não for o próprio cliente cancelando (checado via UI normalmente, mas ok aqui)
+                // Se o status mudou pra CANCELLED via backend/timeout
+                showError("Corrida cancelada ou nenhum motorista encontrado.");
             } else if (newRide.status === 'COMPLETED') {
                  let updatedRide = { ...newRide };
                  if (newRide.driver_id) updatedRide.driver_name = await fetchDriverInfo(newRide.driver_id);
@@ -172,13 +174,30 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
             }
         }
         
+        // --- LÓGICA DO MOTORISTA ---
         if (userRole === 'driver') {
-            if (payload.eventType === 'INSERT' && newRide.status === 'SEARCHING') {
-                setAvailableRides(prev => [...prev, newRide]);
+            // Se foi rejeitada por mim, ignora ou remove da lista
+            if (newRide.rejected_by && newRide.rejected_by.includes(userId)) {
+                setAvailableRides(prev => prev.filter(r => r.id !== newRide.id));
+                return; 
             }
-            if (payload.eventType === 'UPDATE' && newRide.status !== 'SEARCHING') {
+
+            // Nova corrida disponível
+            if (newRide.status === 'SEARCHING') {
+                setAvailableRides(prev => {
+                    // Evita duplicatas e garante que não está rejeitada
+                    const exists = prev.find(r => r.id === newRide.id);
+                    if (exists) return prev; 
+                    return [...prev, newRide];
+                });
+            }
+            
+            // Corrida não está mais disponível (Alguém aceitou ou foi cancelada)
+            if (newRide.status !== 'SEARCHING') {
                 setAvailableRides(prev => prev.filter(r => r.id !== newRide.id));
             }
+
+            // Atualização da MINHA corrida atual
             if (newRide.driver_id === userId) {
                 if (newRide.status === 'CANCELLED') {
                     setRide(null);
@@ -199,14 +218,11 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
 
   const addBalance = async (amount: number) => {
       if (!userId) return;
-      // Pegar saldo atual
       const { data: profile } = await supabase.from('profiles').select('balance').eq('id', userId).single();
       const currentBalance = Number(profile?.balance || 0);
       
-      // Atualizar
       const { error } = await supabase.from('profiles').update({ balance: currentBalance + amount }).eq('id', userId);
       
-      // Registrar transação
       await supabase.from('transactions').insert({
           user_id: userId,
           amount: amount,
@@ -235,7 +251,8 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
         price: Number(price),
         distance,
         category,
-        status: 'SEARCHING'
+        status: 'SEARCHING',
+        rejected_by: [] // Inicializa array vazio
     });
     
     if (error) throw error;
@@ -244,17 +261,52 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
 
   const acceptRide = async (rideId: string) => {
       if (!userId) return;
+      
+      // Tenta pegar a corrida. Verifica se já não foi aceita por outro.
+      const { data: checkRide } = await supabase.from('rides').select('status').eq('id', rideId).single();
+      if (checkRide.status !== 'SEARCHING') {
+          showError("Esta corrida já foi aceita por outro motorista ou cancelada.");
+          setAvailableRides(prev => prev.filter(r => r.id !== rideId));
+          return;
+      }
+
       const { error } = await supabase.from('rides').update({
           status: 'ACCEPTED',
           driver_id: userId
       }).eq('id', rideId);
+      
       if (error) throw error;
       
-      // Simular chegada em 60s (Update status to ARRIVED)
       setTimeout(async () => {
           await supabase.from('rides').update({ status: 'ARRIVED' }).eq('id', rideId);
           showSuccess("Você chegou ao local de embarque!");
       }, 60000); 
+  };
+
+  // Nova função de Rejeitar
+  const rejectRide = async (rideId: string) => {
+      if (!userId) return;
+
+      // Remove localmente imediatamente
+      setAvailableRides(prev => prev.filter(r => r.id !== rideId));
+
+      // Atualiza no banco
+      // Usamos RPC ou raw SQL para append no array se fosse complexo, mas aqui vamos ler e atualizar
+      // Nota: Idealmente seria uma chamada RPC "append_rejection", mas vamos fazer via JS para simplicidade do prompt
+      
+      const { data: currentRide } = await supabase.from('rides').select('rejected_by').eq('id', rideId).single();
+      const currentRejected = currentRide?.rejected_by || [];
+      
+      if (!currentRejected.includes(userId)) {
+          const { error } = await supabase
+            .from('rides')
+            .update({ 
+                rejected_by: [...currentRejected, userId] 
+            })
+            .eq('id', rideId);
+            
+          if (error) console.error("Error rejecting ride", error);
+      }
   };
 
   const startRide = async (rideId: string) => {
@@ -268,14 +320,13 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
       const driverEarn = price * 0.8;
       const platformFee = price * 0.2;
 
-      // Atualizar corrida
       await supabase.from('rides').update({
           status: 'COMPLETED',
           driver_earnings: driverEarn,
           platform_fee: platformFee
       }).eq('id', rideId);
 
-      // 1. Debitar Passageiro
+      // Debitar Passageiro
       const { data: clientProfile } = await supabase.from('profiles').select('balance').eq('id', ride.customer_id).single();
       await supabase.from('profiles').update({ balance: (clientProfile?.balance || 0) - price }).eq('id', ride.customer_id);
       
@@ -283,10 +334,10 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
           user_id: ride.customer_id,
           amount: -price,
           type: 'RIDE_PAYMENT',
-          description: `Pagamento Corrida para ${ride.destination_address}`
+          description: `Pagamento Corrida`
       });
 
-      // 2. Creditar Motorista (80%)
+      // Creditar Motorista
       if (ride.driver_id) {
           const { data: driverProfile } = await supabase.from('profiles').select('balance').eq('id', ride.driver_id).single();
           await supabase.from('profiles').update({ balance: (driverProfile?.balance || 0) + driverEarn }).eq('id', ride.driver_id);
@@ -302,27 +353,36 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
       showSuccess("Corrida finalizada! Pagamento processado.");
   };
 
-  const cancelRide = async (rideId: string) => {
-      if (!ride) return;
+  const cancelRide = async (rideId: string, reason: string = "Cancelado pelo usuário") => {
+      if (!ride && !rideId) return;
+      const targetId = rideId || ride?.id;
+      if (!targetId) return;
+
+      // Se a corrida já foi cancelada por timeout, apenas reseta estado
+      if (reason === 'TIMEOUT') {
+           await supabase.from('rides').update({ status: 'CANCELLED' }).eq('id', targetId);
+           setRide(null);
+           return;
+      }
       
-      // Verificar se aplica taxa (Se motorista já aceitou)
-      if (ride.status === 'ACCEPTED' || ride.status === 'ARRIVED') {
-          // Taxa de 5 reais (2.50 mot, 2.50 admin)
+      // Logica de taxa (apenas se motorista já tinha aceitado)
+      // Se userRole == client e status == ACCEPTED/ARRIVED
+      const isLateCancel = (ride?.status === 'ACCEPTED' || ride?.status === 'ARRIVED');
+      
+      if (isLateCancel && userRole === 'client') {
           const fee = 5.00;
           const driverPart = 2.50;
           
-          // Debitar Cliente
-          const { data: clientProfile } = await supabase.from('profiles').select('balance').eq('id', ride.customer_id).single();
-          await supabase.from('profiles').update({ balance: (clientProfile?.balance || 0) - fee }).eq('id', ride.customer_id);
+          const { data: clientProfile } = await supabase.from('profiles').select('balance').eq('id', userId).single();
+          await supabase.from('profiles').update({ balance: (clientProfile?.balance || 0) - fee }).eq('id', userId);
           
           await supabase.from('transactions').insert({
-              user_id: ride.customer_id,
+              user_id: userId,
               amount: -fee,
               type: 'FEE_CANCELLATION',
-              description: `Taxa de cancelamento tardio`
+              description: `Taxa de cancelamento`
           });
 
-          // Creditar Motorista
           if (ride.driver_id) {
               const { data: driverProfile } = await supabase.from('profiles').select('balance').eq('id', ride.driver_id).single();
               await supabase.from('profiles').update({ balance: (driverProfile?.balance || 0) + driverPart }).eq('id', ride.driver_id);
@@ -331,15 +391,16 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
                   user_id: ride.driver_id,
                   amount: driverPart,
                   type: 'FEE_CANCELLATION_EARNING',
-                  description: `Compensação Cancelamento (50%)`
+                  description: `Compensação Cancelamento`
               });
           }
-          showSuccess("Corrida cancelada. Taxa de R$ 5,00 aplicada.");
+          showSuccess("Cancelado. Taxa de R$ 5,00 aplicada.");
       } else {
           showSuccess("Corrida cancelada.");
       }
 
-      await supabase.from('rides').update({ status: 'CANCELLED' }).eq('id', rideId);
+      await supabase.from('rides').update({ status: 'CANCELLED' }).eq('id', targetId);
+      setRide(null);
   };
 
   const rateRide = async (rideId: string, rating: number, isDriver: boolean) => {
@@ -355,7 +416,7 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <RideContext.Provider value={{ ride, availableRides, requestRide, acceptRide, startRide, finishRide, cancelRide, rateRide, addBalance, userRole, loading }}>
+    <RideContext.Provider value={{ ride, availableRides, requestRide, acceptRide, rejectRide, startRide, finishRide, cancelRide, rateRide, addBalance, userRole, loading }}>
       {children}
     </RideContext.Provider>
   );

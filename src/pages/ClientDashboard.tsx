@@ -67,16 +67,39 @@ const ClientDashboard = () => {
     fetchProfile();
   }, []);
 
+  // Monitora estado da corrida e Timeout
   useEffect(() => {
+    let timeout: NodeJS.Timeout;
+
     if (ride) {
       if (ride.status === 'COMPLETED') {
          setStep('rating');
       } else if (['SEARCHING', 'ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(ride.status)) {
          setStep('waiting');
+         
+         // Se ficar procurando por mais de 60 segundos, cancela
+         if (ride.status === 'SEARCHING') {
+             const created = new Date(ride.created_at).getTime();
+             const now = new Date().getTime();
+             const diff = now - created;
+             const remaining = 60000 - diff;
+             
+             if (remaining > 0) {
+                 timeout = setTimeout(() => {
+                     cancelRide(ride.id, 'TIMEOUT');
+                     showError("Nenhum motorista disponível no momento. Tente novamente.");
+                 }, remaining);
+             } else {
+                 // Já passou do tempo (page refresh)
+                 cancelRide(ride.id, 'TIMEOUT');
+             }
+         }
       }
     } else {
       setStep('search');
     }
+    
+    return () => clearTimeout(timeout);
   }, [ride]);
 
   const getCurrentLocation = () => {

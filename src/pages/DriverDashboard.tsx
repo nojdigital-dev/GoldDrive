@@ -12,7 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 const DriverDashboard = () => {
   const navigate = useNavigate();
-  const { ride, availableRides, acceptRide, finishRide, startRide, rateRide } = useRide();
+  const { ride, availableRides, acceptRide, rejectRide, finishRide, startRide, rateRide } = useRide();
   const [activeTab, setActiveTab] = useState<'home' | 'history' | 'wallet'>('home');
   const [isOnline, setIsOnline] = useState(false);
   const [incomingRide, setIncomingRide] = useState<RideData | null>(null);
@@ -50,6 +50,7 @@ const DriverDashboard = () => {
 
   useEffect(() => {
     if (isOnline && availableRides.length > 0 && !ride && activeTab === 'home') {
+        // Pega a primeira que não foi rejeitada (já filtrado no Context, mas segurança extra)
         setIncomingRide(availableRides[0]);
         setTimer(15);
     } else {
@@ -61,8 +62,9 @@ const DriverDashboard = () => {
     if (incomingRide && timer > 0) {
         const interval = setInterval(() => setTimer(t => t - 1), 1000);
         return () => clearInterval(interval);
-    } else if (timer === 0) {
-        setIncomingRide(null);
+    } else if (timer === 0 && incomingRide) {
+        // Tempo acabou: rejeita automaticamente
+        handleReject();
     }
   }, [incomingRide, timer]);
 
@@ -72,6 +74,13 @@ const DriverDashboard = () => {
         showSuccess("Corrida aceita! Vá até o passageiro.");
         setIncomingRide(null);
     }
+  };
+
+  const handleReject = async () => {
+      if (incomingRide) {
+          await rejectRide(incomingRide.id); // Chama a função que salva no banco
+          setIncomingRide(null);
+      }
   };
 
   const handleSubmitRating = async (stars: number) => {
@@ -230,7 +239,7 @@ const DriverDashboard = () => {
                                     <Button 
                                         variant="ghost" 
                                         className="h-16 text-xl bg-zinc-800 hover:bg-zinc-700 text-gray-300 rounded-xl"
-                                        onClick={() => setIncomingRide(null)}
+                                        onClick={handleReject}
                                     >
                                         Recusar
                                     </Button>
