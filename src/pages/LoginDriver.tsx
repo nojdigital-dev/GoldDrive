@@ -9,21 +9,16 @@ import { ArrowLeft, Loader2, ArrowRight, Car } from "lucide-react";
 const LoginDriver = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [checkingSession, setCheckingSession] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
   const [name, setName] = useState("");
 
-  // Auto-Redirect
+  // Verificação em segundo plano
   useEffect(() => {
     const checkUser = async () => {
         const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-            navigate('/driver', { replace: true });
-        } else {
-            setCheckingSession(false);
-        }
+        if (session) navigate('/driver');
     };
     checkUser();
   }, [navigate]);
@@ -49,13 +44,10 @@ const LoginDriver = () => {
         }
     } catch (e: any) {
         showError(e.message);
+    } finally {
         setLoading(false);
     }
   };
-
-  if (checkingSession) {
-      return <div className="min-h-screen bg-black flex items-center justify-center"><Loader2 className="animate-spin w-8 h-8 text-yellow-500" /></div>;
-  }
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col relative overflow-hidden">

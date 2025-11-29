@@ -9,20 +9,18 @@ import { ArrowLeft, Loader2, ArrowRight, MapPin, User, Lock, Mail } from "lucide
 const LoginClient = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [checkingSession, setCheckingSession] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
   const [name, setName] = useState("");
 
-  // Auto-Redirect Inteligente
+  // Verificação em segundo plano (Não bloqueia a tela)
   useEffect(() => {
     const checkUser = async () => {
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
-            navigate('/client', { replace: true });
-        } else {
-            setCheckingSession(false);
+            // Se já tiver sessão, redireciona suavemente
+            navigate('/client');
         }
     };
     checkUser();
@@ -45,18 +43,14 @@ const LoginClient = () => {
         } else {
             const { error } = await supabase.auth.signInWithPassword({ email, password });
             if(error) throw error;
-            // O redirecionamento será feito automaticamente pelo listener do auth state ou pelo ProtectedRoute
             navigate('/client');
         }
     } catch (e: any) {
         showError(e.message);
+    } finally {
         setLoading(false);
     }
   };
-
-  if (checkingSession) {
-      return <div className="min-h-screen bg-white flex items-center justify-center"><Loader2 className="animate-spin w-8 h-8 text-yellow-500" /></div>;
-  }
 
   return (
     <div className="min-h-screen bg-white flex">

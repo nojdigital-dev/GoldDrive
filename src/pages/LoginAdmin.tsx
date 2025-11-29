@@ -10,22 +10,16 @@ import { Card, CardContent } from "@/components/ui/card";
 const LoginAdmin = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [checkingSession, setCheckingSession] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
+  // Verificação em segundo plano
   useEffect(() => {
     const checkUser = async () => {
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
              const { data } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
-             if (data?.role === 'admin') {
-                 navigate('/admin', { replace: true });
-             } else {
-                 setCheckingSession(false);
-             }
-        } else {
-            setCheckingSession(false);
+             if (data?.role === 'admin') navigate('/admin');
         }
     };
     checkUser();
@@ -49,13 +43,10 @@ const LoginAdmin = () => {
         }
     } catch (e: any) {
         showError(e.message);
+    } finally {
         setLoading(false);
     }
   };
-
-  if (checkingSession) {
-      return <div className="min-h-screen bg-slate-950 flex items-center justify-center"><Loader2 className="animate-spin w-8 h-8 text-yellow-500" /></div>;
-  }
 
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden font-sans">
