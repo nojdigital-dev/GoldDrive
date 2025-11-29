@@ -39,6 +39,7 @@ const ClientDashboard = () => {
   const [userProfile, setUserProfile] = useState<any>(null);
   const [showBalanceAlert, setShowBalanceAlert] = useState(false);
   const [missingAmount, setMissingAmount] = useState(0);
+  const [loadingCats, setLoadingCats] = useState(true);
   
   // Confirmação de Cancelamento
   const [showCancelAlert, setShowCancelAlert] = useState(false);
@@ -70,6 +71,8 @@ const ClientDashboard = () => {
   const fetchInitialData = async () => {
     const { data: cats } = await supabase.from('car_categories').select('*').order('base_fare', { ascending: true });
     if (cats) { setCategories(cats); setSelectedCategoryId(cats[0].id); }
+    setLoadingCats(false);
+    
     const { data: { user } } = await supabase.auth.getUser();
     if(user) { 
         const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single(); 
