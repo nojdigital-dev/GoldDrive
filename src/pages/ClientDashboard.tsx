@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import MapComponent from "@/components/MapComponent";
 import { 
-  MapPin, Clock, Search, Menu, User, ArrowLeft, Car, Navigation
+  MapPin, Menu, User, ArrowLeft, Car, Navigation, Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,18 +9,23 @@ import { useRide } from "@/context/RideContext";
 import { showSuccess, showError } from "@/utils/toast";
 import { useNavigate } from "react-router-dom";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { supabase } from "@/integrations/supabase/client";
 
-// Dados simulados para teste
+// Mocks apenas para distâncias
 const MOCK_LOCATIONS = [
-    { id: "short", label: "Shopping Center (2km)", distance: "2.1 km", basePrice: 10 },
-    { id: "long", label: "Aeroporto Internacional (15km)", distance: "15.4 km", basePrice: 40 }
+    { id: "short", label: "Shopping Center (2km)", distance: "2.1 km", km: 2.1 },
+    { id: "medium", label: "Centro da Cidade (5km)", distance: "5.0 km", km: 5.0 },
+    { id: "long", label: "Aeroporto (15km)", distance: "15.4 km", km: 15.4 }
 ];
 
-const CATEGORIES = [
-    { id: "GoPromo", name: "GoPromo", multiplier: 1, time: "3 min", image: Car },
-    { id: "GoComfort", name: "GoComfort", multiplier: 1.4, time: "5 min", image: Car },
-    { id: "GoBlack", name: "GoBlack", multiplier: 2.0, time: "8 min", image: Car },
-];
+type Category = {
+    id: string;
+    name: string;
+    description: string;
+    base_fare: number;
+    cost_per_km: number;
+    min_fare: number;
+};
 
 const ClientDashboard = () => {
   const navigate = useNavigate();
@@ -30,8 +35,26 @@ const ClientDashboard = () => {
   const [step, setStep] = useState<'search' | 'confirm' | 'waiting'>('search');
   const [pickup, setPickup] = useState("");
   const [destinationId, setDestinationId] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("GoPromo");
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>("");
   const [loadingLocation, setLoadingLocation] = useState(false);
+  
+  // Dados do DB
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loadingCats, setLoadingCats] = useState(false);
+
+  // Carregar categorias do banco
+  useEffect(() => {
+    const fetchCategories = async () => {
+        setLoadingCats(true);
+        const { data } = await supabase.from('car_categories').select('*').order('base_fare', { ascending: true });
+        if (data) {
+            setCategories(data);
+            if(data.length > 0) setSelectedCategoryId(data[0].id);
+        }
+        setLoadingCats(false);
+    };
+    fetchCategories();
+  }, []);
 
   // Sincronizar estado da corrida com a UI
   useEffect(() => {
@@ -50,7 +73,6 @@ const ClientDashboard = () => {
       setLoadingLocation(true);
       if ("geolocation" in navigator) {
           navigator.geolocation.getCurrentPosition((position) => {
-              // Aqui idealmente faríamos reverse geocoding
               setPickup(`Rua das Flores, 123 (Minha Localização)`);
               setLoadingLocation(false);
           }, (error) => {
@@ -74,17 +96,25 @@ const ClientDashboard = () => {
 
   const getPrice = (catId: string) => {
       const dest = MOCK_LOCATIONS.find(l => l.id === destinationId);
-      const cat = CATEGORIES.find(c => c.id === catId);
-      if (!dest || !cat) return 0;
-      return (dest.basePrice * cat.multiplier).toFixed(2);
+      const cat = categories.find(c => c.id === catId);
+      
+      if (!dest || !cat) return "0.00";
+
+      // Fórmula: Taxa Base + (Km * Custo por Km)
+      const calculated = Number(cat.base_fare) + (dest.km * Number(cat.cost_per_km));
+      
+      // Respeitar tarifa mínima
+      const finalPrice = Math.max(calculated, Number(cat.min_fare));
+      
+      return finalPrice.toFixed(2);
   };
 
   const confirmRide = async () => {
     const dest = MOCK_LOCATIONS.find(l => l.id === destinationId);
-    const cat = CATEGORIES.find(c => c.id === selectedCategory);
-    const price = parseFloat(getPrice(selectedCategory) as string);
+    const cat = categories.find(c => c.id === selectedCategoryId);
     
     if (dest && cat) {
+        const price = parseFloat(getPrice(cat.id));
         await requestRide(pickup, dest.label, price, dest.distance, cat.name);
     }
   };
@@ -142,17 +172,17 @@ const ClientDashboard = () => {
                    </Button>
                 </div>
 
-                {/* Input Destino (Select para teste) */}
+                {/* Input Destino */}
                 <div className="relative">
                    <div className="absolute left-3 top-3.5 w-2 h-2 bg-black z-10"></div>
                    <Select onValueChange={setDestinationId} value={destinationId}>
                       <SelectTrigger className="pl-8 bg-gray-100 border-0 h-12 text-lg font-medium">
-                        <SelectValue placeholder="Selecione o destino (Teste)" />
+                        <SelectValue placeholder="Selecione o destino" />
                       </SelectTrigger>
                       <SelectContent>
                         {MOCK_LOCATIONS.map(loc => (
                             <SelectItem key={loc.id} value={loc.id}>
-                                {loc.label} - <span className="text-muted-foreground text-xs">{loc.distance}</span>
+                                {loc.label}
                             </SelectItem>
                         ))}
                       </SelectContent>
@@ -169,28 +199,32 @@ const ClientDashboard = () => {
              <div className="animate-in slide-in-from-bottom duration-300">
                 <span className="font-medium text-gray-500 block mb-4">Escolha a categoria</span>
                 
-                <div className="space-y-3 mb-6 max-h-[300px] overflow-y-auto pr-2">
-                    {CATEGORIES.map((cat) => (
-                        <div 
-                            key={cat.id} 
-                            onClick={() => setSelectedCategory(cat.id)}
-                            className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                                selectedCategory === cat.id 
-                                ? 'border-black bg-zinc-50 shadow-md' 
-                                : 'border-transparent bg-white hover:bg-gray-50'
-                            }`}
-                        >
-                            <div className="flex items-center gap-4">
-                                <cat.image className="w-10 h-10" />
-                                <div>
-                                    <h4 className="font-bold text-lg">{cat.name}</h4>
-                                    <p className="text-xs text-gray-500">{cat.time} • Perto</p>
+                {loadingCats ? (
+                    <div className="py-10 text-center"><Loader2 className="animate-spin mx-auto" /></div>
+                ) : (
+                    <div className="space-y-3 mb-6 max-h-[300px] overflow-y-auto pr-2">
+                        {categories.map((cat) => (
+                            <div 
+                                key={cat.id} 
+                                onClick={() => setSelectedCategoryId(cat.id)}
+                                className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                                    selectedCategoryId === cat.id 
+                                    ? 'border-black bg-zinc-50 shadow-md' 
+                                    : 'border-transparent bg-white hover:bg-gray-50'
+                                }`}
+                            >
+                                <div className="flex items-center gap-4">
+                                    <Car className="w-10 h-10 text-gray-700" />
+                                    <div>
+                                        <h4 className="font-bold text-lg">{cat.name}</h4>
+                                        <p className="text-xs text-gray-500">{cat.description}</p>
+                                    </div>
                                 </div>
+                                <span className="font-bold text-lg">R$ {getPrice(cat.id)}</span>
                             </div>
-                            <span className="font-bold text-lg">R$ {getPrice(cat.id)}</span>
-                        </div>
-                    ))}
-                </div>
+                        ))}
+                    </div>
+                )}
                 
                 <div className="flex gap-3 items-center">
                     <div className="flex-1">
@@ -199,8 +233,8 @@ const ClientDashboard = () => {
                             💵 Dinheiro
                         </div>
                     </div>
-                    <Button className="flex-[2] py-6 text-lg rounded-xl bg-black hover:bg-zinc-800" onClick={confirmRide}>
-                        Confirmar {selectedCategory}
+                    <Button className="flex-[2] py-6 text-lg rounded-xl bg-black hover:bg-zinc-800" onClick={confirmRide} disabled={!selectedCategoryId}>
+                        Confirmar GoMove
                     </Button>
                 </div>
              </div>
@@ -218,7 +252,7 @@ const ClientDashboard = () => {
                                 <h3 className="font-bold text-lg">{ride.driver_name || 'Motorista'}</h3>
                                 <div className="flex items-center gap-2 text-sm text-gray-600">
                                     <span className="bg-gray-200 px-2 py-0.5 rounded text-xs font-bold">★ 5.0</span>
-                                    <span>• Toyota Corolla Prata</span>
+                                    <span>• {ride.category}</span>
                                 </div>
                                 <p className="text-xs font-mono bg-zinc-100 inline-block px-1 mt-1 rounded border">ABC-1234</p>
                             </div>
@@ -247,12 +281,16 @@ const ClientDashboard = () => {
                     <>
                         <div className="w-20 h-20 bg-blue-50 rounded-full mx-auto flex items-center justify-center mb-4 relative">
                             <div className="absolute inset-0 border-4 border-blue-500 rounded-full animate-ping opacity-20"></div>
-                            <Search className="w-8 h-8 text-blue-600" />
+                            <Car className="w-8 h-8 text-blue-600" />
                         </div>
                         <h3 className="text-xl font-bold mb-2">Procurando motorista...</h3>
                         <p className="text-gray-500 mb-6 text-sm px-8">Estamos oferecendo sua corrida para os motoristas parceiros da GoMove.</p>
                         
                         <div className="bg-gray-50 p-4 rounded-lg mb-4 text-left">
+                             <div className="flex justify-between items-center border-b pb-2 mb-2">
+                                <span className="text-sm font-bold">{ride?.category}</span>
+                                <span className="text-sm font-bold text-green-600">R$ {ride?.price}</span>
+                             </div>
                             <div className="flex justify-between mb-2">
                                 <span className="text-sm text-gray-500">Origem</span>
                                 <span className="text-sm font-medium truncate max-w-[200px]">{ride?.pickup_address}</span>
