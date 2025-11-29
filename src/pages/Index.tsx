@@ -1,85 +1,62 @@
 import { MadeWithDyad } from "@/components/made-with-dyad";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Car, ShieldCheck, User, ArrowRight } from "lucide-react";
+import { Car, ShieldCheck, User, ArrowRight, LogIn } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const Index = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-gray-900 to-gray-800 p-4">
-      <div className="max-w-4xl w-full space-y-8">
-        <div className="text-center space-y-4">
-          <h1 className="text-5xl font-extrabold text-white tracking-tight">
-            GoMove <span className="text-blue-500">Premium</span>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-950 p-4 relative overflow-hidden">
+      {/* Background Effects */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0">
+         <div className="absolute -top-[20%] -left-[10%] w-[50%] h-[50%] bg-blue-600/20 rounded-full blur-[120px]" />
+         <div className="absolute top-[40%] -right-[10%] w-[40%] h-[40%] bg-purple-600/20 rounded-full blur-[120px]" />
+      </div>
+
+      <div className="max-w-5xl w-full space-y-12 z-10">
+        <div className="text-center space-y-6">
+          <h1 className="text-6xl md:text-7xl font-black text-white tracking-tighter">
+            Go<span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600">Move</span>
           </h1>
-          <p className="text-xl text-gray-300 max-w-2xl mx-auto">
-            A plataforma de mobilidade mais avançada do mercado. 
-            Experimente todos os lados da operação agora mesmo.
+          <p className="text-xl md:text-2xl text-gray-400 max-w-2xl mx-auto font-light">
+            A revolução da mobilidade urbana.
+            <br />
+            Conectando destinos, pessoas e oportunidades.
           </p>
+          
+          <div className="pt-4">
+            <Button 
+                onClick={() => navigate('/login')} 
+                className="h-14 px-8 text-lg rounded-full bg-white text-black hover:bg-gray-200 transition-all font-bold"
+            >
+                Entrar na Plataforma <LogIn className="ml-2 w-5 h-5" />
+            </Button>
+          </div>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-6 mt-12">
-          
-          {/* Card Cliente */}
-          <Card className="bg-white/10 border-white/10 text-white hover:bg-white/15 transition-all cursor-pointer group backdrop-blur-sm" onClick={() => navigate('/client')}>
-            <CardHeader>
-              <div className="w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                <User className="w-6 h-6 text-white" />
-              </div>
-              <CardTitle className="text-xl">Passageiro</CardTitle>
-              <CardDescription className="text-gray-400">
-                Solicite corridas, veja o mapa interativo e escolha categorias.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button variant="link" className="text-blue-400 p-0 group-hover:text-blue-300">
-                Acessar App <ArrowRight className="ml-2 w-4 h-4" />
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Card Motorista */}
-          <Card className="bg-white/10 border-white/10 text-white hover:bg-white/15 transition-all cursor-pointer group backdrop-blur-sm" onClick={() => navigate('/driver')}>
-            <CardHeader>
-              <div className="w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                <Car className="w-6 h-6 text-white" />
-              </div>
-              <CardTitle className="text-xl">Motorista</CardTitle>
-              <CardDescription className="text-gray-400">
-                Gerencie ganhos, fique online e aceite corridas.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button variant="link" className="text-green-400 p-0 group-hover:text-green-300">
-                Acessar Painel <ArrowRight className="ml-2 w-4 h-4" />
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Card Admin */}
-          <Card className="bg-white/10 border-white/10 text-white hover:bg-white/15 transition-all cursor-pointer group backdrop-blur-sm" onClick={() => navigate('/admin')}>
-            <CardHeader>
-              <div className="w-12 h-12 bg-purple-500 rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                <ShieldCheck className="w-6 h-6 text-white" />
-              </div>
-              <CardTitle className="text-xl">Administrador</CardTitle>
-              <CardDescription className="text-gray-400">
-                Configure preços, gerencie frota e crie banners.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button variant="link" className="text-purple-400 p-0 group-hover:text-purple-300">
-                Acessar Dashboard <ArrowRight className="ml-2 w-4 h-4" />
-              </Button>
-            </CardContent>
-          </Card>
-
+        <div className="grid md:grid-cols-3 gap-6 pt-8">
+          {[
+             { title: "Passageiro", desc: "Viaje com segurança e conforto", icon: User, color: "bg-blue-500", nav: '/client' },
+             { title: "Motorista", desc: "Maximize seus ganhos diários", icon: Car, color: "bg-green-500", nav: '/driver' },
+             { title: "Corporativo", desc: "Gestão completa de frota", icon: ShieldCheck, color: "bg-purple-500", nav: '/admin' }
+          ].map((item, i) => (
+             <div key={i} onClick={() => navigate('/login')} className="group relative bg-white/5 border border-white/10 p-6 rounded-2xl hover:bg-white/10 transition-all cursor-pointer backdrop-blur-sm">
+                <div className={`w-12 h-12 ${item.color} rounded-xl flex items-center justify-center mb-4 text-white shadow-lg group-hover:scale-110 transition-transform`}>
+                    <item.icon className="w-6 h-6" />
+                </div>
+                <h3 className="text-xl font-bold text-white mb-2">{item.title}</h3>
+                <p className="text-gray-400">{item.desc}</p>
+                <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <ArrowRight className="text-white w-6 h-6" />
+                </div>
+             </div>
+          ))}
         </div>
       </div>
       
-      <div className="fixed bottom-0 w-full">
+      <div className="fixed bottom-0 w-full z-20">
         <MadeWithDyad />
       </div>
     </div>
