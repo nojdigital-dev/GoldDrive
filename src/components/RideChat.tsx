@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, X, RefreshCw } from "lucide-react";
+import { Send, X, MessageCircle } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface Message {
@@ -31,16 +31,14 @@ const RideChat = ({ rideId, currentUserId, otherUserName, otherUserAvatar, role,
   const [newMessage, setNewMessage] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Polling de 1 segundo agressivo para garantir tempo real
+  // Polling de 1 segundo para tempo real
   useEffect(() => {
     fetchMessages();
-    const interval = setInterval(() => {
-        fetchMessages();
-    }, 1000);
+    const interval = setInterval(fetchMessages, 1000);
     return () => clearInterval(interval);
   }, [rideId]);
 
-  // Scroll automático para a última mensagem
+  // Auto-scroll
   useEffect(() => {
     if (scrollRef.current) {
         scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -49,21 +47,21 @@ const RideChat = ({ rideId, currentUserId, otherUserName, otherUserAvatar, role,
 
   const fetchMessages = async () => {
     try {
-        const { data, error } = await supabase
+        const { data } = await supabase
         .from('messages')
         .select('*')
         .eq('ride_id', rideId)
         .order('created_at', { ascending: true });
         
         if (data) {
-             // Compara se mudou para evitar re-render visual desnecessário
+             // Atualiza apenas se houver novas mensagens para evitar render desnecessário
              setMessages(prev => {
                  if (prev.length !== data.length) return data;
                  return prev;
              });
         }
     } catch (err) {
-        console.error("Erro chat", err);
+        console.error(err);
     }
   };
 
@@ -86,12 +84,12 @@ const RideChat = ({ rideId, currentUserId, otherUserName, otherUserAvatar, role,
         content: text
     });
     
-    // Força fetch logo após envio
+    // Força fetch
     setTimeout(fetchMessages, 200);
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/20 backdrop-blur-sm animate-in fade-in">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
         <div className="w-full max-w-sm bg-white rounded-[32px] shadow-2xl overflow-hidden flex flex-col h-[600px] border border-gray-200">
             {/* Header */}
             <div className="bg-slate-900 p-4 flex items-center justify-between text-white shadow-md z-10">
