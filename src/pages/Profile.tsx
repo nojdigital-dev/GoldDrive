@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ArrowLeft, Camera, Loader2, Shield, Upload } from "lucide-react";
+import { ArrowLeft, Camera, Loader2, Shield } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 
 const Profile = () => {
@@ -23,11 +23,19 @@ const Profile = () => {
   const getProfile = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("No user");
+      if (!user) {
+          showError("Usuário não autenticado.");
+          navigate('/login');
+          return;
+      }
       const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).single();
       if (error) throw error;
       setProfile({ ...data, email: user.email || "", phone: data.phone || "", bio: data.bio || "", avatar_url: data.avatar_url || "" });
-    } catch (error: any) { showError(error.message); } finally { setLoading(false); }
+    } catch (error: any) { 
+        showError(error.message); 
+    } finally { 
+        setLoading(false); 
+    }
   };
 
   const handleUpdate = async () => {

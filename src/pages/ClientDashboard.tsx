@@ -16,6 +16,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import FloatingDock from "@/components/FloatingDock";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 const MOCK_LOCATIONS = [
     { id: "short", label: "Shopping Center (2km)", distance: "2.1 km", km: 2.1 },
@@ -50,6 +51,8 @@ const ClientDashboard = () => {
   // Data
   const [historyItems, setHistoryItems] = useState<any[]>([]);
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<any>(null);
+  // Histórico Sheet Control
+  const [showHistorySheet, setShowHistorySheet] = useState(false);
 
   useEffect(() => {
     fetchInitialData();
@@ -66,28 +69,46 @@ const ClientDashboard = () => {
   }, [ride]);
 
   const fetchInitialData = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if(!user) return;
+    try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if(!user) return; // Se não tiver user, o finally roda de qualquer jeito
 
-    const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single(); 
-    setUserProfile(data); 
+        // Busca Perfil
+        const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single(); 
+        if (profile) setUserProfile(profile); 
 
-    if (activeTab === 'home') {
-        const { data: cats } = await supabase.from('car_categories').select('*').order('base_fare', { ascending: true });
-        if (cats) { setCategories(cats); setSelectedCategoryId(cats[0].id); }
+        // Busca Categorias (Apenas se estiver na home)
+        if (activeTab === 'home') {
+            const { data: cats, error } = await supabase.from('car_categories').select('*').order('base_fare', { ascending: true });
+            
+            if (error) {
+                console.error("Erro categorias:", error);
+            } else if (cats && cats.length > 0) {
+                setCategories(cats); 
+                setSelectedCategoryId(cats[0].id);
+            }
+        } 
+        
+        // Busca Histórico
+        if (activeTab === 'history') {
+            const { data: history } = await supabase.from('rides')
+                .select('*, driver:profiles!driver_id(first_name, last_name, car_model, car_plate)')
+                .eq('customer_id', user.id)
+                .order('created_at', { ascending: false });
+            setHistoryItems(history || []);
+        }
+    } catch (error) {
+        console.error("Erro no fetch inicial:", error);
+    } finally {
+        // GARANTE que o loading pare, independente de erro ou sucesso
         setLoadingCats(false);
-    } else if (activeTab === 'history') {
-        const { data: history } = await supabase.from('rides')
-            .select('*, driver:profiles!driver_id(first_name, last_name, car_model, car_plate)')
-            .eq('customer_id', user.id)
-            .order('created_at', { ascending: false });
-        setHistoryItems(history || []);
     }
   };
 
   const handleTabChange = (tab: string) => {
       if (tab === 'profile') navigate('/profile');
       else if (tab === 'wallet') navigate('/wallet');
+      else if (tab === 'history') setShowHistorySheet(true);
       else setActiveTab(tab);
   };
 
@@ -187,8 +208,39 @@ const ClientDashboard = () => {
                             <div className="p-2 bg-gray-100 rounded-full hover:bg-gray-200"><ArrowLeft className="w-5 h-5" /></div>
                             <h2 className="text-xl font-bold">Escolha a Categoria</h2>
                         </div>
-                        {loadingCats ? <div className="py-10 text-center"><Loader2 className="animate-spin mx-auto text-yellow-500 w-8 h-8" /></div> : <div className="space-y-3 mb-6 max-h-[35vh] overflow-y-auto pr-1 custom-scrollbar">{categories.map((cat) => (<div key={cat.id} onClick={() => setSelectedCategoryId(cat.id)} className={`relative flex items-center justify-between p-4 rounded-2xl border transition-all cursor-pointer overflow-hidden group ${selectedCategoryId === cat.id ? 'border-yellow-500 bg-yellow-50/50 shadow-md' : 'border-transparent bg-gray-50 hover:bg-white'}`}><div className="flex items-center gap-4 z-10"><div className={`w-12 h-12 rounded-full flex items-center justify-center ${selectedCategoryId === cat.id ? 'bg-yellow-500 text-black' : 'bg-white text-gray-500'}`}><Car className="w-6 h-6" /></div><div><h4 className="font-bold text-lg text-slate-900">{cat.name}</h4><p className="text-xs text-gray-500 font-medium">{cat.description}</p></div></div><span className="font-black text-lg text-slate-900 z-10">R$ {getPrice(cat.id)}</span></div>))}</div>}
-                        <Button className="w-full h-14 text-lg font-bold rounded-2xl bg-black hover:bg-zinc-800" onClick={confirmRide} disabled={!selectedCategoryId || isRequesting}>{isRequesting ? <Loader2 className="animate-spin" /> : "Confirmar GoldDrive"}</Button>
+                        
+                        {loadingCats ? (
+                            <div className="py-10 text-center flex flex-col items-center gap-3">
+                                <Loader2 className="animate-spin text-yellow-500 w-8 h-8" />
+                                <p className="text-gray-400 text-sm">Buscando categorias...</p>
+                            </div>
+                        ) : categories.length === 0 ? (
+                            <div className="py-10 text-center">
+                                <p className="text-red-500 font-bold">Nenhuma categoria disponível.</p>
+                                <Button variant="link" onClick={() => fetchInitialData()}>Tentar novamente</Button>
+                            </div>
+                        ) : (
+                            <div className="space-y-3 mb-6 max-h-[35vh] overflow-y-auto pr-1 custom-scrollbar">
+                                {categories.map((cat) => (
+                                    <div key={cat.id} onClick={() => setSelectedCategoryId(cat.id)} className={`relative flex items-center justify-between p-4 rounded-2xl border transition-all cursor-pointer overflow-hidden group ${selectedCategoryId === cat.id ? 'border-yellow-500 bg-yellow-50/50 shadow-md' : 'border-transparent bg-gray-50 hover:bg-white'}`}>
+                                        <div className="flex items-center gap-4 z-10">
+                                            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${selectedCategoryId === cat.id ? 'bg-yellow-500 text-black' : 'bg-white text-gray-500'}`}>
+                                                <Car className="w-6 h-6" />
+                                            </div>
+                                            <div>
+                                                <h4 className="font-bold text-lg text-slate-900">{cat.name}</h4>
+                                                <p className="text-xs text-gray-500 font-medium">{cat.description}</p>
+                                            </div>
+                                        </div>
+                                        <span className="font-black text-lg text-slate-900 z-10">R$ {getPrice(cat.id)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        
+                        <Button className="w-full h-14 text-lg font-bold rounded-2xl bg-black hover:bg-zinc-800" onClick={confirmRide} disabled={!selectedCategoryId || isRequesting || loadingCats}>
+                            {isRequesting ? <Loader2 className="animate-spin" /> : "Confirmar GoldDrive"}
+                        </Button>
                     </div>
                 )}
 
@@ -291,6 +343,31 @@ const ClientDashboard = () => {
               </div>
           </DialogContent>
       </Dialog>
+      
+      {/* HISTÓRICO SHEET (MOBILE) */}
+       <Sheet open={showHistorySheet} onOpenChange={setShowHistorySheet}>
+          <SheetContent side="right" className="w-full sm:w-[400px]">
+              <SheetHeader><SheetTitle>Histórico de Viagens</SheetTitle></SheetHeader>
+              <ScrollArea className="h-[calc(100vh-100px)] mt-4 pr-4">
+                  {historyItems.map(item => (
+                      <div key={item.id} onClick={() => setSelectedHistoryItem(item)} className="mb-4 p-4 border rounded-xl hover:bg-gray-50 cursor-pointer transition-colors">
+                          <div className="flex justify-between mb-2">
+                              <span className="font-bold text-sm">{new Date(item.created_at).toLocaleDateString()}</span>
+                              <span className={`text-xs font-bold ${item.status === 'CANCELLED' ? 'text-red-500' : 'text-green-600'}`}>{item.status}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center"><MapPin className="w-5 h-5 text-gray-600" /></div>
+                              <div className="flex-1 overflow-hidden">
+                                  <p className="font-medium truncate">{item.destination_address}</p>
+                                  <p className="text-xs text-gray-500">R$ {item.price}</p>
+                              </div>
+                              <ChevronRight className="w-4 h-4 text-gray-400" />
+                          </div>
+                      </div>
+                  ))}
+              </ScrollArea>
+          </SheetContent>
+      </Sheet>
 
       {/* 5. MENU FLUTUANTE - SEMPRE VISÍVEL E NO TOPO */}
       <div className="relative z-[100]">
