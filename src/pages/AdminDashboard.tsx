@@ -1,28 +1,21 @@
 import React, { useEffect, useState } from "react";
 import { 
   LayoutDashboard, Users, Car, Settings, Wallet, 
-  Map as MapIcon, LogOut, Search, Star, MoreHorizontal,
-  ArrowUpRight, ArrowDownRight, Save, RefreshCw, Filter, Menu, User,
-  CheckCircle, XCircle, Clock, AlertTriangle, ChevronRight, DollarSign, Shield,
-  Sun, Moon, PanelLeftClose, PanelLeftOpen
+  Map as MapIcon, LogOut, RefreshCw, Filter, Menu, Shield,
+  Sun, Moon, PanelLeftClose, PanelLeftOpen, DollarSign, Clock, CheckCircle, XCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import MapComponent from "@/components/MapComponent";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { showSuccess, showError } from "@/utils/toast";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, AreaChart, Area } from 'recharts';
+import { ResponsiveContainer, AreaChart, Area, CartesianGrid, XAxis, YAxis, Tooltip } from 'recharts';
 import { useTheme } from "@/components/theme-provider";
 
 const AdminDashboard = () => {
@@ -35,15 +28,13 @@ const AdminDashboard = () => {
   
   // Dados Principais
   const [stats, setStats] = useState({ revenue: 0, adminRevenue: 0, rides: 0, users: 0, drivers: 0, activeRides: 0 });
-  const [users, setUsers] = useState<any[]>([]);
   const [rides, setRides] = useState<any[]>([]);
-  const [categories, setCategories] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
 
   // Modais e Seleções
   const [selectedRide, setSelectedRide] = useState<any>(null);
-  const [selectedUser, setSelectedUser] = useState<any>(null);
-
+  
   // Filtros
   const [filterStatus, setFilterStatus] = useState("ALL");
 
@@ -56,42 +47,45 @@ const AdminDashboard = () => {
             setAdminProfile(data);
         }
 
+        // Busca Corridas com Relacionamentos Explícitos
+        // Usando sintaxe simplificada que agora funciona garantido pelos FKs
         const { data: ridesData, error: ridesError } = await supabase
             .from('rides')
             .select(`
                 *,
-                driver:profiles!driver_id(first_name, last_name, email, car_model, car_plate, car_color, avatar_url, phone),
-                customer:profiles!customer_id(first_name, last_name, email, avatar_url, phone)
+                driver:profiles!rides_driver_id_fkey(first_name, last_name, email, car_model, car_plate, avatar_url, phone),
+                customer:profiles!rides_customer_id_fkey(first_name, last_name, email, avatar_url, phone)
             `)
             .order('created_at', { ascending: false });
 
-        if (ridesError) throw ridesError;
+        if (ridesError) {
+             console.error("Erro SQL:", ridesError);
+             throw new Error("Falha ao carregar corridas. Verifique as conexões do banco.");
+        }
         
         const totalRevenue = ridesData?.filter(r => r.status === 'COMPLETED').reduce((acc, curr) => acc + (Number(curr.price) || 0), 0) || 0;
         const adminRev = ridesData?.reduce((acc, curr) => acc + (Number(curr.platform_fee) || 0), 0) || 0;
         const activeCount = ridesData?.filter(r => ['SEARCHING', 'ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(r.status)).length || 0;
 
+        // Chart Data Builder
         const chartMap = new Map();
         for(let i=6; i>=0; i--) {
             const d = new Date(); d.setDate(d.getDate() - i);
             const dateStr = d.toLocaleDateString('pt-BR');
-            chartMap.set(dateStr, { date: dateStr, total: 0, admin: 0 });
+            chartMap.set(dateStr, { date: dateStr, total: 0 });
         }
-
         ridesData?.forEach(r => {
             if (r.status === 'COMPLETED') {
                 const date = new Date(r.created_at).toLocaleDateString('pt-BR');
                 if(chartMap.has(date)) {
-                    const item = chartMap.get(date);
-                    item.total += Number(r.price || 0);
-                    item.admin += Number(r.platform_fee || 0);
+                    chartMap.get(date).total += Number(r.price || 0);
                 }
             }
         });
         setChartData(Array.from(chartMap.values()));
 
+        // Busca Usuários
         const { data: usersData } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
-        const { data: catsData } = await supabase.from('car_categories').select('*').order('base_fare', { ascending: true });
 
         setStats({
             revenue: totalRevenue,
@@ -104,10 +98,9 @@ const AdminDashboard = () => {
 
         if (ridesData) setRides(ridesData);
         if (usersData) setUsers(usersData);
-        if (catsData) setCategories(catsData);
 
     } catch (e: any) {
-        showError("Erro ao carregar dados: " + e.message);
+        showError(e.message);
     } finally {
         setLoading(false);
     }
@@ -115,32 +108,7 @@ const AdminDashboard = () => {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
   }, []);
-
-  const updateCategory = async (id: string, field: string, value: string) => {
-      setCategories(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c));
-  };
-
-  const saveCategory = async (cat: any) => {
-      try {
-          const { error } = await supabase.from('car_categories').update({
-              base_fare: cat.base_fare,
-              cost_per_km: cat.cost_per_km,
-              min_fare: cat.min_fare
-          }).eq('id', cat.id);
-          if (error) throw error;
-          showSuccess(`Categoria ${cat.name} atualizada!`);
-      } catch (e: any) {
-          showError(e.message);
-      }
-  };
-
-  const formatDate = (dateString: string) => {
-      if(!dateString) return '-';
-      return new Date(dateString).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-  };
 
   const filteredRides = rides.filter(r => {
       if (filterStatus === 'ALL') return true;
@@ -266,7 +234,6 @@ const AdminDashboard = () => {
                                   </div>
                               </CardContent>
                           </Card>
-                          {/* Cards Simples */}
                           <Card><CardContent className="p-6 flex justify-between"><div><p className="text-muted-foreground text-sm">Corridas Ativas</p><h3 className="text-3xl font-bold">{stats.activeRides}</h3></div><Clock className="w-8 h-8 text-yellow-500 opacity-50" /></CardContent></Card>
                           <Card><CardContent className="p-6 flex justify-between"><div><p className="text-muted-foreground text-sm">Motoristas</p><h3 className="text-3xl font-bold">{stats.drivers}</h3></div><Car className="w-8 h-8 text-blue-500 opacity-50" /></CardContent></Card>
                       </div>
@@ -305,25 +272,115 @@ const AdminDashboard = () => {
                       </div>
                   </div>
               )}
-
-              {/* ... Resto do código (Rides, Users, etc) ... */}
-              {/* Omitido aqui para brevidade, mas o código original do AdminDashboard deve ser mantido ou usar o anterior com as correções de estilo dark mode aplicadas via classes Tailwind (bg-background, text-foreground, etc) */}
               
-              {/* MANTENHA O RESTO DAS ABAS (rides, users, drivers, finance, config) DO CÓDIGO ANTERIOR, APENAS ATUALIZANDO AS CLASSES DE CORES PARA USAR AS VARIÁVEIS CSS (bg-card, text-card-foreground) PARA SUPORTAR DARK MODE */}
-              
+              {/* --- RIDES TAB --- */}
               {activeTab === 'rides' && (
                   <Card className="animate-in fade-in">
-                       <CardHeader className="flex flex-row items-center justify-between"><CardTitle>Histórico de Corridas</CardTitle><Select value={filterStatus} onValueChange={setFilterStatus}><SelectTrigger className="w-[150px]"><SelectValue placeholder="Status" /></SelectTrigger><SelectContent><SelectItem value="ALL">Todos</SelectItem><SelectItem value="COMPLETED">Finalizadas</SelectItem></SelectContent></Select></CardHeader>
-                       <CardContent><Table><TableHeader><TableRow><TableHead>ID</TableHead><TableHead>Passageiro</TableHead><TableHead>Motorista</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Valor</TableHead></TableRow></TableHeader><TableBody>{filteredRides.map(r => (<TableRow key={r.id} onClick={()=>setSelectedRide(r)} className="cursor-pointer"><TableCell className="font-mono">{r.id.substring(0,6)}</TableCell><TableCell>{r.customer?.first_name}</TableCell><TableCell>{r.driver?.first_name || '-'}</TableCell><TableCell><Badge variant="outline">{r.status}</Badge></TableCell><TableCell className="text-right font-bold">R$ {r.price}</TableCell></TableRow>))}</TableBody></Table></CardContent>
+                       <CardHeader className="flex flex-row items-center justify-between">
+                           <CardTitle>Histórico de Corridas</CardTitle>
+                           <Select value={filterStatus} onValueChange={setFilterStatus}>
+                               <SelectTrigger className="w-[150px]"><SelectValue placeholder="Status" /></SelectTrigger>
+                               <SelectContent><SelectItem value="ALL">Todos</SelectItem><SelectItem value="COMPLETED">Finalizadas</SelectItem><SelectItem value="CANCELLED">Canceladas</SelectItem></SelectContent>
+                           </Select>
+                       </CardHeader>
+                       <CardContent>
+                           <Table>
+                               <TableHeader><TableRow><TableHead>ID</TableHead><TableHead>Passageiro</TableHead><TableHead>Motorista</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Valor</TableHead></TableRow></TableHeader>
+                               <TableBody>
+                                   {filteredRides.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center py-4">Nenhuma corrida encontrada</TableCell></TableRow> : filteredRides.map(r => (
+                                       <TableRow key={r.id} onClick={()=>setSelectedRide(r)} className="cursor-pointer hover:bg-muted/50">
+                                           <TableCell className="font-mono text-xs">{r.id.substring(0,8)}</TableCell>
+                                           <TableCell>{r.customer?.first_name || 'Desconhecido'}</TableCell>
+                                           <TableCell>{r.driver?.first_name || '-'}</TableCell>
+                                           <TableCell>
+                                               <Badge variant="outline" className={r.status === 'COMPLETED' ? 'bg-green-100 text-green-700' : r.status === 'CANCELLED' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}>
+                                                   {r.status}
+                                               </Badge>
+                                           </TableCell>
+                                           <TableCell className="text-right font-bold">R$ {r.price}</TableCell>
+                                       </TableRow>
+                                   ))}
+                               </TableBody>
+                           </Table>
+                       </CardContent>
                   </Card>
               )}
+
+              {/* --- USERS TAB --- */}
+              {activeTab === 'users' && (
+                   <Card className="animate-in fade-in">
+                       <CardHeader><CardTitle>Usuários ({users.filter(u=>u.role==='client').length})</CardTitle></CardHeader>
+                       <CardContent>
+                           <Table>
+                               <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Email</TableHead><TableHead>Telefone</TableHead><TableHead>Saldo</TableHead></TableRow></TableHeader>
+                               <TableBody>
+                                   {users.filter(u=>u.role==='client').map(u => (
+                                       <TableRow key={u.id}>
+                                           <TableCell className="font-medium flex items-center gap-2"><Avatar className="w-6 h-6"><AvatarImage src={u.avatar_url}/></Avatar> {u.first_name} {u.last_name}</TableCell>
+                                           <TableCell>{u.email || '-'}</TableCell>
+                                           <TableCell>{u.phone || '-'}</TableCell>
+                                           <TableCell className="font-bold text-green-600">R$ {u.balance?.toFixed(2)}</TableCell>
+                                       </TableRow>
+                                   ))}
+                               </TableBody>
+                           </Table>
+                       </CardContent>
+                   </Card>
+              )}
               
-              {/* (Repita a lógica para as outras abas, usando componentes Shadcn) */}
+              {/* --- DRIVERS TAB --- */}
+              {activeTab === 'drivers' && (
+                   <Card className="animate-in fade-in">
+                       <CardHeader><CardTitle>Motoristas ({users.filter(u=>u.role==='driver').length})</CardTitle></CardHeader>
+                       <CardContent>
+                           <Table>
+                               <TableHeader><TableRow><TableHead>Motorista</TableHead><TableHead>Carro</TableHead><TableHead>Placa</TableHead><TableHead>Viagens</TableHead><TableHead>Saldo</TableHead></TableRow></TableHeader>
+                               <TableBody>
+                                   {users.filter(u=>u.role==='driver').map(u => (
+                                       <TableRow key={u.id}>
+                                           <TableCell className="font-medium flex items-center gap-2"><Avatar className="w-6 h-6"><AvatarImage src={u.avatar_url}/></Avatar> {u.first_name} {u.last_name}</TableCell>
+                                           <TableCell>{u.car_model || '-'}</TableCell>
+                                           <TableCell><Badge variant="secondary">{u.car_plate || '-'}</Badge></TableCell>
+                                           <TableCell>{u.total_rides || 0}</TableCell>
+                                           <TableCell className="font-bold text-green-600">R$ {u.balance?.toFixed(2)}</TableCell>
+                                       </TableRow>
+                                   ))}
+                               </TableBody>
+                           </Table>
+                       </CardContent>
+                   </Card>
+              )}
           </div>
       </main>
       
-      {/* Modais (Ride Detail, User Detail) aqui... */}
-      <Dialog open={!!selectedRide} onOpenChange={(o) => !o && setSelectedRide(null)}><DialogContent><DialogHeader><DialogTitle>Detalhes</DialogTitle></DialogHeader><div className="space-y-4"><div className="grid grid-cols-2 gap-4"><Card className="p-4 bg-muted"><p className="text-xs font-bold">Origem</p><p>{selectedRide?.pickup_address}</p></Card><Card className="p-4 bg-muted"><p className="text-xs font-bold">Destino</p><p>{selectedRide?.destination_address}</p></Card></div></div></DialogContent></Dialog>
+      {/* Detalhes da Corrida Modal */}
+      <Dialog open={!!selectedRide} onOpenChange={(o) => !o && setSelectedRide(null)}>
+          <DialogContent>
+              <DialogHeader><DialogTitle>Detalhes da Corrida</DialogTitle></DialogHeader>
+              <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                      <div className="p-3 bg-muted rounded-lg">
+                          <p className="text-xs font-bold text-muted-foreground uppercase">Origem</p>
+                          <p className="font-medium">{selectedRide?.pickup_address}</p>
+                      </div>
+                      <div className="p-3 bg-muted rounded-lg">
+                          <p className="text-xs font-bold text-muted-foreground uppercase">Destino</p>
+                          <p className="font-medium">{selectedRide?.destination_address}</p>
+                      </div>
+                  </div>
+                  <div className="flex justify-between items-center p-4 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                          <Avatar><AvatarImage src={selectedRide?.driver?.avatar_url} /><AvatarFallback>DR</AvatarFallback></Avatar>
+                          <div><p className="font-bold">{selectedRide?.driver?.first_name || 'Sem motorista'}</p><p className="text-xs text-muted-foreground">{selectedRide?.driver?.car_model} • {selectedRide?.driver?.car_plate}</p></div>
+                      </div>
+                      <div className="text-right">
+                          <p className="text-xs text-muted-foreground">Valor Total</p>
+                          <p className="text-xl font-black">R$ {selectedRide?.price}</p>
+                      </div>
+                  </div>
+              </div>
+          </DialogContent>
+      </Dialog>
     </div>
   );
 };
