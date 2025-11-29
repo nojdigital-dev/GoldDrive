@@ -10,6 +10,8 @@ import { showSuccess, showError } from "@/utils/toast";
 import { useNavigate } from "react-router-dom";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const MOCK_LOCATIONS = [
     { id: "short", label: "Shopping Center (2km)", distance: "2.1 km", km: 2.1 },
@@ -40,6 +42,7 @@ const ClientDashboard = () => {
   
   const [categories, setCategories] = useState<Category[]>([]);
   const [loadingCats, setLoadingCats] = useState(false);
+  const [userProfile, setUserProfile] = useState<any>(null);
 
   useEffect(() => {
     const fetchCategories = async () => {
@@ -51,7 +54,17 @@ const ClientDashboard = () => {
         }
         setLoadingCats(false);
     };
+
+    const fetchProfile = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if(user) {
+             const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+             setUserProfile(data);
+        }
+    }
+
     fetchCategories();
+    fetchProfile();
   }, []);
 
   useEffect(() => {
@@ -135,14 +148,39 @@ const ClientDashboard = () => {
 
       {step !== 'rating' && (
           <div className="absolute top-0 left-0 right-0 p-4 z-10 flex justify-between items-center pointer-events-none">
-            <Button 
-                variant="secondary" 
-                size="icon" 
-                className="shadow-lg pointer-events-auto rounded-full h-10 w-10 bg-white"
-                onClick={() => navigate('/')}
-            >
-            {step === 'search' ? <Menu className="h-5 w-5 text-gray-700" /> : <ArrowLeft className="h-5 w-5" />}
-            </Button>
+            <Sheet>
+                <SheetTrigger asChild>
+                    <Button 
+                        variant="secondary" 
+                        size="icon" 
+                        className="shadow-lg pointer-events-auto rounded-full h-10 w-10 bg-white"
+                    >
+                    {step === 'search' ? <Menu className="h-5 w-5 text-gray-700" /> : <ArrowLeft className="h-5 w-5" onClick={(e) => { e.stopPropagation(); navigate('/'); }} />}
+                    </Button>
+                </SheetTrigger>
+                <SheetContent side="left">
+                    <SheetHeader className="text-left mb-6">
+                        <div className="flex items-center gap-4 mb-4" onClick={() => navigate('/profile')}>
+                            <Avatar className="w-12 h-12 cursor-pointer">
+                                <AvatarImage src={userProfile?.avatar_url} />
+                                <AvatarFallback>{userProfile?.first_name?.[0]}</AvatarFallback>
+                            </Avatar>
+                            <div>
+                                <SheetTitle className="text-lg">{userProfile?.first_name}</SheetTitle>
+                                <p className="text-sm text-gray-500">5.0 ★</p>
+                            </div>
+                        </div>
+                    </SheetHeader>
+                    <div className="space-y-2">
+                        <Button variant="ghost" className="w-full justify-start text-lg" onClick={() => navigate('/profile')}>
+                            <User className="mr-2 h-5 w-5" /> Perfil
+                        </Button>
+                        <Button variant="ghost" className="w-full justify-start text-lg text-red-500" onClick={() => navigate('/')}>
+                            Sair
+                        </Button>
+                    </div>
+                </SheetContent>
+            </Sheet>
         </div>
       )}
 
@@ -261,6 +299,12 @@ const ClientDashboard = () => {
                     )}
                     
                     <div className="flex gap-3 items-center">
+                        <div className="flex-1">
+                            <p className="text-xs text-gray-500 mb-1">Pagamento</p>
+                            <div className="flex items-center gap-2 font-bold">
+                                💵 Dinheiro
+                            </div>
+                        </div>
                         <Button className="flex-[2] py-6 text-lg rounded-xl bg-black hover:bg-zinc-800" onClick={confirmRide} disabled={!selectedCategoryId || isRequesting}>
                             {isRequesting ? <Loader2 className="animate-spin" /> : "Confirmar GoMove"}
                         </Button>
@@ -282,28 +326,59 @@ const ClientDashboard = () => {
                                         <span className="bg-gray-200 px-2 py-0.5 rounded text-xs font-bold">★ 5.0</span>
                                         <span>• {ride.category}</span>
                                     </div>
+                                    <p className="text-xs font-mono bg-zinc-100 inline-block px-1 mt-1 rounded border">ABC-1234</p>
                                 </div>
                             </div>
 
                             <div className="flex justify-between items-center px-2">
-                                <p className="text-blue-600 font-bold animate-pulse">
-                                    {ride.status === 'IN_PROGRESS' ? 'Em viagem ao destino' : 'Motorista chegando'}
-                                </p>
+                                 <div className="text-left">
+                                    <p className="text-xs text-gray-500 uppercase font-bold">Status</p>
+                                    <p className="text-blue-600 font-bold animate-pulse">
+                                        {ride.status === 'IN_PROGRESS' ? 'Em viagem ao destino' : 'Motorista chegando'}
+                                    </p>
+                                 </div>
+                                 <div className="text-right">
+                                    <p className="text-xs text-gray-500 uppercase font-bold">Chegada</p>
+                                    <p className="font-bold">14:35</p>
+                                 </div>
                             </div>
+
+                            {ride?.status !== 'IN_PROGRESS' && (
+                                 <Button variant="destructive" className="w-full mt-4" onClick={() => cancelRide(ride.id)}>
+                                    Cancelar Corrida
+                                 </Button>
+                            )}
                         </div>
                     ) : (
                         <>
                             <div className="w-20 h-20 bg-blue-50 rounded-full mx-auto flex items-center justify-center mb-4 relative">
                                 <div className="absolute inset-0 border-4 border-blue-500 rounded-full animate-ping opacity-20"></div>
-                                <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                                <Car className="w-8 h-8 text-blue-600" />
                             </div>
                             <h3 className="text-xl font-bold mb-2">Procurando motorista...</h3>
-                            <Button variant="outline" className="text-red-500 w-full mt-4" onClick={() => cancelRide(ride!.id)}>
-                                Cancelar
+                            <p className="text-gray-500 mb-6 text-sm px-8">Estamos oferecendo sua corrida para os motoristas parceiros da GoMove.</p>
+                            
+                            <div className="bg-gray-50 p-4 rounded-lg mb-4 text-left">
+                                 <div className="flex justify-between items-center border-b pb-2 mb-2">
+                                    <span className="text-sm font-bold">{ride?.category}</span>
+                                    <span className="text-sm font-bold text-green-600">R$ {ride?.price}</span>
+                                 </div>
+                                <div className="flex justify-between mb-2">
+                                    <span className="text-sm text-gray-500">Origem</span>
+                                    <span className="text-sm font-medium truncate max-w-[200px]">{ride?.pickup_address}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-sm text-gray-500">Destino</span>
+                                    <span className="text-sm font-medium truncate max-w-[200px]">{ride?.destination_address}</span>
+                                </div>
+                            </div>
+
+                            <Button variant="outline" className="text-red-500 border-red-200 hover:bg-red-50 w-full" onClick={() => cancelRide(ride!.id)}>
+                                Cancelar Solicitação
                             </Button>
                         </>
                     )}
-                </div>
+                 </div>
             )}
             </div>
         )}

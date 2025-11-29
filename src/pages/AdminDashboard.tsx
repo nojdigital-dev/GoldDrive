@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { 
   LayoutDashboard, Users, Car, Settings, Wallet, 
   Map as MapIcon, LogOut, Search, Star, MoreHorizontal,
-  ArrowUpRight, ArrowDownRight, Save, RefreshCw, Filter
+  ArrowUpRight, ArrowDownRight, Save, RefreshCw, Filter, Menu, User
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"; // Importação do Sheet
 import MapComponent from "@/components/MapComponent";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,6 +21,7 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("overview");
   const [loading, setLoading] = useState(false);
+  const [userProfile, setUserProfile] = useState<any>(null);
   
   // Dados
   const [stats, setStats] = useState({ revenue: 0, rides: 0, users: 0, drivers: 0 });
@@ -30,6 +32,12 @@ const AdminDashboard = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+            setUserProfile(data);
+        }
+
         // Corridas e Receita
         const { data: ridesData } = await supabase.from('rides').select('*').order('created_at', { ascending: false });
         const revenue = ridesData?.filter(r => r.status === 'COMPLETED').reduce((acc, curr) => acc + (Number(curr.price) || 0), 0) || 0;
@@ -80,7 +88,6 @@ const AdminDashboard = () => {
       }
   };
 
-  // Helper para renderizar estrelas
   const renderStars = (rating?: number) => {
       if (!rating) return <span className="text-gray-300 text-xs">Sem avaliação</span>;
       return (
@@ -92,11 +99,9 @@ const AdminDashboard = () => {
       );
   };
 
-  return (
-    <div className="flex h-screen bg-slate-50 font-sans text-slate-900">
-      
-      {/* Sidebar Elegante */}
-      <aside className="w-72 bg-white border-r border-slate-200 flex flex-col shadow-[4px_0_24px_rgba(0,0,0,0.02)] z-20">
+  // Componente de Navegação Reutilizável
+  const NavContent = () => (
+    <div className="flex flex-col h-full">
          <div className="p-8 pb-4">
              <div className="flex items-center gap-2 text-2xl font-black tracking-tighter text-slate-900">
                 <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white">
@@ -130,43 +135,68 @@ const AdminDashboard = () => {
              ))}
          </nav>
 
-         <div className="p-4 border-t">
+         <div className="p-4 border-t space-y-2">
+             <button onClick={() => navigate('/profile')} className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:bg-slate-100 px-4 py-3 rounded-xl w-full transition-colors">
+                 <User className="w-4 h-4" /> Meu Perfil
+             </button>
              <button onClick={() => navigate('/')} className="flex items-center gap-2 text-sm font-medium text-red-500 hover:bg-red-50 px-4 py-3 rounded-xl w-full transition-colors">
                  <LogOut className="w-4 h-4" /> Sair
              </button>
          </div>
+    </div>
+  );
+
+  return (
+    <div className="flex h-screen bg-slate-50 font-sans text-slate-900">
+      
+      {/* Sidebar Desktop */}
+      <aside className="hidden lg:flex w-72 bg-white border-r border-slate-200 flex-col shadow-[4px_0_24px_rgba(0,0,0,0.02)] z-20">
+         <NavContent />
       </aside>
 
       {/* Conteúdo Principal */}
       <main className="flex-1 flex flex-col overflow-hidden bg-slate-50/50">
-          {/* Topbar */}
-          <header className="h-20 border-b bg-white/80 backdrop-blur px-8 flex items-center justify-between sticky top-0 z-10">
-              <div>
-                  <h1 className="text-xl font-bold text-slate-800">
-                      {activeTab === 'overview' ? 'Painel de Controle' : 
-                       activeTab === 'users' ? 'Gestão de Passageiros' :
-                       activeTab === 'drivers' ? 'Gestão de Motoristas' :
-                       activeTab === 'finance' ? 'Controle Financeiro' : 'Configurações'}
-                  </h1>
-                  <p className="text-xs text-slate-400">Atualizado em tempo real</p>
-              </div>
+          {/* Topbar Responsiva */}
+          <header className="h-20 border-b bg-white/80 backdrop-blur px-4 lg:px-8 flex items-center justify-between sticky top-0 z-10">
               <div className="flex items-center gap-4">
+                  {/* Menu Mobile Trigger */}
+                  <Sheet>
+                    <SheetTrigger asChild>
+                        <Button variant="ghost" size="icon" className="lg:hidden">
+                            <Menu className="w-6 h-6" />
+                        </Button>
+                    </SheetTrigger>
+                    <SheetContent side="left" className="p-0 w-72">
+                        <NavContent />
+                    </SheetContent>
+                  </Sheet>
+
+                  <div>
+                      <h1 className="text-lg lg:text-xl font-bold text-slate-800 truncate">
+                          {activeTab === 'overview' ? 'Painel de Controle' : 
+                           activeTab === 'users' ? 'Gestão de Passageiros' :
+                           activeTab === 'drivers' ? 'Gestão de Motoristas' :
+                           activeTab === 'finance' ? 'Controle Financeiro' : 'Configurações'}
+                      </h1>
+                  </div>
+              </div>
+
+              <div className="flex items-center gap-2 lg:gap-4">
                   <Button variant="outline" size="icon" onClick={fetchData} disabled={loading}>
                       <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                   </Button>
-                  <Avatar className="w-10 h-10 border-2 border-white shadow-sm">
-                      <AvatarImage src="https://github.com/shadcn.png" />
+                  <Avatar className="w-10 h-10 border-2 border-white shadow-sm cursor-pointer" onClick={() => navigate('/profile')}>
+                      <AvatarImage src={userProfile?.avatar_url} />
                       <AvatarFallback>AD</AvatarFallback>
                   </Avatar>
               </div>
           </header>
 
-          <div className="flex-1 overflow-y-auto p-8">
-              
-              {/* VISÃO GERAL */}
+          <div className="flex-1 overflow-y-auto p-4 lg:p-8">
+              {/* O conteúdo das tabs permanece o mesmo, a estrutura já é responsiva (grid) */}
               {activeTab === 'overview' && (
                   <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                           {[
                               { label: 'Faturamento', value: `R$ ${stats.revenue.toFixed(2)}`, icon: Wallet, color: 'text-green-600', bg: 'bg-green-50' },
                               { label: 'Corridas Totais', value: stats.rides, icon: Car, color: 'text-blue-600', bg: 'bg-blue-50' },
@@ -185,49 +215,51 @@ const AdminDashboard = () => {
                           ))}
                       </div>
 
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                          <Card className="lg:col-span-2 border-0 shadow-sm">
+                      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+                          <Card className="xl:col-span-2 border-0 shadow-sm">
                               <CardHeader>
                                   <CardTitle>Últimas Corridas</CardTitle>
                               </CardHeader>
                               <CardContent>
-                                  <Table>
-                                      <TableHeader>
-                                          <TableRow>
-                                              <TableHead>Status</TableHead>
-                                              <TableHead>Avaliação (Mot/Pass)</TableHead>
-                                              <TableHead>Valor</TableHead>
-                                              <TableHead className="text-right">Data</TableHead>
-                                          </TableRow>
-                                      </TableHeader>
-                                      <TableBody>
-                                          {rides.slice(0, 5).map(ride => (
-                                              <TableRow key={ride.id}>
-                                                  <TableCell>
-                                                      <Badge className={
-                                                          ride.status === 'COMPLETED' ? 'bg-green-100 text-green-700 hover:bg-green-100' :
-                                                          ride.status === 'CANCELLED' ? 'bg-red-100 text-red-700 hover:bg-red-100' :
-                                                          'bg-blue-100 text-blue-700 hover:bg-blue-100'
-                                                      }>{ride.status}</Badge>
-                                                  </TableCell>
-                                                  <TableCell>
-                                                      <div className="flex flex-col gap-1">
-                                                          <div className="flex items-center gap-1 text-xs text-gray-500">
-                                                              M: {renderStars(ride.driver_rating)}
-                                                          </div>
-                                                          <div className="flex items-center gap-1 text-xs text-gray-500">
-                                                              P: {renderStars(ride.customer_rating)}
-                                                          </div>
-                                                      </div>
-                                                  </TableCell>
-                                                  <TableCell className="font-bold">R$ {ride.price}</TableCell>
-                                                  <TableCell className="text-right text-gray-500 text-xs">
-                                                      {new Date(ride.created_at).toLocaleDateString()}
-                                                  </TableCell>
+                                  <div className="overflow-x-auto">
+                                      <Table>
+                                          <TableHeader>
+                                              <TableRow>
+                                                  <TableHead>Status</TableHead>
+                                                  <TableHead>Avaliação</TableHead>
+                                                  <TableHead>Valor</TableHead>
+                                                  <TableHead className="text-right">Data</TableHead>
                                               </TableRow>
-                                          ))}
-                                      </TableBody>
-                                  </Table>
+                                          </TableHeader>
+                                          <TableBody>
+                                              {rides.slice(0, 5).map(ride => (
+                                                  <TableRow key={ride.id}>
+                                                      <TableCell>
+                                                          <Badge className={
+                                                              ride.status === 'COMPLETED' ? 'bg-green-100 text-green-700 hover:bg-green-100' :
+                                                              ride.status === 'CANCELLED' ? 'bg-red-100 text-red-700 hover:bg-red-100' :
+                                                              'bg-blue-100 text-blue-700 hover:bg-blue-100'
+                                                          }>{ride.status}</Badge>
+                                                      </TableCell>
+                                                      <TableCell>
+                                                          <div className="flex flex-col gap-1 min-w-[100px]">
+                                                              <div className="flex items-center gap-1 text-xs text-gray-500">
+                                                                  M: {renderStars(ride.driver_rating)}
+                                                              </div>
+                                                              <div className="flex items-center gap-1 text-xs text-gray-500">
+                                                                  P: {renderStars(ride.customer_rating)}
+                                                              </div>
+                                                          </div>
+                                                      </TableCell>
+                                                      <TableCell className="font-bold">R$ {ride.price}</TableCell>
+                                                      <TableCell className="text-right text-gray-500 text-xs whitespace-nowrap">
+                                                          {new Date(ride.created_at).toLocaleDateString()}
+                                                      </TableCell>
+                                                  </TableRow>
+                                              ))}
+                                          </TableBody>
+                                      </Table>
+                                  </div>
                               </CardContent>
                           </Card>
                           
@@ -243,58 +275,61 @@ const AdminDashboard = () => {
                   </div>
               )}
 
-              {/* LISTA DE USUÁRIOS (GENÉRICA PARA DRIVER E PASSAGEIRO) */}
+              {/* LISTA DE USUÁRIOS */}
               {(activeTab === 'users' || activeTab === 'drivers') && (
                   <Card className="border-0 shadow-sm animate-in fade-in">
-                      <CardHeader className="flex flex-row items-center justify-between">
+                      <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                           <div>
                               <CardTitle>Base de {activeTab === 'users' ? 'Passageiros' : 'Motoristas'}</CardTitle>
                               <CardDescription>Gerencie os usuários cadastrados</CardDescription>
                           </div>
-                          <div className="relative w-64">
+                          <div className="relative w-full sm:w-64">
                               <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                               <Input placeholder="Buscar por nome..." className="pl-9 bg-slate-50 border-0" />
                           </div>
                       </CardHeader>
                       <CardContent>
-                          <Table>
-                              <TableHeader>
-                                  <TableRow>
-                                      <TableHead>Usuário</TableHead>
-                                      <TableHead>Status</TableHead>
-                                      <TableHead>ID</TableHead>
-                                      <TableHead className="text-right">Ações</TableHead>
-                                  </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                  {users
-                                    .filter(u => u.role === (activeTab === 'users' ? 'client' : 'driver'))
-                                    .map(user => (
-                                      <TableRow key={user.id}>
-                                          <TableCell>
-                                              <div className="flex items-center gap-3">
-                                                  <Avatar>
-                                                      <AvatarFallback className="bg-blue-100 text-blue-700 font-bold">
-                                                          {user.first_name?.[0]}{user.last_name?.[0]}
-                                                      </AvatarFallback>
-                                                  </Avatar>
-                                                  <div>
-                                                      <p className="font-medium text-slate-900">{user.first_name} {user.last_name}</p>
-                                                      <p className="text-xs text-slate-500">{user.id}</p>
-                                                  </div>
-                                              </div>
-                                          </TableCell>
-                                          <TableCell>
-                                              <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50">Ativo</Badge>
-                                          </TableCell>
-                                          <TableCell className="font-mono text-xs text-gray-400">{user.id}</TableCell>
-                                          <TableCell className="text-right">
-                                              <Button variant="ghost" size="icon"><MoreHorizontal className="w-4 h-4" /></Button>
-                                          </TableCell>
-                                      </TableRow>
-                                  ))}
-                              </TableBody>
-                          </Table>
+                          <div className="overflow-x-auto">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Usuário</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead className="hidden md:table-cell">ID</TableHead>
+                                        <TableHead className="text-right">Ações</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {users
+                                        .filter(u => u.role === (activeTab === 'users' ? 'client' : 'driver'))
+                                        .map(user => (
+                                        <TableRow key={user.id}>
+                                            <TableCell>
+                                                <div className="flex items-center gap-3">
+                                                    <Avatar>
+                                                        <AvatarImage src={user.avatar_url} />
+                                                        <AvatarFallback className="bg-blue-100 text-blue-700 font-bold">
+                                                            {user.first_name?.[0]}{user.last_name?.[0]}
+                                                        </AvatarFallback>
+                                                    </Avatar>
+                                                    <div>
+                                                        <p className="font-medium text-slate-900 whitespace-nowrap">{user.first_name} {user.last_name}</p>
+                                                        <p className="text-xs text-slate-500 md:hidden">{user.id.substring(0,8)}...</p>
+                                                    </div>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50">Ativo</Badge>
+                                            </TableCell>
+                                            <TableCell className="font-mono text-xs text-gray-400 hidden md:table-cell">{user.id}</TableCell>
+                                            <TableCell className="text-right">
+                                                <Button variant="ghost" size="icon"><MoreHorizontal className="w-4 h-4" /></Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                          </div>
                       </CardContent>
                   </Card>
               )}
@@ -308,7 +343,7 @@ const AdminDashboard = () => {
                                   <div className="flex justify-between items-start">
                                       <div>
                                           <Badge variant="secondary" className="mb-2">{cat.name}</Badge>
-                                          <CardTitle className="text-lg">Configuração de Preço</CardTitle>
+                                          <CardTitle className="text-lg">Preços</CardTitle>
                                       </div>
                                       <Car className="w-8 h-8 text-slate-200" />
                                   </div>
@@ -339,7 +374,7 @@ const AdminDashboard = () => {
                                       </div>
                                   </div>
                                   <Button className="w-full bg-slate-900 hover:bg-slate-800" onClick={() => saveCategory(cat)}>
-                                      <Save className="w-4 h-4 mr-2" /> Salvar Alterações
+                                      <Save className="w-4 h-4 mr-2" /> Salvar
                                   </Button>
                               </CardContent>
                           </Card>

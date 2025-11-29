@@ -1,22 +1,38 @@
 import React, { useState, useEffect } from "react";
-import { Wallet, User, MapPin, Navigation, Shield, DollarSign, Clock, Star } from "lucide-react";
+import { Wallet, User, MapPin, Navigation, Shield, DollarSign, Clock, Star, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import MapComponent from "@/components/MapComponent";
 import { useRide, RideData } from "@/context/RideContext";
 import { showSuccess } from "@/utils/toast";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 
 const DriverDashboard = () => {
+  const navigate = useNavigate();
   const { ride, availableRides, acceptRide, finishRide, startRide, rateRide } = useRide();
   const [isOnline, setIsOnline] = useState(false);
   const [incomingRide, setIncomingRide] = useState<RideData | null>(null);
   const [timer, setTimer] = useState(15);
   const [rating, setRating] = useState(0);
+  const [driverProfile, setDriverProfile] = useState<any>(null);
 
   // Estados derivados
   const isOnTrip = !!ride && ride.status !== 'COMPLETED';
   const isRating = ride?.status === 'COMPLETED';
+
+  useEffect(() => {
+    const getProfile = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if(user) {
+            const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+            setDriverProfile(data);
+        }
+    }
+    getProfile();
+  }, []);
 
   useEffect(() => {
     if (isOnline && availableRides.length > 0 && !ride) {
@@ -55,18 +71,21 @@ const DriverDashboard = () => {
       {/* Header Fixo */}
       <header className="bg-zinc-900 text-white p-4 shadow-md z-30">
         <div className="flex justify-between items-center">
-          <div className="flex items-center gap-3">
-             <div className="bg-zinc-700 p-2 rounded-full"><User className="w-5 h-5" /></div>
-             <div>
-                <div className="font-bold text-sm">Carlos Mot.</div>
-                <div className="text-xs text-yellow-400">★ 4.98</div>
+          <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate('/profile')}>
+             <Avatar className="border-2 border-zinc-700">
+                <AvatarImage src={driverProfile?.avatar_url} />
+                <AvatarFallback className="bg-zinc-700 text-white"><User /></AvatarFallback>
+             </Avatar>
+             <div className="max-w-[120px] sm:max-w-none">
+                <div className="font-bold text-sm truncate">{driverProfile?.first_name || 'Motorista'}</div>
+                <div className="text-xs text-yellow-400">★ 5.0</div>
              </div>
           </div>
-          <div className="flex items-center gap-3 bg-zinc-800 px-4 py-2 rounded-full border border-zinc-700">
-             <span className={`text-xs font-bold ${isOnline ? 'text-green-400' : 'text-gray-400'}`}>
+          <div className="flex items-center gap-3 bg-zinc-800 px-3 py-2 rounded-full border border-zinc-700">
+             <span className={`text-[10px] sm:text-xs font-bold ${isOnline ? 'text-green-400' : 'text-gray-400'}`}>
                 {isOnline ? 'ONLINE' : 'OFFLINE'}
              </span>
-             <Switch checked={isOnline} onCheckedChange={setIsOnline} className="data-[state=checked]:bg-green-500" />
+             <Switch checked={isOnline} onCheckedChange={setIsOnline} className="data-[state=checked]:bg-green-500 scale-75 sm:scale-100" />
           </div>
         </div>
       </header>
@@ -116,7 +135,7 @@ const DriverDashboard = () => {
 
                 {isOnTrip && !isRating && (
                     <div className="absolute bottom-0 left-0 right-0 bg-white shadow-[0_-5px_30px_rgba(0,0,0,0.3)] z-20 animate-in slide-in-from-bottom duration-500">
-                        <div className="p-6">
+                        <div className="p-6 pb-8">
                             <div className="flex justify-between items-center mb-6">
                                 <div>
                                     <div className="flex items-center gap-2 mb-1">
@@ -167,7 +186,7 @@ const DriverDashboard = () => {
                     </div>
 
                     <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-2">Nova Solicitação</h2>
-                    <h1 className="text-5xl font-black mb-1">{incomingRide.category}</h1>
+                    <h1 className="text-4xl sm:text-5xl font-black mb-1 text-center">{incomingRide.category}</h1>
                     <div className="bg-green-500/20 text-green-400 px-4 py-1 rounded-full text-sm font-bold mb-8 flex items-center gap-1">
                         <DollarSign className="w-4 h-4" /> Pagamento em Dinheiro
                     </div>
@@ -189,14 +208,14 @@ const DriverDashboard = () => {
                                  <div className="w-3 h-3 rounded-full bg-white mt-2 shrink-0 shadow-[0_0_10px_white]" />
                                  <div>
                                      <p className="text-xs text-gray-500 uppercase">Buscar em</p>
-                                     <p className="text-lg font-medium leading-tight">{incomingRide.pickup_address}</p>
+                                     <p className="text-lg font-medium leading-tight line-clamp-2">{incomingRide.pickup_address}</p>
                                  </div>
                              </div>
                              <div className="flex items-start gap-4">
                                  <div className="w-3 h-3 rounded-full bg-green-500 mt-2 shrink-0 shadow-[0_0_10px_#22c55e]" />
                                  <div>
                                      <p className="text-xs text-gray-500 uppercase">Levar até</p>
-                                     <p className="text-lg font-medium leading-tight">{incomingRide.destination_address}</p>
+                                     <p className="text-lg font-medium leading-tight line-clamp-2">{incomingRide.destination_address}</p>
                                  </div>
                              </div>
                         </div>
@@ -214,7 +233,7 @@ const DriverDashboard = () => {
                             className="h-16 text-xl bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl shadow-[0_0_20px_rgba(22,163,74,0.4)] animate-pulse"
                             onClick={handleAccept}
                          >
-                            ACEITAR CORRIDA
+                            ACEITAR
                          </Button>
                     </div>
                 </div>
