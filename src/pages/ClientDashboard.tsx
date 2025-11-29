@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import MapComponent from "@/components/MapComponent";
 import { 
-  MapPin, Car, Navigation, Loader2, Star, AlertTriangle, XCircle, ChevronRight, Clock, Wallet, User, ArrowLeft, BellRing, History, X
+  MapPin, Car, Navigation, Loader2, Star, AlertTriangle, XCircle, ChevronRight, Clock, Wallet, User, ArrowLeft, BellRing, History, X, Flag
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import FloatingDock from "@/components/FloatingDock";
+import RideChat from "@/components/RideChat";
+import { Textarea } from "@/components/ui/textarea";
 
 const MOCK_LOCATIONS = [
     { id: "short", label: "Shopping Center (2km)", distance: "2.1 km", km: 2.1 },
@@ -27,7 +29,7 @@ type Category = { id: string; name: string; description: string; base_fare: numb
 
 const ClientDashboard = () => {
   const navigate = useNavigate();
-  const { ride, requestRide, cancelRide, rateRide, clearRide } = useRide();
+  const { ride, requestRide, cancelRide, rateRide, clearRide, currentUserId } = useRide();
   
   // Tabs Navigation
   const [activeTab, setActiveTab] = useState("home");
@@ -40,6 +42,7 @@ const ClientDashboard = () => {
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [isRequesting, setIsRequesting] = useState(false);
   const [rating, setRating] = useState(0);
+  const [ratingComment, setRatingComment] = useState("");
   const [categories, setCategories] = useState<Category[]>([]);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [showBalanceAlert, setShowBalanceAlert] = useState(false);
@@ -47,6 +50,7 @@ const ClientDashboard = () => {
   const [loadingCats, setLoadingCats] = useState(true);
   const [showCancelAlert, setShowCancelAlert] = useState(false);
   const [showArrivalPopup, setShowArrivalPopup] = useState(false);
+  const [showStartPopup, setShowStartPopup] = useState(false);
   
   // Data
   const [historyItems, setHistoryItems] = useState<any[]>([]);
@@ -63,14 +67,14 @@ const ClientDashboard = () => {
       else if (['SEARCHING', 'ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(ride.status)) setStep('waiting');
 
       // Pop-up de chegada
-      if (ride.status === 'ARRIVED') {
-          setShowArrivalPopup(true);
-      } else {
-          setShowArrivalPopup(false);
-      }
+      if (ride.status === 'ARRIVED') setShowArrivalPopup(true); else setShowArrivalPopup(false);
+      // Pop-up de início
+      if (ride.status === 'IN_PROGRESS') setShowStartPopup(true); else setShowStartPopup(false);
+
     } else {
       if (step !== 'search') setStep('search');
       setShowArrivalPopup(false);
+      setShowStartPopup(false);
     }
   }, [ride]);
 
@@ -249,7 +253,20 @@ const ClientDashboard = () => {
                 {/* RATING */}
                 {step === 'rating' && (
                      <div className={`${cardBaseClasses} text-center`}>
-                         <div className="w-20 h-20 bg-green-100 rounded-full mx-auto flex items-center justify-center mb-6"><User className="w-10 h-10 text-green-600" /></div><h2 className="text-2xl font-black text-slate-900 mb-2">Chegamos!</h2><p className="text-gray-500 mb-8">Como foi sua experiência?</p><div className="flex justify-center gap-2 mb-8">{[1, 2, 3, 4, 5].map((star) => (<button key={star} onClick={() => setRating(star)} className="transition-transform hover:scale-125 focus:outline-none"><Star className={`w-10 h-10 ${rating >= star ? 'fill-yellow-400 text-yellow-400' : 'text-gray-200'}`} /></button>))}</div><Button className="w-full h-14 text-lg font-bold bg-black rounded-2xl" onClick={() => { rateRide(ride!.id, rating || 5, false); setStep('search'); }}>Enviar Avaliação</Button>
+                         <div className="w-20 h-20 bg-green-100 rounded-full mx-auto flex items-center justify-center mb-6"><User className="w-10 h-10 text-green-600" /></div>
+                         <h2 className="text-2xl font-black text-slate-900 mb-2">Chegamos!</h2>
+                         <p className="text-gray-500 mb-6">Como foi sua experiência?</p>
+                         <div className="flex justify-center gap-2 mb-6">{[1, 2, 3, 4, 5].map((star) => (<button key={star} onClick={() => setRating(star)} className="transition-transform hover:scale-125 focus:outline-none"><Star className={`w-10 h-10 ${rating >= star ? 'fill-yellow-400 text-yellow-400' : 'text-gray-200'}`} /></button>))}</div>
+                         <div className="mb-6 text-left">
+                            <label className="text-xs font-bold text-gray-500 uppercase ml-1">Observação (Opcional)</label>
+                            <Textarea 
+                                placeholder="O carro estava limpo? O motorista foi educado?" 
+                                className="bg-gray-50 border-gray-100 rounded-2xl resize-none mt-1" 
+                                value={ratingComment}
+                                onChange={e => setRatingComment(e.target.value)}
+                            />
+                         </div>
+                         <Button className="w-full h-14 text-lg font-bold bg-black rounded-2xl" onClick={() => { rateRide(ride!.id, rating || 5, false, ratingComment); setStep('search'); setRatingComment(""); setRating(0); }}>Enviar Avaliação</Button>
                      </div>
                 )}
 
@@ -278,7 +295,7 @@ const ClientDashboard = () => {
                                 <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center shrink-0"><MapPin className="w-5 h-5 text-gray-500" /></div>
                                 <div className="flex-1 min-w-0">
                                     <p className="font-medium truncate text-sm">{item.destination_address}</p>
-                                    <p className="text-xs text-gray-500">R$ {item.price}</p>
+                                    <p className="text-xs text-gray-500">R$ {Number(item.price).toFixed(2)}</p>
                                 </div>
                             </div>
                         </div>
@@ -314,6 +331,17 @@ const ClientDashboard = () => {
           </DialogContent>
       </Dialog>
 
+      {/* POPUP: CORRIDA INICIADA */}
+      <Dialog open={showStartPopup} onOpenChange={setShowStartPopup}>
+          <DialogContent className="sm:max-w-md bg-white border-0 shadow-2xl rounded-[40px] p-8 text-center">
+              <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-in zoom-in">
+                  <Flag className="w-10 h-10" />
+              </div>
+              <h2 className="text-2xl font-black text-slate-900 mb-2">Corrida Iniciada</h2>
+              <p className="text-gray-500">Aproveite sua viagem com conforto e segurança.</p>
+          </DialogContent>
+      </Dialog>
+
       {/* MODAIS GERAIS */}
       <Dialog open={showBalanceAlert} onOpenChange={setShowBalanceAlert}><DialogContent className="sm:max-w-md bg-white rounded-3xl border-0"><DialogHeader><DialogTitle className="text-red-600 flex items-center gap-2"><Wallet /> Saldo Insuficiente</DialogTitle></DialogHeader><div className="text-center py-6"><p className="text-gray-500 mb-1">Faltam</p><h2 className="text-5xl font-black text-slate-900">R$ {missingAmount.toFixed(2)}</h2></div><DialogFooter><Button className="w-full rounded-xl h-12 font-bold" onClick={() => navigate('/wallet')}>Recarregar Agora</Button></DialogFooter></DialogContent></Dialog>
       <AlertDialog open={showCancelAlert} onOpenChange={setShowCancelAlert}><AlertDialogContent className="rounded-3xl bg-white border-0"><AlertDialogHeader><AlertDialogTitle className="flex items-center gap-2 text-red-600"><AlertTriangle /> Cancelar Corrida?</AlertDialogTitle><AlertDialogDescription>Deseja realmente cancelar? Uma taxa pode ser cobrada.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel className="rounded-xl h-12">Voltar</AlertDialogCancel><AlertDialogAction onClick={() => { cancelRide(ride!.id); setShowCancelAlert(false); }} className="bg-red-600 hover:bg-red-700 rounded-xl h-12 font-bold">Sim, Cancelar</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
@@ -336,11 +364,22 @@ const ClientDashboard = () => {
                   )}
                   <div className="flex justify-between items-center pt-2 border-t border-gray-100">
                       <span className="font-medium text-gray-500">Total Pago</span>
-                      <span className="font-black text-2xl text-slate-900">R$ {selectedHistoryItem?.price}</span>
+                      <span className="font-black text-2xl text-slate-900">R$ {Number(selectedHistoryItem?.price).toFixed(2)}</span>
                   </div>
               </div>
           </DialogContent>
       </Dialog>
+
+      {/* CHAT FLUTUANTE */}
+      {ride && ['ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(ride.status) && currentUserId && (
+          <RideChat 
+            rideId={ride.id} 
+            currentUserId={currentUserId} 
+            role="client"
+            otherUserName={ride.driver_details?.name || 'Motorista'}
+            otherUserAvatar={ride.driver_details?.avatar_url}
+          />
+      )}
       
       <div className="relative z-[100]">
          <FloatingDock activeTab={activeTab} onTabChange={handleTabChange} role="client" />

@@ -23,7 +23,8 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
-      <Sonner />
+      {/* Configuração atualizada do Toast (Sonner) */}
+      <Sonner position="top-right" closeButton richColors theme="light" />
       <RideProvider>
         <BrowserRouter>
           <Routes>

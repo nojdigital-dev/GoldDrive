@@ -16,10 +16,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import FloatingDock from "@/components/FloatingDock";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import RideChat from "@/components/RideChat";
 
 const DriverDashboard = () => {
   const navigate = useNavigate();
-  const { ride, availableRides, acceptRide, rejectRide, confirmArrival, finishRide, startRide, cancelRide, rateRide } = useRide();
+  const { ride, availableRides, acceptRide, rejectRide, confirmArrival, finishRide, startRide, cancelRide, rateRide, currentUserId } = useRide();
   
   // Tabs & State
   const [activeTab, setActiveTab] = useState('home');
@@ -56,7 +57,6 @@ const DriverDashboard = () => {
           if (!data.car_model || !data.car_plate) { setShowCarForm(true); setIsOnline(false); }
 
           if (activeTab === 'history') {
-               // Agora busca usando a FK explicita do supabase que criamos para garantir acesso
                const { data: rides } = await supabase.from('rides')
                 .select(`
                     *, 
@@ -216,7 +216,7 @@ const DriverDashboard = () => {
                      <div className={cardBaseClasses}>
                         <div className="flex justify-between items-center mb-6">
                             <div><Badge className="mb-2 bg-black text-white hover:bg-black">{ride?.status === 'ACCEPTED' ? 'A CAMINHO' : ride?.status === 'ARRIVED' ? 'NO LOCAL' : 'EM VIAGEM'}</Badge><h3 className="text-2xl font-bold text-slate-900">{ride?.client_details?.name}</h3></div>
-                            <div className="text-right"><h3 className="text-3xl font-black text-slate-900">R$ {(ride?.price || 0) * 0.8}</h3><p className="text-gray-400 text-xs uppercase font-bold tracking-wider">Ganhos</p></div>
+                            <div className="text-right"><h3 className="text-3xl font-black text-slate-900">R$ {(Number(ride?.price) * 0.8).toFixed(2)}</h3><p className="text-gray-400 text-xs uppercase font-bold tracking-wider">Ganhos</p></div>
                         </div>
 
                         <div className="flex flex-col gap-3">
@@ -246,7 +246,7 @@ const DriverDashboard = () => {
                                         <p className="text-xs text-gray-500">{formatDate(item.created_at).day} • {formatDate(item.created_at).time}</p>
                                     </div>
                                 </div>
-                                <span className="font-black text-green-700">R$ {item.driver_earnings?.toFixed(2)}</span>
+                                <span className="font-black text-green-700">R$ {Number(item.driver_earnings).toFixed(2)}</span>
                              </div>
                              <p className="text-xs text-gray-500 truncate mt-1">{item.destination_address}</p>
                          </div>
@@ -325,8 +325,8 @@ const DriverDashboard = () => {
 
                   {/* Valores */}
                   <div className="bg-slate-900 text-white p-6 rounded-2xl flex items-center justify-between">
-                       <div><p className="text-gray-400 text-xs font-bold uppercase">Seu Ganho</p><h3 className="text-3xl font-black">R$ {selectedHistoryItem?.driver_earnings?.toFixed(2)}</h3></div>
-                       <div className="text-right"><p className="text-gray-400 text-xs font-bold uppercase">Taxa App</p><p className="font-bold">R$ {selectedHistoryItem?.platform_fee?.toFixed(2)}</p></div>
+                       <div><p className="text-gray-400 text-xs font-bold uppercase">Seu Ganho</p><h3 className="text-3xl font-black">R$ {Number(selectedHistoryItem?.driver_earnings).toFixed(2)}</h3></div>
+                       <div className="text-right"><p className="text-gray-400 text-xs font-bold uppercase">Taxa App</p><p className="font-bold">R$ {Number(selectedHistoryItem?.platform_fee).toFixed(2)}</p></div>
                   </div>
                   
                   {/* Infos Extras */}
@@ -366,6 +366,17 @@ const DriverDashboard = () => {
                   <Button className="w-full h-14 text-lg font-bold bg-slate-900 hover:bg-slate-800 rounded-2xl" onClick={() => handleSubmitRating(rating || 5)}>Receber Nova Corrida</Button>
               </div>
           </div>
+      )}
+
+      {/* CHAT FLUTUANTE */}
+      {ride && ['ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(ride.status) && currentUserId && (
+          <RideChat 
+            rideId={ride.id} 
+            currentUserId={currentUserId} 
+            role="driver"
+            otherUserName={ride.client_details?.name || 'Passageiro'}
+            otherUserAvatar={ride.client_details?.avatar_url}
+          />
       )}
 
       <div className="relative z-[100]">
