@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -7,9 +7,10 @@ import L from 'leaflet';
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
 
-let DefaultIcon = L.icon({
-    iconUrl: icon,
-    shadowUrl: iconShadow,
+// Configura o ícone padrão globalmente
+const DefaultIcon = L.icon({
+    iconUrl: typeof icon === 'string' ? icon : (icon as any).src,
+    shadowUrl: typeof iconShadow === 'string' ? iconShadow : (iconShadow as any).src,
     iconSize: [25, 41],
     iconAnchor: [12, 41]
 });
@@ -32,15 +33,24 @@ interface MapProps {
 }
 
 const MapComponent = ({ className = "h-full w-full", showPickup = false, showDestination = false }: MapProps) => {
+  const [isMounted, setIsMounted] = useState(false);
   const centerPosition: [number, number] = [-23.55052, -46.633309]; // São Paulo
   const destinationPos: [number, number] = [-23.559, -46.640]; 
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  if (!isMounted) {
+    return <div className="h-full w-full bg-gray-200 animate-pulse flex items-center justify-center text-gray-400">Carregando mapa...</div>;
+  }
 
   return (
     <div className={`relative z-0 ${className}`}>
       <MapContainer 
         center={centerPosition} 
         zoom={13} 
-        scrollWheelZoom={false} 
+        scrollWheelZoom={true} 
         className="h-full w-full"
         zoomControl={false}
       >
