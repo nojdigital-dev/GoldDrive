@@ -66,56 +66,41 @@ const AdminDashboard = () => {
         const { data: { user } } = await supabase.auth.getUser();
         
         if (user) {
-            // VERIFICAÇÃO SEGURA: Usa RPC primeiro para garantir permissão
             const { data: role } = await supabase.rpc('get_my_role');
-            
             if (role !== 'admin') {
-                console.warn("Acesso negado via RPC. Role:", role);
                 showError("Acesso restrito.");
                 navigate('/');
                 return;
             }
-
             const { data: profileData } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
             setAdminProfile(profileData || { first_name: 'Admin', last_name: 'User' });
         }
 
-        // 1. Buscar Corridas (CORRIGIDO: Nomes de Foreign Key padrão)
-        let { data: ridesData, error: rideError } = await supabase
-            .from('rides')
-            .select(`*, driver:profiles!rides_driver_id_fkey(first_name, last_name, avatar_url), customer:profiles!rides_customer_id_fkey(first_name, last_name, avatar_url)`)
-            .order('created_at', { ascending: false });
-
-        if (rideError) {
-             // Fallback para caso a FK tenha outro nome ou não esteja sendo detectada
-             const { data: simpleRides } = await supabase.from('rides').select('*').order('created_at', { ascending: false });
-             ridesData = simpleRides;
-        }
-
-        const currentRides = ridesData || [];
-        setRides(currentRides);
-
-        // 2. Buscar Perfis (CORREÇÃO: Ordenar por nome, pois created_at pode não existir)
-        const { data: profilesData, error: profileError } = await supabase
-            .from('profiles')
-            .select('*')
-            .order('first_name', { ascending: true }); // Alterado de created_at para first_name
+        // --- BUSCA SEGURA DE DADOS (USANDO RPC) ---
         
-        if (profileError) {
-            console.error("Erro profiles:", profileError);
-            showError("Erro ao buscar usuários.");
-        }
+        // 1. Buscar Corridas
+        const { data: ridesData, error: ridesError } = await supabase.rpc('get_admin_rides');
+        if (ridesError) throw ridesError;
+        
+        const currentRides = ridesData || [];
+        // Converte JSON de volta para array se necessário (Supabase retorna JSON direto)
+        const ridesArray = Array.isArray(currentRides) ? currentRides : [];
+        setRides(ridesArray);
 
-        const allProfiles = profilesData || [];
+        // 2. Buscar Perfis
+        const { data: profilesData, error: profilesError } = await supabase.rpc('get_admin_profiles');
+        if (profilesError) throw profilesError;
+
+        const allProfiles = Array.isArray(profilesData) ? profilesData : [];
         setPassengers(allProfiles.filter((p: any) => p.role === 'client'));
         setDrivers(allProfiles.filter((p: any) => p.role === 'driver'));
 
         // 3. Calcular Estatísticas
         const today = new Date().toDateString();
-        const ridesTodayCount = currentRides.filter(r => new Date(r.created_at).toDateString() === today).length;
-        const totalRevenue = currentRides.filter(r => r.status === 'COMPLETED').reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
-        const adminRev = currentRides.reduce((acc, curr) => acc + (Number(curr.platform_fee) || 0), 0);
-        const activeCount = currentRides.filter(r => ['SEARCHING', 'ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(r.status)).length;
+        const ridesTodayCount = ridesArray.filter((r: any) => new Date(r.created_at).toDateString() === today).length;
+        const totalRevenue = ridesArray.filter((r: any) => r.status === 'COMPLETED').reduce((acc: number, curr: any) => acc + (Number(curr.price) || 0), 0);
+        const adminRev = ridesArray.reduce((acc: number, curr: any) => acc + (Number(curr.platform_fee) || 0), 0);
+        const activeCount = ridesArray.filter((r: any) => ['SEARCHING', 'ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(r.status)).length;
 
         // Gráfico
         const chartMap = new Map();
@@ -124,7 +109,7 @@ const AdminDashboard = () => {
             const dateStr = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
             chartMap.set(dateStr, { date: dateStr, total: 0 });
         }
-        currentRides.forEach(r => {
+        ridesArray.forEach((r: any) => {
             if (r.status === 'COMPLETED') {
                 const date = new Date(r.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
                 if(chartMap.has(date)) {
@@ -142,8 +127,8 @@ const AdminDashboard = () => {
             activeRides: activeCount
         });
 
-        // Mock Transactions baseadas nas corridas
-        const recentTrans = currentRides.slice(0, 15).map(r => ({
+        // Transactions Mock
+        const recentTrans = ridesArray.slice(0, 15).map((r: any) => ({
             id: r.id, 
             date: r.created_at, 
             amount: Number(r.platform_fee || 0), 
@@ -154,14 +139,14 @@ const AdminDashboard = () => {
         setTransactions(recentTrans);
 
     } catch (e: any) {
-        console.error(e);
-        showError("Erro de conexão: " + e.message);
+        console.error("Erro Dashboard:", e);
+        showError("Erro ao carregar dados: " + e.message);
     } finally {
         setLoading(false);
     }
   };
 
-  // --- ACTIONS DE GESTÃO ---
+  // --- ACTIONS ---
 
   const openEditUser = (user: any) => {
       setSelectedUser(user);
@@ -190,7 +175,7 @@ const AdminDashboard = () => {
       try {
           const { error } = await supabase.from('profiles').delete().eq('id', selectedUser.id);
           if (error) throw error;
-          showSuccess("Perfil removido do sistema.");
+          showSuccess("Perfil removido.");
           setIsDeleteDialogOpen(false);
           fetchData();
       } catch (e: any) { showError(e.message); }
@@ -200,18 +185,18 @@ const AdminDashboard = () => {
       try {
           const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + '/update-password' });
           if (error) throw error;
-          showSuccess(`Email de redefinição enviado para ${email}`);
+          showSuccess(`Email enviado para ${email}`);
       } catch (e: any) { showError(e.message); }
   };
 
   const handleSaveConfig = () => {
-      showSuccess("Configurações atualizadas com sucesso!");
+      showSuccess("Configurações atualizadas!");
   };
 
-  // --- UI COMPONENTS ---
+  // --- COMPONENTS ---
 
   const StatCard = ({ title, value, icon: Icon, colorClass, subtext }: any) => (
-      <Card className="border-0 shadow-lg bg-white/50 dark:bg-slate-900/50 backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-xl group overflow-hidden relative">
+      <Card className="border-0 shadow-lg bg-white/50 dark:bg-slate-900/50 backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] group overflow-hidden relative">
           <div className={`absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity ${colorClass}`}>
               <Icon className="w-24 h-24" />
           </div>
@@ -242,7 +227,7 @@ const AdminDashboard = () => {
                    </div>
                    <div className="relative w-full md:w-64">
                        <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-                       <Input placeholder="Buscar por nome ou email..." className="pl-9 bg-white/50 dark:bg-slate-900/50 border-0 rounded-xl" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                       <Input placeholder="Buscar..." className="pl-9 bg-white/50 dark:bg-slate-900/50 border-0 rounded-xl" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                    </div>
               </div>
 
@@ -250,7 +235,7 @@ const AdminDashboard = () => {
                   <CardHeader><CardTitle>Gerenciar {type === 'client' ? 'Passageiros' : 'Motoristas'}</CardTitle></CardHeader>
                   <CardContent className="p-0">
                       {loading ? (
-                          <div className="p-10 text-center flex flex-col items-center gap-2"><Loader2 className="animate-spin w-8 h-8 text-yellow-500" /><p className="text-muted-foreground">Carregando usuários...</p></div>
+                          <div className="p-10 text-center flex flex-col items-center gap-2"><Loader2 className="animate-spin w-8 h-8 text-yellow-500" /><p className="text-muted-foreground">Carregando...</p></div>
                       ) : filtered.length === 0 ? (
                           <div className="p-10 text-center text-muted-foreground"><p>Nenhum usuário encontrado.</p></div>
                       ) : (
@@ -263,12 +248,12 @@ const AdminDashboard = () => {
                                               <TableCell className="pl-8"><div className="flex items-center gap-3"><Avatar className="w-10 h-10 border-2 border-white shadow-sm"><AvatarImage src={u.avatar_url}/><AvatarFallback>{u.first_name?.[0]}</AvatarFallback></Avatar><div><p className="font-bold text-sm">{u.first_name} {u.last_name}</p><p className="text-xs text-muted-foreground">ID: {u.id.substring(0,6)}</p></div></div></TableCell>
                                               <TableCell><div className="text-sm"><p>{u.email}</p><p className="text-muted-foreground text-xs">{u.phone || 'Sem telefone'}</p></div></TableCell>
                                               {type === 'driver' && <TableCell><Badge variant="secondary" className="font-mono">{u.car_model || 'N/A'} • {u.car_plate}</Badge></TableCell>}
-                                              <TableCell className="font-bold text-green-600">R$ {u.balance?.toFixed(2)}</TableCell>
+                                              <TableCell className="font-bold text-green-600">R$ {Number(u.balance || 0).toFixed(2)}</TableCell>
                                               <TableCell className="text-right pr-8">
                                                   <div className="flex justify-end gap-2">
-                                                      <Button variant="ghost" size="icon" title="Editar" onClick={() => openEditUser(u)}><Edit className="w-4 h-4 text-blue-500" /></Button>
-                                                      <Button variant="ghost" size="icon" title="Resetar Senha" onClick={() => handleResetPassword(u.email)}><Mail className="w-4 h-4 text-yellow-500" /></Button>
-                                                      <Button variant="ghost" size="icon" title="Excluir" onClick={() => openDeleteUser(u)}><Trash2 className="w-4 h-4 text-red-500" /></Button>
+                                                      <Button variant="ghost" size="icon" onClick={() => openEditUser(u)}><Edit className="w-4 h-4 text-blue-500" /></Button>
+                                                      <Button variant="ghost" size="icon" onClick={() => handleResetPassword(u.email)}><Mail className="w-4 h-4 text-yellow-500" /></Button>
+                                                      <Button variant="ghost" size="icon" onClick={() => openDeleteUser(u)}><Trash2 className="w-4 h-4 text-red-500" /></Button>
                                                   </div>
                                               </TableCell>
                                           </TableRow>
@@ -395,7 +380,7 @@ const AdminDashboard = () => {
                                <Table>
                                    <TableHeader className="bg-slate-50/50 dark:bg-slate-800/50"><TableRow><TableHead className="pl-8">ID</TableHead><TableHead>Passageiro</TableHead><TableHead>Motorista</TableHead><TableHead>Status</TableHead><TableHead>Taxa App</TableHead><TableHead className="text-right pr-8">Valor Total</TableHead></TableRow></TableHeader>
                                    <TableBody>
-                                       {rides.filter(r => filterStatus === 'ALL' ? true : r.status === filterStatus).map(r => (
+                                       {rides.filter((r: any) => filterStatus === 'ALL' ? true : r.status === filterStatus).map((r: any) => (
                                            <TableRow key={r.id} onClick={()=>setSelectedRide(r)} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-border/50">
                                                <TableCell className="pl-8 font-mono text-xs opacity-50">#{r.id.substring(0,8)}</TableCell>
                                                <TableCell><div className="flex items-center gap-3"><Avatar className="w-8 h-8"><AvatarImage src={r.customer?.avatar_url}/><AvatarFallback>{r.customer?.first_name?.[0]}</AvatarFallback></Avatar><span className="font-medium">{r.customer?.first_name || 'Usuário'}</span></div></TableCell>
