@@ -17,11 +17,20 @@ const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
   useEffect(() => {
     let mounted = true;
 
+    // Timeout de segurança: Se travar por 3 segundos, força a falha e redireciona
+    const timeoutId = setTimeout(() => {
+        if (mounted && isLoading) {
+            console.warn("Verificação de sessão demorou muito. Redirecionando...");
+            setIsLoading(false);
+            setIsAuthenticated(false);
+        }
+    }, 3000);
+
     const checkSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
-        if (!session) {
+        if (sessionError || !session) {
             if (mounted) {
                 setIsAuthenticated(false);
                 setIsLoading(false);
@@ -30,18 +39,19 @@ const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
         }
 
         // Se tem sessão, busca a role
-        const { data: profile } = await supabase
+        const { data: profile, error: profileError } = await supabase
             .from('profiles')
             .select('role')
             .eq('id', session.user.id)
-            .single();
+            .maybeSingle();
 
         if (mounted) {
-            if (profile) {
+            if (profile && !profileError) {
                 setUserRole(profile.role);
                 setIsAuthenticated(true);
             } else {
-                // Sessão existe mas perfil não (erro raro)
+                // Sessão existe mas não conseguimos ler o perfil (erro de rede ou banco)
+                console.error("Erro ao ler perfil:", profileError);
                 setIsAuthenticated(false);
             }
             setIsLoading(false);
@@ -57,16 +67,19 @@ const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
 
     checkSession();
 
-    // Listener para mudanças (logout, etc)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
         if (event === 'SIGNED_OUT') {
-            setIsAuthenticated(false);
-            setUserRole(null);
+            if (mounted) {
+                setIsAuthenticated(false);
+                setUserRole(null);
+                // Não precisa setar loading, o redirect vai acontecer no render
+            }
         }
     });
 
     return () => {
         mounted = false;
+        clearTimeout(timeoutId); // Limpa o timer se o componente desmontar
         subscription.unsubscribe();
     };
   }, []);
