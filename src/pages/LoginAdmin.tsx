@@ -14,20 +14,16 @@ const LoginAdmin = () => {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  // Verificação silenciosa (Não bloqueia a UI)
+  // Verificação silenciosa de sessão (apenas redireciona se já estiver logado)
   useEffect(() => {
     let mounted = true;
     const checkSession = async () => {
-        try {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session && mounted) {
-                 const { data } = await supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle();
-                 if (data?.role === 'admin') {
-                     navigate('/admin', { replace: true });
-                 }
-            }
-        } catch (error) {
-            console.error("Verificação silenciosa falhou:", error);
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session && mounted) {
+             const { data } = await supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle();
+             if (data?.role === 'admin') {
+                 navigate('/admin', { replace: true });
+             }
         }
     };
     checkSession();
@@ -38,46 +34,54 @@ const LoginAdmin = () => {
     e.preventDefault();
     if (loading) return;
 
-    setLoading(true);
+    setLoading(true); // Bloqueia botão
 
     try {
-        // 1. Limpa qualquer sessão anterior
-        await supabase.auth.signOut();
+        // 1. Limpeza preventiva (ignora erros aqui para não travar)
+        await supabase.auth.signOut().catch(() => {});
 
-        // 2. Tenta o login
-        const { data: authData, error } = await supabase.auth.signInWithPassword({ email, password });
+        // 2. Tentativa de Login
+        const { data, error } = await supabase.auth.signInWithPassword({
+            email: email.trim(),
+            password: password.trim()
+        });
         
         if (error) throw error;
         
-        if (authData.user) {
-            // 3. Verifica se é admin
-            const { data: profile, error: profileError } = await supabase
-                .from('profiles')
-                .select('role')
-                .eq('id', authData.user.id)
-                .single();
-            
-            if (profileError) throw profileError;
+        if (!data.user) throw new Error("Erro desconhecido ao obter usuário.");
 
-            if (profile?.role !== 'admin') {
-                await supabase.auth.signOut();
-                throw new Error("Acesso negado: Este usuário não é um administrador.");
-            }
-            
-            // 4. Sucesso - Redireciona
-            navigate('/admin', { replace: true });
-        } else {
-            throw new Error("Erro ao obter dados do usuário.");
+        // 3. Verificação de Permissão (Admin)
+        const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', data.user.id)
+            .single();
+        
+        if (profileError) {
+            // Se falhar ao ler o perfil, desloga por segurança
+            await supabase.auth.signOut();
+            throw new Error("Erro ao verificar permissões do usuário.");
         }
+
+        if (profile?.role !== 'admin') {
+            await supabase.auth.signOut();
+            throw new Error("Acesso negado: Apenas administradores.");
+        }
+        
+        // 4. Sucesso! Redireciona
+        navigate('/admin', { replace: true });
+
     } catch (e: any) {
         console.error("Erro login:", e);
-        // Tratamento específico para credenciais inválidas para ser mais claro
-        if (e.message.includes("Invalid login")) {
-            showError("Email ou senha incorretos.");
-        } else {
-            showError(e.message || "Erro ao autenticar");
+        // Mensagem amigável
+        let msg = e.message;
+        if (msg.includes("Invalid login") || msg.includes("Invalid credentials")) {
+            msg = "Email ou senha incorretos.";
         }
-        setLoading(false); // CRÍTICO: Garante que o loading pare em caso de erro
+        showError(msg);
+    } finally {
+        // CRÍTICO: Isso roda SEMPRE, garantindo que o botão desbloqueie
+        setLoading(false);
     }
   };
 
@@ -134,7 +138,7 @@ const LoginAdmin = () => {
                                <button 
                                    type="button"
                                    onClick={() => setShowPassword(!showPassword)}
-                                   className="absolute right-4 top-3.5 text-slate-500 hover:text-white transition-colors focus:outline-none"
+                                   className="absolute right-4 top-3.5 text-slate-500 hover:text-white transition-colors focus:outline-none z-10 p-1"
                                >
                                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                                </button>
