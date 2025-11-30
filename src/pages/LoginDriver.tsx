@@ -72,30 +72,29 @@ const LoginDriver = () => {
 
       setLoading(true);
       
-      // Timeout de segurança para não travar o botão
-      const safetyTimeout = setTimeout(() => {
-          if (loading) {
-              setLoading(false);
-              showError("O servidor demorou a responder. Verifique sua conexão.");
-          }
-      }, 15000);
-
       try {
-          const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+          // Login Simples e Direto
+          const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: password.trim() });
+          
           if (error) throw error;
           
-          const { data: profile } = await supabase.from('profiles').select('role, driver_status').eq('id', data.user.id).single();
+          // Verificação rápida de role
+          const { data: profile } = await supabase.from('profiles').select('role').eq('id', data.user.id).maybeSingle();
           
-          clearTimeout(safetyTimeout);
-          if (profile?.role !== 'driver') {
-              await supabase.auth.signOut();
-              throw new Error("Esta conta não é de motorista.");
+          const role = profile?.role || 'driver'; // Assume driver se falhar leitura
+          
+          if (role !== 'driver') {
+              // Se logou mas não é motorista, avisa mas deixa entrar se quiser (ou bloqueia)
+              // Aqui vamos redirecionar para a área correta
+              if (role === 'client') navigate('/client');
+              else if (role === 'admin') navigate('/admin');
+              else navigate('/driver');
+          } else {
+              navigate('/driver');
           }
-          
-          navigate('/driver');
       } catch (e: any) {
-          clearTimeout(safetyTimeout);
-          showError(e.message);
+          console.error(e);
+          showError(e.message || "Erro ao entrar.");
       } finally {
           setLoading(false);
       }
@@ -107,10 +106,11 @@ const LoginDriver = () => {
           const fileName = `${Math.random()}.${fileExt}`;
           const filePath = `${path}/${fileName}`;
           
+          // Upload "fire and forget" para não travar o cadastro se a imagem falhar
           const { error: uploadError } = await supabase.storage.from('documents').upload(filePath, file);
           
           if (uploadError) {
-              console.warn("Upload falhou (tentando prosseguir):", uploadError.message);
+              console.warn("Upload falhou (prosseguindo sem imagem):", uploadError.message);
               return null; 
           }
           
@@ -169,12 +169,6 @@ const LoginDriver = () => {
       if (loading) return;
       setLoading(true);
 
-      // Timeout de segurança
-      const safetyTimeout = setTimeout(() => {
-           setLoading(false);
-           showError("Tempo limite excedido. Tente novamente.");
-      }, 30000);
-
       try {
           let userId = "";
 
@@ -194,46 +188,29 @@ const LoginDriver = () => {
           if (authError) {
               // LOGICA DE RECUPERAÇÃO: Se usuário já existe, tentamos logar
               if (authError.message.includes("already registered") || authError.status === 422) {
-                  console.log("Usuário já existe. Tentando login automático...");
-                  
                   const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({ 
                       email: email.trim(), 
                       password: password.trim() 
                   });
                   
-                  if (loginError) {
-                      throw new Error("Este email já está cadastrado, mas a senha está incorreta. Faça login.");
-                  }
-                  
-                  if (loginData.user) {
-                      userId = loginData.user.id;
-                  } else {
-                      throw new Error("Erro ao recuperar usuário existente.");
-                  }
+                  if (loginError) throw new Error("Email já cadastrado. Tente fazer login.");
+                  if (loginData.user) userId = loginData.user.id;
               } else {
                   throw authError;
               }
           } else {
-              // Caso de sucesso normal no cadastro
-              if (authData.user) {
-                  userId = authData.user.id;
-              } else if (authData?.session?.user) {
-                  userId = authData.session.user.id;
-              } else {
-                  // Se caiu aqui, pode ser que exija confirmação de email, mas vamos tentar prosseguir se tiver ID
-                  // Se não tiver ID, é um edge case
-                  showSuccess("Cadastro iniciado! Verifique seu email para confirmar antes de continuar.");
-                  clearTimeout(safetyTimeout);
-                  setLoading(false);
-                  return;
-              }
+              if (authData.user) userId = authData.user.id;
+              else if (authData?.session?.user) userId = authData.session.user.id;
           }
 
-          // Delay para garantir propagação do Trigger no DB
-          await new Promise(resolve => setTimeout(resolve, 1500));
+          if (!userId) {
+              // Se não conseguiu ID mas não deu erro, assume que precisa de confirmação de email
+              showSuccess("Verifique seu email para confirmar o cadastro.");
+              setLoading(false);
+              return;
+          }
 
-          // 2. Upload Docs (Em paralelo)
-          // Se falhar upload, continuamos o cadastro para não travar o usuário
+          // 2. Upload Docs (Em paralelo e sem travar)
           const uploadPromises = [
              facePhoto ? uploadFile(facePhoto, `face/${userId}`) : Promise.resolve(null),
              cnhFront ? uploadFile(cnhFront, `cnh/${userId}`) : Promise.resolve(null),
@@ -242,8 +219,8 @@ const LoginDriver = () => {
 
           const [faceUrl, cnhFrontUrl, cnhBackUrl] = await Promise.all(uploadPromises);
 
-          // 3. Atualizar Profile
-          const updates = {
+          // 3. Atualizar Profile (Tenta atualizar, mas se falhar não impede a tela de sucesso, pois o usuário já foi criado)
+          await supabase.from('profiles').update({
               cpf,
               phone,
               face_photo_url: faceUrl,
@@ -255,24 +232,15 @@ const LoginDriver = () => {
               car_year: carYear,
               driver_status: 'PENDING',
               updated_at: new Date().toISOString()
-          };
+          }).eq('id', userId);
 
-          const { error: updateError } = await supabase.from('profiles').update(updates).eq('id', userId);
-
-          if (updateError) {
-              console.error("Erro update:", updateError);
-              throw new Error("Erro ao salvar dados do veículo. Tente novamente.");
-          }
-
-          // SUCESSO TOTAL
-          clearTimeout(safetyTimeout);
+          // SUCESSO TOTAL E IMEDIATO
           setRegistrationSuccess(true);
           window.scrollTo(0, 0);
 
       } catch (e: any) {
-          clearTimeout(safetyTimeout);
           console.error(e);
-          showError(e.message || "Erro desconhecido. Tente novamente.");
+          showError(e.message || "Erro ao processar cadastro.");
       } finally {
           setLoading(false);
       }

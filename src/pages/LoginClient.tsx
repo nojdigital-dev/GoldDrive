@@ -25,29 +25,35 @@ const LoginClient = () => {
 
     setLoading(true);
 
-    const timeoutId = setTimeout(() => {
-        if (loading) {
-            setLoading(false);
-            showError("O servidor demorou para responder. Tente novamente.");
-        }
-    }, 15000);
-
     try {
         if(isSignUp) {
-            const { error } = await supabase.auth.signUp({
-                email, password,
+            // CADASTRO DIRETO
+            const { error, data } = await supabase.auth.signUp({
+                email: email.trim(), 
+                password: password.trim(),
                 options: { data: { role: 'client', first_name: name.split(' ')[0], last_name: name.split(' ').slice(1).join(' ') } }
             });
+
             if(error) throw error;
-            showSuccess("Conta criada! Verifique seu email.");
-            setLoading(false);
+            
+            // Se cadastro deu certo e já tem sessão (sem confirmação de email), entra direto
+            if (data.session) {
+                navigate('/client', { replace: true });
+            } else {
+                showSuccess("Conta criada! Se necessário, verifique seu email.");
+                // Opcional: tentar login automático se não precisar confirmar email
+            }
         } else {
-            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+            // LOGIN DIRETO
+            const { data, error } = await supabase.auth.signInWithPassword({ 
+                email: email.trim(), 
+                password: password.trim() 
+            });
+            
             if(error) throw error;
 
-            setLoading(false);
-            clearTimeout(timeoutId);
-
+            // Redirecionamento robusto (sem depender de leituras complexas)
+            // Tenta ler o perfil, mas se falhar, assume 'client' se estiver nesta tela
             const { data: profile } = await supabase.from('profiles').select('role').eq('id', data.user.id).maybeSingle();
             const role = profile?.role || 'client';
 
@@ -57,11 +63,11 @@ const LoginClient = () => {
         }
     } catch (e: any) {
         console.error(e);
-        clearTimeout(timeoutId);
-        setLoading(false);
         let msg = e.message || "Erro ao conectar.";
         if (msg.includes("Invalid login")) msg = "Email ou senha incorretos.";
         showError(msg);
+    } finally {
+        setLoading(false);
     }
   };
 
