@@ -19,6 +19,13 @@ const LoginAdmin = () => {
     if (loading) return;
 
     setLoading(true);
+    
+    const timeoutId = setTimeout(() => {
+        if (loading) {
+            setLoading(false);
+            showError("Sem resposta do servidor. Tente novamente.");
+        }
+    }, 15000);
 
     try {
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -28,26 +35,27 @@ const LoginAdmin = () => {
         
         if (error) throw error;
         
-        // Verificação rápida de perfil
         const { data: profile } = await supabase
             .from('profiles')
             .select('role')
             .eq('id', data.user.id)
             .maybeSingle();
 
-        if (profile && profile.role !== 'admin') {
-            await supabase.auth.signOut();
-            throw new Error("Usuário não é administrador.");
-        }
+        setLoading(false);
+        clearTimeout(timeoutId);
+
+        const role = profile?.role || 'admin';
         
-        navigate('/admin', { replace: true });
+        if (role === 'admin') navigate('/admin', { replace: true });
+        else if (role === 'driver') navigate('/driver', { replace: true });
+        else navigate('/client', { replace: true });
 
     } catch (e: any) {
+        clearTimeout(timeoutId);
+        setLoading(false);
         let msg = e.message || "Erro ao conectar.";
         if (msg.includes("Invalid login")) msg = "Credenciais inválidas.";
         showError(msg);
-    } finally {
-        setLoading(false);
     }
   };
 
@@ -61,7 +69,7 @@ const LoginAdmin = () => {
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden font-sans">
        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none"></div>
 
-       <div className="w-full max-w-md relative z-10 animate-in fade-in slide-in-from-bottom-8 duration-700">
+       <div className="w-full max-w-md relative z-10">
            <div className="mb-8 text-center">
                <div className="w-16 h-16 bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-2xl border border-white/10 ring-4 ring-white/5">
                    <Shield className="w-8 h-8 text-yellow-500" />
@@ -83,7 +91,7 @@ const LoginAdmin = () => {
                                    className="bg-slate-900/50 border-white/10 pl-12 h-12 rounded-xl text-white placeholder:text-slate-600 focus:border-yellow-500/50 focus:ring-yellow-500/20 transition-all" 
                                    value={email} 
                                    onChange={e => setEmail(e.target.value)} 
-                                   autoComplete="email" 
+                                   disabled={loading}
                                />
                            </div>
                        </div>
@@ -98,22 +106,15 @@ const LoginAdmin = () => {
                                    className="bg-slate-900/50 border-white/10 pl-12 pr-12 h-12 rounded-xl text-white placeholder:text-slate-600 focus:border-yellow-500/50 focus:ring-yellow-500/20 transition-all" 
                                    value={password} 
                                    onChange={e => setPassword(e.target.value)} 
-                                   autoComplete="current-password" 
+                                   disabled={loading}
                                />
-                               <button 
-                                   type="button"
-                                   onClick={() => setShowPassword(!showPassword)}
-                                   className="absolute right-4 top-3.5 text-slate-500 hover:text-white transition-colors focus:outline-none z-10 p-1"
-                               >
+                               <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-3.5 text-slate-500 hover:text-white transition-colors focus:outline-none z-10 p-1">
                                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                                </button>
                            </div>
                        </div>
 
-                       <Button 
-                           className="w-full bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-black font-black h-12 rounded-xl shadow-lg shadow-yellow-500/20 transition-all hover:scale-[1.02] active:scale-[0.98]" 
-                           disabled={loading}
-                       >
+                       <Button className="w-full bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-black font-black h-12 rounded-xl shadow-lg shadow-yellow-500/20 transition-all hover:scale-[1.02] active:scale-[0.98]" disabled={loading}>
                            {loading ? <Loader2 className="animate-spin mr-2" /> : "ENTRAR"}
                        </Button>
                    </form>
@@ -121,10 +122,9 @@ const LoginAdmin = () => {
            </Card>
 
            <div className="mt-8 text-center space-y-2">
-               <Button variant="ghost" className="text-slate-500 hover:text-white hover:bg-white/5 rounded-xl gap-2 transition-colors" onClick={() => navigate('/')}>
+               <Button variant="ghost" className="text-slate-500 hover:text-white hover:bg-white/5 rounded-xl gap-2 transition-colors" onClick={() => navigate('/')} disabled={loading}>
                    <ArrowLeft className="w-4 h-4" /> Voltar ao Início
                </Button>
-               
                <div onClick={handleForceClear} className="text-[10px] text-slate-700 hover:text-red-500 cursor-pointer pt-4 uppercase font-bold tracking-widest flex items-center justify-center gap-1">
                    <LogOut className="w-3 h-3" /> Limpar Sessão (Debug)
                </div>
