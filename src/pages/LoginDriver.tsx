@@ -1,10 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
-import { ArrowLeft, Loader2, ArrowRight, Car, User, FileText, Camera, ShieldCheck, Mail, Lock, Phone, CreditCard, Eye, EyeOff, AlertCircle, Clock } from "lucide-react";
+import { ArrowLeft, Loader2, Car, Label as LabelIcon, Eye, EyeOff } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -15,8 +15,6 @@ const LoginDriver = () => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   
-  const [errors, setErrors] = useState<Record<string, boolean>>({});
-
   // Dados
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -36,19 +34,14 @@ const LoginDriver = () => {
   const [carColor, setCarColor] = useState("");
   const [carYear, setCarYear] = useState("");
 
-  const handleCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let value = e.target.value.replace(/\D/g, "");
-    if (value.length > 11) value = value.slice(0, 11);
-    value = value.replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d{1,2})$/, "$1-$2");
-    setCpf(value);
-  };
-
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let value = e.target.value.replace(/\D/g, "");
-    if (value.length > 11) value = value.slice(0, 11);
-    value = value.replace(/(\d{2})(\d)/, "($1) $2").replace(/(\d{5})(\d)/, "$1-$2");
-    setPhone(value);
-  };
+  // Limpeza inicial ao montar o componente
+  useEffect(() => {
+    const clearSession = async () => {
+        await supabase.auth.signOut();
+        localStorage.removeItem(`sb-${new URL(supabase.supabaseUrl).hostname.split('.')[0]}-auth-token`);
+    };
+    clearSession();
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
       e.preventDefault();
@@ -57,63 +50,43 @@ const LoginDriver = () => {
       
       setLoading(true);
       
-      // Timeout de segurança: Se demorar mais de 10s, destrava o botão
-      const timeoutId = setTimeout(() => {
-          setLoading((current) => {
-              if (current) {
-                  showError("O servidor demorou para responder. Tente novamente.");
-                  return false;
-              }
-              return false;
-          });
-      }, 10000);
-
       try {
-          const { data, error } = await supabase.auth.signInWithPassword({ 
+          // 1. Força limpeza antes de tentar
+          await supabase.auth.signOut();
+
+          // 2. Timeout de segurança (15s)
+          const timeoutPromise = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error("Tempo limite excedido")), 15000)
+          );
+
+          // 3. Tentativa de Login
+          const loginPromise = supabase.auth.signInWithPassword({ 
               email: email.trim(), 
               password: password.trim() 
           });
+
+          const { data, error } = await Promise.race([loginPromise, timeoutPromise]) as any;
           
           if (error) throw error;
-          if (!data.user) throw new Error("Usuário não encontrado.");
+          if (!data?.user) throw new Error("Usuário não encontrado.");
 
-          // Busca role e status do motorista
-          const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('role, driver_status')
-            .eq('id', data.user.id)
-            .maybeSingle();
+          // 4. Verifica Perfil
+          const { data: profile } = await supabase.from('profiles').select('role, driver_status').eq('id', data.user.id).maybeSingle();
           
-          if (profileError) {
-              console.error("Erro perfil:", profileError);
-              // Não trava o login se der erro no perfil, tenta redirecionar pro padrão
-          }
-
-          // Cancela o timeout pois deu certo
-          clearTimeout(timeoutId);
-          setLoading(false);
-
           if (profile?.role === 'driver') {
-              // Se o status for PENDING, manda para a tela de análise/sucesso
-              if (profile.driver_status === 'PENDING') {
-                  navigate('/success', { replace: true });
-              } else {
-                  navigate('/driver', { replace: true });
-              }
+              if (profile.driver_status === 'PENDING') navigate('/success', { replace: true });
+              else navigate('/driver', { replace: true });
           }
-          else if (profile?.role === 'admin') {
-              navigate('/admin', { replace: true });
-          }
-          else {
-              navigate('/client', { replace: true });
-          }
+          else if (profile?.role === 'admin') navigate('/admin', { replace: true });
+          else navigate('/client', { replace: true });
 
       } catch (e: any) {
-          clearTimeout(timeoutId);
-          setLoading(false);
+          console.error(e);
           let msg = e.message || "Erro no login";
           if (msg.includes("Invalid login")) msg = "Email ou senha incorretos.";
           showError(msg);
+      } finally {
+          setLoading(false);
       }
   };
 
@@ -123,62 +96,19 @@ const LoginDriver = () => {
           const fileExt = file.name.split('.').pop();
           const fileName = `${Date.now()}_${Math.random().toString(36).substr(2,9)}.${fileExt}`;
           const filePath = `${path}/${fileName}`;
-          
           await supabase.storage.from('documents').upload(filePath, file, { upsert: true });
           const { data } = supabase.storage.from('documents').getPublicUrl(filePath);
           return data.publicUrl;
-      } catch {
-          return "";
-      }
-  };
-
-  const handleNextStep = async () => {
-      let isValid = true;
-      const newErrors: Record<string, boolean> = {};
-
-      if (step === 1) {
-          if (!name) newErrors.name = true;
-          if (!email) newErrors.email = true;
-          if (!password) newErrors.password = true;
-          if (password !== confirmPassword) { showError("Senhas não conferem"); isValid = false; }
-          if (cpf.length < 14) newErrors.cpf = true;
-      } else if (step === 2) {
-          if (!facePhoto) newErrors.facePhoto = true;
-          if (!cnhFront) newErrors.cnhFront = true;
-      } else if (step === 3) {
-          if (!carModel) newErrors.carModel = true;
-          if (!carPlate) newErrors.carPlate = true;
-      }
-
-      if (Object.keys(newErrors).length > 0) {
-          setErrors(newErrors);
-          isValid = false;
-          showError("Verifique os campos obrigatórios");
-      }
-
-      if (isValid) {
-          if (step < 3) setStep(step + 1);
-          else await submitRegistration();
-      }
+      } catch { return ""; }
   };
 
   const submitRegistration = async () => {
       if (loading) return;
       setLoading(true);
 
-      // Timeout de segurança para cadastro também
-      const timeoutId = setTimeout(() => {
-          setLoading((current) => {
-             if(current) {
-                 showError("O envio está demorando. Verifique sua conexão.");
-                 return false;
-             }
-             return false;
-          });
-      }, 20000);
-
       try {
-          // 1. CRIA O USUÁRIO
+          await supabase.auth.signOut(); // Garante sessão limpa
+
           const { data: authData, error: authError } = await supabase.auth.signUp({
               email: email.trim(),
               password: password.trim(),
@@ -198,131 +128,96 @@ const LoginDriver = () => {
                    const { data: loginData } = await supabase.auth.signInWithPassword({ email, password });
                    if (loginData.user) userId = loginData.user.id;
                    else throw authError;
-              } else {
-                  throw authError;
-              }
+              } else throw authError;
           }
 
           if (!userId) {
-              clearTimeout(timeoutId);
-              setLoading(false);
-              showSuccess("Verifique seu email.");
+              showSuccess("Verifique seu email para confirmar.");
               return;
           }
 
-          // 2. UPLOAD ARQUIVOS
           const [faceUrl, cnhFrontUrl, cnhBackUrl] = await Promise.all([
              uploadFileSafe(facePhoto!, `face/${userId}`),
              uploadFileSafe(cnhFront!, `cnh/${userId}`),
              uploadFileSafe(cnhBack!, `cnh/${userId}`)
           ]);
 
-          // 3. SALVA DADOS
           await supabase.from('profiles').upsert({
               id: userId,
               role: 'driver',
               email: email.trim(),
               first_name: name.split(' ')[0],
               last_name: name.split(' ').slice(1).join(' '),
-              cpf,
-              phone,
-              car_model: carModel,
-              car_plate: carPlate.toUpperCase(),
-              car_color: carColor,
-              car_year: carYear,
-              face_photo_url: faceUrl,
-              cnh_front_url: cnhFrontUrl,
-              cnh_back_url: cnhBackUrl,
+              cpf, phone, car_model: carModel, car_plate: carPlate.toUpperCase(),
+              car_color: carColor, car_year: carYear,
+              face_photo_url: faceUrl, cnh_front_url: cnhFrontUrl, cnh_back_url: cnhBackUrl,
               driver_status: 'PENDING',
               updated_at: new Date().toISOString()
           });
 
-          clearTimeout(timeoutId);
-          setLoading(false);
-          // SUCESSO
           navigate('/success', { replace: true });
-
       } catch (e: any) {
-          clearTimeout(timeoutId);
-          setLoading(false);
           showError(e.message);
+      } finally {
+          setLoading(false);
       }
   };
 
-  // TELA DE LOGIN (Design Original)
+  const handleNextStep = () => { if (step < 3) setStep(step + 1); else submitRegistration(); };
+
   if (!isSignUp) {
       return (
         <div className="min-h-screen relative flex items-center justify-center font-sans overflow-hidden bg-slate-900">
-            <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?q=80&w=2070')] bg-cover bg-center opacity-40" />
-            <div className="relative z-10 w-full max-w-6xl flex flex-col lg:flex-row h-full lg:h-auto min-h-screen lg:min-h-[600px] lg:rounded-[32px] lg:overflow-hidden lg:shadow-2xl lg:bg-white animate-in fade-in zoom-in-95 duration-500">
-                <div className="lg:w-1/2 p-8 lg:p-12 flex flex-col justify-center text-white lg:bg-slate-900/90 relative">
-                     <div className="relative z-10 text-center lg:text-left">
-                        <div className="w-16 h-16 bg-yellow-500 rounded-2xl flex items-center justify-center mb-6 shadow-glow mx-auto lg:mx-0"><Car className="w-8 h-8 text-black" /></div>
-                        <h1 className="text-4xl lg:text-5xl font-black mb-4">Gold<span className="text-yellow-500">Drive</span></h1>
-                        <p className="text-lg text-gray-300">A plataforma definitiva para motoristas.</p>
-                     </div>
-                </div>
-                <div className="flex-1 bg-white p-8 lg:p-12 flex flex-col justify-center">
-                    <div className="mb-8">
-                         <Button variant="ghost" onClick={() => navigate('/')} className="pl-0 hover:bg-transparent text-slate-500 mb-2"><ArrowLeft className="mr-2 w-4 h-4" /> Voltar</Button>
-                         <h2 className="text-3xl font-black text-slate-900">Login Parceiro</h2>
-                    </div>
-                    <form onSubmit={handleLogin} className="space-y-5">
-                        <div className="space-y-1"><Label>Email</Label><Input type="email" value={email} onChange={e => setEmail(e.target.value)} className="h-12" placeholder="seu@email.com"/></div>
-                        <div className="space-y-1"><Label>Senha</Label><div className="relative"><Input type={showPassword?"text":"password"} value={password} onChange={e => setPassword(e.target.value)} className="h-12 pr-10" placeholder="••••••"/><button type="button" onClick={()=>setShowPassword(!showPassword)} className="absolute right-3 top-3 text-gray-400"><Eye className="w-5 h-5"/></button></div></div>
-                        <Button className="w-full h-14 font-bold bg-slate-900 text-white rounded-xl mt-4" disabled={loading}>{loading ? <Loader2 className="animate-spin" /> : "Acessar Painel"}</Button>
-                    </form>
-                    <div className="mt-8 text-center pt-6 border-t border-gray-100"><Button variant="outline" onClick={() => setIsSignUp(true)} className="w-full h-12 font-bold rounded-xl">Criar Cadastro Gratuito</Button></div>
-                </div>
+            <div className="relative z-10 w-full max-w-lg bg-white p-8 rounded-3xl shadow-2xl">
+                <Button variant="ghost" onClick={() => navigate('/')} className="pl-0 mb-4"><ArrowLeft className="mr-2 w-4 h-4"/> Voltar</Button>
+                <h2 className="text-3xl font-black text-slate-900 mb-6">Login Motorista</h2>
+                <form onSubmit={handleLogin} className="space-y-4">
+                    <div className="space-y-1"><Label>Email</Label><Input type="email" value={email} onChange={e => setEmail(e.target.value)} className="h-12" placeholder="seu@email.com"/></div>
+                    <div className="space-y-1"><Label>Senha</Label><div className="relative"><Input type={showPassword?"text":"password"} value={password} onChange={e => setPassword(e.target.value)} className="h-12 pr-10"/><button type="button" onClick={()=>setShowPassword(!showPassword)} className="absolute right-3 top-3 text-gray-400"><Eye className="w-5 h-5"/></button></div></div>
+                    <Button className="w-full h-14 font-bold bg-slate-900 text-white rounded-xl mt-4" disabled={loading}>{loading ? <Loader2 className="animate-spin"/> : "Entrar"}</Button>
+                </form>
+                <div className="mt-6 text-center pt-4 border-t"><Button variant="outline" onClick={() => setIsSignUp(true)} className="w-full h-12 font-bold rounded-xl">Quero ser motorista</Button></div>
             </div>
         </div>
       );
   }
 
-  // TELA DE CADASTRO (Design Original Card Centered)
   return (
-    <div className="min-h-screen relative flex items-center justify-center p-4 lg:p-8 font-sans overflow-hidden bg-slate-900">
-        <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?q=80&w=2583')] bg-cover bg-center opacity-20" />
-        <div className="absolute inset-0 bg-gradient-to-br from-black via-slate-900/90 to-slate-900/80" />
-
-        <Card className="w-full max-w-2xl bg-white/95 backdrop-blur-xl shadow-2xl rounded-[32px] overflow-hidden border-0 relative z-10 animate-in slide-in-from-bottom-10">
-            <div className="bg-slate-900 p-8 text-white relative">
-                <div className="flex justify-between items-center mb-6">
-                    <Button variant="ghost" onClick={() => step === 1 ? setIsSignUp(false) : setStep(step - 1)} className="text-white hover:bg-white/10 p-0 w-8 h-8 rounded-full h-auto"><ArrowLeft className="w-6 h-6" /></Button>
-                    <span className="font-bold text-yellow-500 tracking-widest text-xs uppercase bg-yellow-500/10 px-3 py-1 rounded-full">ETAPA {step} / 3</span>
-                </div>
-                <h2 className="text-3xl font-black mb-2">{step === 1 ? "Seus Dados" : step === 2 ? "Documentação" : "Seu Veículo"}</h2>
-                <div className="h-1.5 w-full bg-slate-800 rounded-full mt-4"><div className="h-full bg-yellow-500 transition-all duration-500" style={{ width: `${(step / 3) * 100}%` }}/></div>
+    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-900">
+        <Card className="w-full max-w-xl bg-white rounded-3xl border-0 shadow-2xl">
+            <div className="p-6 border-b flex justify-between items-center">
+                <Button variant="ghost" onClick={() => step===1 ? setIsSignUp(false) : setStep(step-1)}><ArrowLeft/></Button>
+                <span className="font-bold text-slate-500">Passo {step} de 3</span>
             </div>
-
-            <CardContent className="p-6 lg:p-10">
-                {step === 1 && (
-                    <div className="space-y-5 animate-in slide-in-from-right fade-in">
-                        <div className="grid md:grid-cols-2 gap-4"><div className="space-y-1"><Label>Nome</Label><Input value={name} onChange={e => setName(e.target.value)} className={errors.name ? "border-red-500" : ""} placeholder="Nome Completo"/></div><div className="space-y-1"><Label>CPF</Label><Input value={cpf} onChange={handleCpfChange} maxLength={14} className={errors.cpf ? "border-red-500" : ""} placeholder="000.000.000-00"/></div></div>
-                        <div className="space-y-1"><Label>Celular</Label><Input value={phone} onChange={handlePhoneChange} maxLength={15} className={errors.phone ? "border-red-500" : ""} placeholder="(11) 99999-9999"/></div>
-                        <div className="space-y-1"><Label>Email</Label><Input type="email" value={email} onChange={e => setEmail(e.target.value)} className={errors.email ? "border-red-500" : ""} placeholder="email@exemplo.com"/></div>
-                        <div className="grid md:grid-cols-2 gap-4"><div className="space-y-1"><Label>Senha</Label><Input type="password" value={password} onChange={e => setPassword(e.target.value)} className={errors.password ? "border-red-500" : ""} placeholder="Senha"/></div><div className="space-y-1"><Label>Confirmar</Label><Input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className={errors.confirmPassword ? "border-red-500" : ""} placeholder="Repita a senha"/></div></div>
-                    </div>
+            <CardContent className="p-6 space-y-4">
+                {step===1 && (
+                    <>
+                        <div className="space-y-1"><Label>Nome</Label><Input value={name} onChange={e=>setName(e.target.value)} placeholder="Nome Completo"/></div>
+                        <div className="space-y-1"><Label>CPF</Label><Input value={cpf} onChange={e=>setCpf(e.target.value)} placeholder="000.000.000-00"/></div>
+                        <div className="space-y-1"><Label>Celular</Label><Input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="(00) 00000-0000"/></div>
+                        <div className="space-y-1"><Label>Email</Label><Input value={email} onChange={e=>setEmail(e.target.value)} placeholder="email@exemplo.com"/></div>
+                        <div className="space-y-1"><Label>Senha</Label><Input type="password" value={password} onChange={e=>setPassword(e.target.value)}/></div>
+                        <div className="space-y-1"><Label>Confirmar Senha</Label><Input type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)}/></div>
+                    </>
                 )}
-                {step === 2 && (
-                    <div className="space-y-6 animate-in slide-in-from-right fade-in">
-                        <div className="space-y-2"><Label>Selfie</Label><div className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer ${facePhoto ? 'border-green-500 bg-green-50' : 'border-gray-200'}`}><input type="file" accept="image/*" className="hidden" id="face" onChange={e => setFacePhoto(e.target.files?.[0]||null)} /><label htmlFor="face" className="block w-full cursor-pointer">{facePhoto ? "Foto OK" : "Tirar Foto"}</label></div></div>
-                        <div className="grid md:grid-cols-2 gap-4">
-                            <div className="space-y-2"><Label>CNH Frente</Label><div className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer ${cnhFront ? 'border-green-500 bg-green-50' : 'border-gray-200'}`}><input type="file" accept="image/*" className="hidden" id="cnhf" onChange={e => setCnhFront(e.target.files?.[0]||null)} /><label htmlFor="cnhf" className="block w-full cursor-pointer">{cnhFront ? "Frente OK" : "Enviar"}</label></div></div>
-                            <div className="space-y-2"><Label>CNH Verso</Label><div className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer ${cnhBack ? 'border-green-500 bg-green-50' : 'border-gray-200'}`}><input type="file" accept="image/*" className="hidden" id="cnhb" onChange={e => setCnhBack(e.target.files?.[0]||null)} /><label htmlFor="cnhb" className="block w-full cursor-pointer">{cnhBack ? "Verso OK" : "Enviar"}</label></div></div>
+                {step===2 && (
+                    <>
+                       <div className="bg-slate-50 p-4 rounded-xl text-center cursor-pointer border-2 border-dashed" onClick={()=>document.getElementById('face')?.click()}><input id="face" type="file" className="hidden" onChange={e=>setFacePhoto(e.target.files?.[0]||null)}/><p>{facePhoto?"Foto Rosto OK":"Foto do Rosto (Selfie)"}</p></div>
+                       <div className="bg-slate-50 p-4 rounded-xl text-center cursor-pointer border-2 border-dashed" onClick={()=>document.getElementById('cnhf')?.click()}><input id="cnhf" type="file" className="hidden" onChange={e=>setCnhFront(e.target.files?.[0]||null)}/><p>{cnhFront?"CNH Frente OK":"Foto CNH Frente"}</p></div>
+                       <div className="bg-slate-50 p-4 rounded-xl text-center cursor-pointer border-2 border-dashed" onClick={()=>document.getElementById('cnhb')?.click()}><input id="cnhb" type="file" className="hidden" onChange={e=>setCnhBack(e.target.files?.[0]||null)}/><p>{cnhBack?"CNH Verso OK":"Foto CNH Verso"}</p></div>
+                    </>
+                )}
+                {step===3 && (
+                    <>
+                        <div className="space-y-1"><Label>Modelo Carro</Label><Input value={carModel} onChange={e=>setCarModel(e.target.value)} placeholder="Ex: Gol 1.0"/></div>
+                        <div className="space-y-1"><Label>Placa</Label><Input value={carPlate} onChange={e=>setCarPlate(e.target.value.toUpperCase())} placeholder="ABC-1234"/></div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1"><Label>Cor</Label><Input value={carColor} onChange={e=>setCarColor(e.target.value)} placeholder="Prata"/></div>
+                            <div className="space-y-1"><Label>Ano</Label><Input value={carYear} onChange={e=>setCarYear(e.target.value)} placeholder="2020"/></div>
                         </div>
-                    </div>
+                    </>
                 )}
-                {step === 3 && (
-                    <div className="space-y-5 animate-in slide-in-from-right fade-in">
-                        <div className="space-y-1"><Label>Modelo</Label><Input value={carModel} onChange={e => setCarModel(e.target.value)} className={errors.carModel ? "border-red-500" : ""} placeholder="Ex: Onix 2020"/></div>
-                        <div className="space-y-1"><Label>Placa</Label><Input value={carPlate} onChange={e => setCarPlate(e.target.value.toUpperCase())} className={errors.carPlate ? "border-red-500 uppercase" : "uppercase"} placeholder="ABC-1234"/></div>
-                        <div className="grid md:grid-cols-2 gap-4"><div className="space-y-1"><Label>Cor</Label><Input value={carColor} onChange={e => setCarColor(e.target.value)} className={errors.carColor ? "border-red-500" : ""} placeholder="Prata"/></div><div className="space-y-1"><Label>Ano</Label><Input type="number" value={carYear} onChange={e => setCarYear(e.target.value)} className={errors.carYear ? "border-red-500" : ""} placeholder="2020"/></div></div>
-                    </div>
-                )}
-                <Button onClick={handleNextStep} disabled={loading} className="w-full h-16 mt-8 text-lg font-bold rounded-2xl bg-slate-900 hover:bg-black text-white shadow-xl">
-                    {loading ? <Loader2 className="animate-spin" /> : (step === 3 ? "Finalizar Cadastro" : "Continuar")}
-                </Button>
+                <Button className="w-full h-14 font-bold bg-slate-900 text-white rounded-xl mt-4" onClick={handleNextStep} disabled={loading}>{loading?<Loader2 className="animate-spin"/>:(step===3?"Finalizar":"Continuar")}</Button>
             </CardContent>
         </Card>
     </div>

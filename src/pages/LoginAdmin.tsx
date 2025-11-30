@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,36 +14,38 @@ const LoginAdmin = () => {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
+  useEffect(() => {
+    // Limpeza forçada ao entrar
+    const clearSession = async () => {
+        await supabase.auth.signOut();
+        localStorage.removeItem(`sb-${new URL(supabase.supabaseUrl).hostname.split('.')[0]}-auth-token`);
+    };
+    clearSession();
+  }, []);
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading) return;
 
     setLoading(true);
     
-    const timeoutId = setTimeout(() => {
-        if (loading) {
-            setLoading(false);
-            showError("Sem resposta do servidor. Tente novamente.");
-        }
-    }, 15000);
-
     try {
-        const { data, error } = await supabase.auth.signInWithPassword({
+        await supabase.auth.signOut();
+
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error("O servidor demorou para responder.")), 15000)
+        );
+
+        const loginPromise = supabase.auth.signInWithPassword({
             email: email.trim(),
             password: password.trim()
         });
+
+        const { data, error } = await Promise.race([loginPromise, timeoutPromise]) as any;
         
         if (error) throw error;
         
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', data.user.id)
-            .maybeSingle();
-
-        setLoading(false);
-        clearTimeout(timeoutId);
-
+        const { data: profile } = await supabase.from('profiles').select('role').eq('id', data.user.id).maybeSingle();
         const role = profile?.role || 'admin';
         
         if (role === 'admin') navigate('/admin', { replace: true });
@@ -51,83 +53,59 @@ const LoginAdmin = () => {
         else navigate('/client', { replace: true });
 
     } catch (e: any) {
-        clearTimeout(timeoutId);
-        setLoading(false);
         let msg = e.message || "Erro ao conectar.";
         if (msg.includes("Invalid login")) msg = "Credenciais inválidas.";
         showError(msg);
+    } finally {
+        setLoading(false);
     }
   };
 
-  const handleForceClear = async () => {
-      await supabase.auth.signOut();
-      localStorage.clear();
-      window.location.reload();
-  };
-
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden font-sans">
-       <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none"></div>
-
-       <div className="w-full max-w-md relative z-10">
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+       <div className="w-full max-w-md">
            <div className="mb-8 text-center">
-               <div className="w-16 h-16 bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-2xl border border-white/10 ring-4 ring-white/5">
+               <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-2xl border border-white/10 ring-4 ring-white/5">
                    <Shield className="w-8 h-8 text-yellow-500" />
                </div>
-               <h1 className="text-3xl font-black text-white tracking-tight mb-2">Gold<span className="text-yellow-500">Admin</span></h1>
-               <p className="text-slate-400">Acesso Restrito</p>
+               <h1 className="text-3xl font-black text-white mb-2">Gold<span className="text-yellow-500">Admin</span></h1>
            </div>
 
            <Card className="bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl rounded-[32px] overflow-hidden">
                <CardContent className="p-8">
                    <form onSubmit={handleAuth} className="space-y-6">
                        <div className="space-y-2">
-                           <label className="text-xs font-bold uppercase text-slate-500 tracking-wider ml-1">Email</label>
-                           <div className="relative group">
-                               <div className="absolute left-4 top-3.5 text-slate-500 group-focus-within:text-yellow-500 transition-colors"><Shield className="w-5 h-5" /></div>
-                               <Input 
-                                   type="email" 
-                                   placeholder="admin@golddrive.com" 
-                                   className="bg-slate-900/50 border-white/10 pl-12 h-12 rounded-xl text-white placeholder:text-slate-600 focus:border-yellow-500/50 focus:ring-yellow-500/20 transition-all" 
-                                   value={email} 
-                                   onChange={e => setEmail(e.target.value)} 
-                                   disabled={loading}
-                               />
-                           </div>
+                           <label className="text-xs font-bold uppercase text-slate-500 ml-1">Email</label>
+                           <Input 
+                               type="email" 
+                               className="bg-slate-900/50 border-white/10 h-12 rounded-xl text-white" 
+                               value={email} 
+                               onChange={e => setEmail(e.target.value)} 
+                               disabled={loading}
+                           />
                        </div>
                        
                        <div className="space-y-2">
-                           <label className="text-xs font-bold uppercase text-slate-500 tracking-wider ml-1">Senha</label>
-                           <div className="relative group">
-                               <div className="absolute left-4 top-3.5 text-slate-500 group-focus-within:text-yellow-500 transition-colors"><KeyRound className="w-5 h-5" /></div>
-                               <Input 
-                                   type={showPassword ? "text" : "password"} 
-                                   placeholder="••••••••••••" 
-                                   className="bg-slate-900/50 border-white/10 pl-12 pr-12 h-12 rounded-xl text-white placeholder:text-slate-600 focus:border-yellow-500/50 focus:ring-yellow-500/20 transition-all" 
-                                   value={password} 
-                                   onChange={e => setPassword(e.target.value)} 
-                                   disabled={loading}
-                               />
-                               <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-3.5 text-slate-500 hover:text-white transition-colors focus:outline-none z-10 p-1">
-                                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                               </button>
-                           </div>
+                           <label className="text-xs font-bold uppercase text-slate-500 ml-1">Senha</label>
+                           <Input 
+                               type="password" 
+                               className="bg-slate-900/50 border-white/10 h-12 rounded-xl text-white" 
+                               value={password} 
+                               onChange={e => setPassword(e.target.value)} 
+                               disabled={loading}
+                           />
                        </div>
 
-                       <Button className="w-full bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-black font-black h-12 rounded-xl shadow-lg shadow-yellow-500/20 transition-all hover:scale-[1.02] active:scale-[0.98]" disabled={loading}>
+                       <Button className="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-black h-12 rounded-xl" disabled={loading}>
                            {loading ? <Loader2 className="animate-spin mr-2" /> : "ENTRAR"}
                        </Button>
                    </form>
                </CardContent>
            </Card>
-
-           <div className="mt-8 text-center space-y-2">
-               <Button variant="ghost" className="text-slate-500 hover:text-white hover:bg-white/5 rounded-xl gap-2 transition-colors" onClick={() => navigate('/')} disabled={loading}>
-                   <ArrowLeft className="w-4 h-4" /> Voltar ao Início
+           <div className="mt-8 text-center">
+               <Button variant="ghost" className="text-slate-500 hover:text-white" onClick={() => navigate('/')}>
+                   <ArrowLeft className="w-4 h-4 mr-2" /> Voltar
                </Button>
-               <div onClick={handleForceClear} className="text-[10px] text-slate-700 hover:text-red-500 cursor-pointer pt-4 uppercase font-bold tracking-widest flex items-center justify-center gap-1">
-                   <LogOut className="w-3 h-3" /> Limpar Sessão (Debug)
-               </div>
            </div>
        </div>
     </div>
