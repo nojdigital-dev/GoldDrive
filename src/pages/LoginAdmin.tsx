@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
-import { Shield, Loader2, ArrowLeft, KeyRound, LogOut, Eye, EyeOff } from "lucide-react";
+import { Shield, Loader2, KeyRound, LogOut, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 
 const LoginAdmin = () => {
@@ -14,16 +14,20 @@ const LoginAdmin = () => {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  // Verificação de sessão existente
+  // Verificação de sessão (apenas redirecionamento se já logado)
   useEffect(() => {
     let mounted = true;
     const checkSession = async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session && mounted) {
-             const { data } = await supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle();
-             if (data?.role === 'admin') {
-                 navigate('/admin', { replace: true });
-             }
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session && mounted) {
+                 const { data } = await supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle();
+                 if (data?.role === 'admin') {
+                     navigate('/admin', { replace: true });
+                 }
+            }
+        } catch (error) {
+            console.error("Check session error:", error);
         }
     };
     checkSession();
@@ -37,20 +41,20 @@ const LoginAdmin = () => {
     setLoading(true);
 
     try {
-        // 1. Limpa sessão anterior para evitar conflitos
-        await supabase.auth.signOut();
-
-        // 2. Autenticação
+        // Tenta logar diretamente. O Supabase lida com a troca de sessão internamente.
+        // Removemos o signOut() prévio pois ele pode causar timeouts de rede desnecessários.
         const { data, error } = await supabase.auth.signInWithPassword({
             email: email.trim(),
             password: password.trim()
         });
         
+        // Se a senha estiver errada, o erro é pego AQUI e vai para o catch
         if (error) throw error;
-        if (!data.user) throw new Error("Erro de autenticação.");
+        
+        if (!data.user) throw new Error("Erro de autenticação: Usuário não retornado.");
 
-        // 3. Verificação de Role (Permissão)
-        // Usamos maybeSingle para evitar erros caso o perfil não exista
+        // Verificação de Perfil
+        // Usamos maybeSingle para evitar exceções de banco (retorna null se não achar)
         const { data: profile, error: profileError } = await supabase
             .from('profiles')
             .select('role')
@@ -58,30 +62,43 @@ const LoginAdmin = () => {
             .maybeSingle();
         
         if (profileError) {
-            console.error("Erro ao buscar perfil:", profileError);
-            throw new Error("Falha ao verificar permissões de administrador.");
+            // Se der erro de banco/rede ao buscar perfil
+            await supabase.auth.signOut();
+            throw new Error("Erro ao verificar perfil: " + profileError.message);
         }
 
-        if (profile?.role !== 'admin') {
-            await supabase.auth.signOut(); // Desloga se não for admin
-            throw new Error("Acesso negado: Este usuário não é administrador.");
+        if (!profile || profile.role !== 'admin') {
+            // Se logou mas não é admin
+            await supabase.auth.signOut();
+            throw new Error("Acesso negado: Apenas administradores.");
         }
         
-        // 4. Sucesso
-        // Forçamos o fim do loading ANTES de navegar para evitar sensação de travamento
-        setLoading(false);
-        showSuccess("Bem-vindo, Administrador.");
+        // Sucesso
+        showSuccess("Acesso autorizado.");
         navigate('/admin', { replace: true });
 
     } catch (e: any) {
-        setLoading(false); // Garante que o botão destrave em caso de erro
-        console.error("Erro login:", e);
+        console.error("Login Error:", e);
         
-        let msg = e.message || "Erro ao tentar entrar.";
+        // Tratamento de mensagens específicas
+        let msg = e.message || "Erro desconhecido.";
+        
         if (msg.includes("Invalid login") || msg.includes("Invalid credentials")) {
             msg = "Email ou senha incorretos.";
+        } else if (msg.includes("network")) {
+            msg = "Erro de conexão. Verifique sua internet.";
         }
+        
         showError(msg);
+        
+        // Em caso de erro, garantimos logout para limpar estados sujos
+        // Fazemos isso sem await para não bloquear a UI
+        supabase.auth.signOut();
+        
+    } finally {
+        // O finally roda SEMPRE, seja sucesso ou erro.
+        // Isso garante que o botão destrave.
+        setLoading(false);
     }
   };
 
