@@ -1,67 +1,43 @@
 import { MadeWithDyad } from "@/components/made-with-dyad";
 import { Button } from "@/components/ui/button";
-import { Car, ShieldCheck, User, ArrowRight, LogIn, Loader2 } from "lucide-react";
+import { Car, ShieldCheck, User, ArrowRight, LogIn } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 const Index = () => {
   const navigate = useNavigate();
-  const [checkingSession, setCheckingSession] = useState(true);
 
+  // Verificação silenciosa: A página carrega IMEDIATAMENTE.
+  // Se o usuário estiver logado, ele será redirecionado em seguida.
+  // Isso evita o "Loading Infinito".
   useEffect(() => {
-    let mounted = true;
-
     const checkUser = async () => {
-      // Timeout de segurança: se o Supabase demorar mais de 2s, libera a tela
-      const timer = setTimeout(() => {
-        if (mounted && checkingSession) {
-             console.log("Timeout de verificação de sessão.");
-             setCheckingSession(false);
-        }
-      }, 2000);
-
       try {
         const { data: { session } } = await supabase.auth.getSession();
         
         if (session) {
-          // Busca role de forma segura
           const { data: profile } = await supabase
             .from('profiles')
             .select('role')
             .eq('id', session.user.id)
             .maybeSingle();
 
-          if (!mounted) return;
-
           if (profile) {
-            if (profile.role === 'admin') navigate('/admin');
-            else if (profile.role === 'driver') navigate('/driver');
-            else navigate('/client');
-            return; // Navegou, não precisa rodar o resto
+            // Usa replace: true para não sujar o histórico do navegador
+            if (profile.role === 'admin') navigate('/admin', { replace: true });
+            else if (profile.role === 'driver') navigate('/driver', { replace: true });
+            else navigate('/client', { replace: true });
           }
         }
       } catch (error) {
-        console.error("Erro ao verificar sessão (Index):", error);
-      } finally {
-        clearTimeout(timer);
-        if (mounted) setCheckingSession(false);
+        console.error("Erro silencioso de verificação:", error);
+        // Não fazemos nada aqui, deixamos o usuário navegar manualmente
       }
     };
 
     checkUser();
-
-    return () => { mounted = false; };
   }, [navigate]);
-
-  if (checkingSession) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-950">
-        <Loader2 className="w-10 h-10 text-yellow-500 animate-spin mb-4" />
-        <p className="text-gray-400 text-sm animate-pulse">Iniciando sistema...</p>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-950 p-4 relative overflow-hidden">
