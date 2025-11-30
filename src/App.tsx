@@ -19,6 +19,7 @@ import AdminDashboard from "./pages/AdminDashboard";
 import Profile from "./pages/Profile";
 import Wallet from "./pages/Wallet";
 import NotFound from "./pages/NotFound";
+import DriverPending from "./pages/DriverPending";
 
 const queryClient = new QueryClient();
 
@@ -27,9 +28,7 @@ const App = () => {
   useEffect(() => {
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       console.error("Promise Rejection:", event.reason);
-      // Evita spam de "ResizeObserver loop" que é inofensivo
       if (event.reason?.message?.includes("ResizeObserver")) return;
-      
       const msg = event.reason?.message || event.reason || "Erro de conexão ou lógica";
       showError(`Sistema: ${msg}`);
     };
@@ -65,6 +64,9 @@ const App = () => {
                 <Route path="/login/driver" element={<LoginDriver />} />
                 <Route path="/login/admin" element={<LoginAdmin />} />
                 
+                {/* Rota de Pendência (Acessível se autenticado, mas status pending) */}
+                <Route path="/driver-pending" element={<DriverPending />} />
+
                 {/* Rotas Protegidas */}
                 <Route path="/client" element={
                   <ProtectedRoute allowedRoles={['client']}>

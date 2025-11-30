@@ -49,7 +49,14 @@ const LoginDriver = () => {
   useEffect(() => {
     const checkUser = async () => {
         const { data: { session } } = await supabase.auth.getSession();
-        if (session) navigate('/driver');
+        if (session) {
+            // Verificar status se já estiver logado
+            const { data: profile } = await supabase.from('profiles').select('driver_status, role').eq('id', session.user.id).single();
+            if (profile?.role === 'driver') {
+                if (profile.driver_status === 'PENDING') navigate('/driver-pending');
+                else navigate('/driver');
+            }
+        }
     };
     checkUser();
   }, [navigate]);
@@ -139,12 +146,29 @@ const LoginDriver = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: form.email,
         password: form.password
       });
       if (error) throw error;
-      navigate('/driver');
+      
+      if (data.user) {
+          // Verificar status PENDING
+          const { data: profile } = await supabase.from('profiles').select('driver_status, role').eq('id', data.user.id).single();
+          
+          if (profile?.role === 'driver') {
+             if (profile.driver_status === 'PENDING') {
+                 navigate('/driver-pending');
+             } else {
+                 navigate('/driver');
+             }
+          } else {
+             // Se não for driver, mas logou aqui, redireciona pro lugar certo
+             if (profile?.role === 'admin') navigate('/admin');
+             else navigate('/client');
+          }
+      }
+
     } catch (e: any) {
       showError(e.message);
     } finally {
@@ -197,9 +221,10 @@ const LoginDriver = () => {
 
       if (profileError) throw profileError;
 
-      showSuccess("Cadastro realizado! Aguarde aprovação.");
-      navigate('/login/driver'); 
-      setIsSignUp(false); // Volta pra tela de login
+      // Cadastro bem sucedido -> Manda pra tela de pendência
+      // O SignUp do Supabase loga o usuário automaticamente se a confirmação de email estiver desligada.
+      // Se estiver ligada, ele vai pedir pra confirmar email. Assumindo fluxo padrão de 'Logado'
+      navigate('/driver-pending'); 
       
     } catch (e: any) {
       showError(e.message);

@@ -26,7 +26,7 @@ const DriverDashboard = () => {
   const [activeTab, setActiveTab] = useState('home');
   const [isOnline, setIsOnline] = useState(false);
   const [incomingRide, setIncomingRide] = useState<RideData | null>(null);
-  const [timer, setTimer] = useState(30); // Aumentei para 30s pra dar tempo de ler
+  const [timer, setTimer] = useState(30);
   const [driverProfile, setDriverProfile] = useState<any>(null);
   const [showChat, setShowChat] = useState(false);
   
@@ -54,7 +54,16 @@ const DriverDashboard = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if(user) {
           const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+          
+          // Bloqueio de segurança para drivers pendentes
+          if (data?.driver_status === 'PENDING') {
+              navigate('/driver-pending');
+              return;
+          }
+
           setDriverProfile(data);
+          
+          // Checagem de carro
           if (!data.car_model || !data.car_plate) { setShowCarForm(true); setIsOnline(false); }
 
           if (activeTab === 'history') {
