@@ -27,18 +27,18 @@ const LoginClient = () => {
                 options: { data: { role: 'client', first_name: name.split(' ')[0], last_name: name.split(' ').slice(1).join(' ') } }
             });
             if(error) throw error;
+            setLoading(false); // Para o loading
             showSuccess("Conta criada! Verifique seu email.");
         } else {
             const { error } = await supabase.auth.signInWithPassword({ email, password });
             if(error) throw error;
-            // Força navegação imediata
-            navigate('/client');
+            
+            setLoading(false); // Para o loading imediatamente
+            navigate('/client', { replace: true }); // Redireciona forçado
         }
     } catch (e: any) {
         showError(e.message);
-    } finally {
-        // GARANTE que o loading pare
-        setLoading(false);
+        setLoading(false); // Para o loading no erro
     }
   };
 

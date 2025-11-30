@@ -40,14 +40,14 @@ const LoginAdmin = () => {
             throw new Error("Usuário não é administrador.");
         }
         
-        navigate('/admin', { replace: true });
+        setLoading(false); // Para o loading
+        navigate('/admin', { replace: true }); // Redireciona forçado
 
     } catch (e: any) {
         let msg = e.message || "Erro ao conectar.";
         if (msg.includes("Invalid login")) msg = "Credenciais inválidas.";
         showError(msg);
-    } finally {
-        setLoading(false);
+        setLoading(false); // Para o loading no erro
     }
   };
 

@@ -27,15 +27,17 @@ const LoginDriver = () => {
                 options: { data: { role: 'driver', first_name: name.split(' ')[0], last_name: name.split(' ').slice(1).join(' ') } }
             });
             if(error) throw error;
+            setLoading(false);
             showSuccess("Cadastro realizado! Verifique seu email.");
         } else {
             const { error } = await supabase.auth.signInWithPassword({ email, password });
             if(error) throw error;
-            navigate('/driver');
+            
+            setLoading(false);
+            navigate('/driver', { replace: true });
         }
     } catch (e: any) {
         showError(e.message);
-    } finally {
         setLoading(false);
     }
   };
