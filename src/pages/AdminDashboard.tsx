@@ -81,33 +81,25 @@ const AdminDashboard = () => {
         }
 
         // 1. Buscar Corridas (CORRIGIDO: Nomes de Foreign Key padrão)
-        // Tentamos primeiro com o nome padrão. Se falhar, tentamos sem alias explícito (Supabase as vezes resolve sozinho)
         let { data: ridesData, error: rideError } = await supabase
             .from('rides')
             .select(`*, driver:profiles!rides_driver_id_fkey(first_name, last_name, avatar_url), customer:profiles!rides_customer_id_fkey(first_name, last_name, avatar_url)`)
             .order('created_at', { ascending: false });
 
-        // Fallback: Se der erro na FK, tenta buscar cru e loga o erro
         if (rideError) {
-             console.error("Erro FK explícita, tentando busca simples:", rideError);
-             const { data: simpleRides, error: simpleError } = await supabase
-                .from('rides')
-                .select(`*`)
-                .order('created_at', { ascending: false });
-             
-             if (simpleError) {
-                 showError("Erro crítico ao buscar corridas: " + simpleError.message);
-             } else {
-                 ridesData = simpleRides;
-                 showError("Aviso: Detalhes de usuários não carregados (Erro de FK).");
-             }
+             // Fallback para caso a FK tenha outro nome ou não esteja sendo detectada
+             const { data: simpleRides } = await supabase.from('rides').select('*').order('created_at', { ascending: false });
+             ridesData = simpleRides;
         }
 
         const currentRides = ridesData || [];
         setRides(currentRides);
 
-        // 2. Buscar Perfis
-        const { data: profilesData, error: profileError } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
+        // 2. Buscar Perfis (CORREÇÃO: Ordenar por nome, pois created_at pode não existir)
+        const { data: profilesData, error: profileError } = await supabase
+            .from('profiles')
+            .select('*')
+            .order('first_name', { ascending: true }); // Alterado de created_at para first_name
         
         if (profileError) {
             console.error("Erro profiles:", profileError);
