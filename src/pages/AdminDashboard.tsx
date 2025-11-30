@@ -70,25 +70,38 @@ const AdminDashboard = () => {
             const { data: role } = await supabase.rpc('get_my_role');
             
             if (role !== 'admin') {
-                // Só redireciona se tiver certeza absoluta que NÃO é admin
                 console.warn("Acesso negado via RPC. Role:", role);
                 showError("Acesso restrito.");
                 navigate('/');
                 return;
             }
 
-            // Busca dados visuais do perfil (sem bloquear se falhar)
             const { data: profileData } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
             setAdminProfile(profileData || { first_name: 'Admin', last_name: 'User' });
         }
 
-        // 1. Buscar Corridas
-        const { data: ridesData, error: rideError } = await supabase
+        // 1. Buscar Corridas (CORRIGIDO: Nomes de Foreign Key padrão)
+        // Tentamos primeiro com o nome padrão. Se falhar, tentamos sem alias explícito (Supabase as vezes resolve sozinho)
+        let { data: ridesData, error: rideError } = await supabase
             .from('rides')
-            .select(`*, driver:profiles!public_rides_driver_id_fkey(*), customer:profiles!public_rides_customer_id_fkey(*)`)
+            .select(`*, driver:profiles!rides_driver_id_fkey(first_name, last_name, avatar_url), customer:profiles!rides_customer_id_fkey(first_name, last_name, avatar_url)`)
             .order('created_at', { ascending: false });
 
-        if (rideError) console.error("Erro ao buscar corridas:", rideError);
+        // Fallback: Se der erro na FK, tenta buscar cru e loga o erro
+        if (rideError) {
+             console.error("Erro FK explícita, tentando busca simples:", rideError);
+             const { data: simpleRides, error: simpleError } = await supabase
+                .from('rides')
+                .select(`*`)
+                .order('created_at', { ascending: false });
+             
+             if (simpleError) {
+                 showError("Erro crítico ao buscar corridas: " + simpleError.message);
+             } else {
+                 ridesData = simpleRides;
+                 showError("Aviso: Detalhes de usuários não carregados (Erro de FK).");
+             }
+        }
 
         const currentRides = ridesData || [];
         setRides(currentRides);
@@ -96,7 +109,10 @@ const AdminDashboard = () => {
         // 2. Buscar Perfis
         const { data: profilesData, error: profileError } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
         
-        if (profileError) console.error("Erro profiles:", profileError);
+        if (profileError) {
+            console.error("Erro profiles:", profileError);
+            showError("Erro ao buscar usuários.");
+        }
 
         const allProfiles = profilesData || [];
         setPassengers(allProfiles.filter((p: any) => p.role === 'client'));
@@ -127,7 +143,6 @@ const AdminDashboard = () => {
         });
         setChartData(Array.from(chartMap.values()));
         
-        // Stats Finais
         setStats({
             revenue: totalRevenue,
             adminRevenue: adminRev,
@@ -148,7 +163,7 @@ const AdminDashboard = () => {
 
     } catch (e: any) {
         console.error(e);
-        // Não mostramos erro fatal para não travar a UI, apenas log
+        showError("Erro de conexão: " + e.message);
     } finally {
         setLoading(false);
     }
