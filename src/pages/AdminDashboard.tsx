@@ -298,23 +298,28 @@ const AdminDashboard = () => {
       setLoading(true);
       try { 
           // Salva Configs Básicas
-          await supabase.from('app_settings').upsert([ { key: 'enable_cash', value: config.enableCash }, { key: 'enable_wallet', value: config.enableWallet } ]);
+          const { error: settingsError } = await supabase.from('app_settings').upsert([ { key: 'enable_cash', value: config.enableCash }, { key: 'enable_wallet', value: config.enableWallet } ]);
+          if (settingsError) throw settingsError;
           
           // Salva Configs Admin
           const adminConfigUpdates = Object.entries(adminConfigs).map(([key, value]) => ({ key, value }));
-          await supabase.from('admin_config').upsert(adminConfigUpdates);
+          const { error: adminConfigError } = await supabase.from('admin_config').upsert(adminConfigUpdates);
+          if (adminConfigError) throw adminConfigError;
 
           // Salva Tabela de Preços
           for (const tier of pricingTiers) {
-              await supabase.from('pricing_tiers').update({ price: tier.price, label: tier.label }).eq('id', tier.id);
+              const { error: tierError } = await supabase.from('pricing_tiers').update({ price: tier.price, label: tier.label }).eq('id', tier.id);
+              if (tierError) throw tierError;
           }
 
           // Salva Categorias
           for (const cat of categories) {
-              await supabase.from('car_categories').update({ name: cat.name, active: cat.active }).eq('id', cat.id);
+              const { error: catError } = await supabase.from('car_categories').update({ name: cat.name, active: cat.active }).eq('id', cat.id);
+              if (catError) throw catError;
           }
 
           showSuccess("Todas as configurações foram salvas!"); 
+          await fetchData(); // Atualiza o estado local com os novos dados do banco
       } catch (e: any) { 
           showError(e.message); 
       } finally { 

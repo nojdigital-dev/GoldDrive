@@ -96,7 +96,7 @@ const ClientDashboard = () => {
             const { data: cats } = await supabase.from('car_categories').select('*').eq('active', true).order('base_fare', { ascending: true });
             if (cats && cats.length > 0) {
                 setCategories(cats); 
-                setSelectedCategoryId(cats[0].id);
+                if (!selectedCategoryId) setSelectedCategoryId(cats[0].id);
             }
 
             // Busca Tabela de Preços e Configs Admin
@@ -120,7 +120,7 @@ const ClientDashboard = () => {
             
             // Define método inicial baseado no que está ativo
             if (!newSettings.enableWallet && newSettings.enableCash) setPaymentMethod('CASH');
-            else setPaymentMethod('WALLET');
+            else if (newSettings.enableWallet) setPaymentMethod('WALLET');
         } 
         
         if (activeTab === 'history') {
@@ -148,26 +148,44 @@ const ClientDashboard = () => {
   // --- LÓGICA DE PREÇO (IMPORTANTE) ---
   const calculatePrice = () => {
       const dest = MOCK_LOCATIONS.find(l => l.id === destinationId);
-      if (!dest || pricingTiers.length === 0) return 0;
-
-      // 1. Encontra a faixa de preço correta
-      // Ordenado por max_distance, pega o primeiro que cobre a distância
-      let tier = pricingTiers.find(t => t.max_distance >= dest.km);
+      const category = categories.find(c => c.id === selectedCategoryId);
       
-      // Se a distância for maior que a maior faixa, pega a última faixa (fallback)
-      if (!tier) {
-          tier = pricingTiers[pricingTiers.length - 1];
-          // TODO: Implementar lógica de "negociado" para distâncias longas se necessário
+      if (!dest || !category || pricingTiers.length === 0) return 0;
+
+      const distanceKm = dest.km;
+      let finalPrice = 0;
+
+      // 1. Cálculo baseado na Categoria (Base Fare + Cost per KM)
+      const baseFare = Number(category.base_fare || 0);
+      const costPerKm = Number(category.cost_per_km || 0);
+      
+      finalPrice = baseFare + (distanceKm * costPerKm);
+
+      // 2. Aplica Regra de Preço Fixo por Faixa (Se aplicável)
+      // Se a distância se encaixa em uma faixa de preço fixo, usa o preço fixo.
+      // Ordenado por max_distance, pega o primeiro que cobre a distância
+      let tier = pricingTiers.find(t => t.max_distance >= distanceKm);
+      
+      if (tier) {
+          // Se o preço calculado pela categoria for menor que o preço fixo da faixa, usa o preço fixo.
+          // Isso garante que o preço mínimo da faixa seja respeitado.
+          if (finalPrice < Number(tier.price)) {
+              finalPrice = Number(tier.price);
+          }
+      } else {
+          // Se a distância for maior que a maior faixa, usa o cálculo da categoria.
+          // O preço mínimo da última faixa (se houver) pode ser usado como fallback mínimo.
+          const maxTier = pricingTiers[pricingTiers.length - 1];
+          if (maxTier && finalPrice < Number(maxTier.price)) {
+              finalPrice = Number(maxTier.price);
+          }
       }
-
-      let finalPrice = Number(tier.price);
-
-      // 2. Aplica Regra Noturna
+      
+      // 3. Aplica Regra Noturna
       const now = new Date();
       const currentHour = now.getHours();
       const currentMinute = now.getMinutes();
       
-      // Converte hora string "21:00" para comparável
       const parseTime = (timeStr: string) => {
           const [h, m] = timeStr.split(':').map(Number);
           return h * 60 + m;
@@ -177,24 +195,22 @@ const ClientDashboard = () => {
       const startNight = adminConfig.night_start ? parseTime(adminConfig.night_start) : 21 * 60; // Padrão 21:00
       const endNight = adminConfig.night_end ? parseTime(adminConfig.night_end) : 0; // Padrão 00:00 (meia-noite)
 
-      // Regra da Madrugada (00h até 06h por exemplo, ou customizado)
-      // Se adminConfig.night_end é 00:00, assumimos que é o fim do "noturno" e começo da "madrugada"
-      // Lógica simples: Se for > night_start (21h)
-      
+      // Verifica se está no período noturno (ex: 21:00 até 00:00)
       if (nowMinutes >= startNight) {
           finalPrice += Number(adminConfig.night_increase || 0);
       }
       
-      // Regra de Mínima da Madrugada (se passou da meia noite até, digamos, 5am)
+      // Regra de Mínima da Madrugada (00h até 05h, por exemplo)
       if (currentHour >= 0 && currentHour < 5) {
            const minMidnight = Number(adminConfig.midnight_min_price || 0);
            if (finalPrice < minMidnight) finalPrice = minMidnight;
       }
 
-      return finalPrice;
+      return parseFloat(finalPrice.toFixed(2));
   };
 
   const currentPrice = calculatePrice();
+  const isSinglePaymentMethod = (appSettings.enableCash && !appSettings.enableWallet) || (!appSettings.enableCash && appSettings.enableWallet);
 
   const confirmRide = async () => {
     if (isRequesting) return;
@@ -296,7 +312,7 @@ const ClientDashboard = () => {
                                             <div className={`w-12 h-12 rounded-full flex items-center justify-center ${selectedCategoryId === cat.id ? 'bg-yellow-500 text-black' : 'bg-white text-gray-500'}`}><Car className="w-6 h-6" /></div>
                                             <div><h4 className="font-bold text-lg text-slate-900">{cat.name}</h4><p className="text-xs text-gray-500 font-medium">{cat.description}</p></div>
                                         </div>
-                                        <span className="font-black text-lg text-slate-900 z-10">R$ {currentPrice.toFixed(2)}</span>
+                                        <span className="font-black text-lg text-slate-900 z-10">R$ {calculatePrice().toFixed(2)}</span>
                                     </div>
                                 ))}
                             </div>
@@ -304,9 +320,9 @@ const ClientDashboard = () => {
 
                         {/* Pagamento Seletor (Condicional) */}
                         <div 
-                            className={`mb-4 bg-gray-50 p-3 rounded-2xl border border-gray-100 flex items-center justify-between transition-colors ${appSettings.enableCash && appSettings.enableWallet ? 'cursor-pointer hover:bg-white' : ''}`}
+                            className={`mb-4 bg-gray-50 p-3 rounded-2xl border border-gray-100 flex items-center justify-between transition-colors ${!isSinglePaymentMethod ? 'cursor-pointer hover:bg-white' : ''}`}
                             onClick={() => {
-                                if (appSettings.enableCash && appSettings.enableWallet) {
+                                if (!isSinglePaymentMethod) {
                                     setPaymentMethod(prev => prev === 'WALLET' ? 'CASH' : 'WALLET');
                                 }
                             }}
@@ -321,7 +337,7 @@ const ClientDashboard = () => {
                                  </div>
                              </div>
                              {/* Só mostra botão de trocar se ambos estiverem ativos */}
-                             {appSettings.enableCash && appSettings.enableWallet && (
+                             {!isSinglePaymentMethod && (
                                  <div className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">Trocar</div>
                              )}
                         </div>
