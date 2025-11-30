@@ -4,48 +4,78 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { showError } from "@/utils/toast";
-import { Shield, Loader2, Lock, ArrowLeft, KeyRound } from "lucide-react";
+import { Shield, Loader2, Lock, ArrowLeft, KeyRound, LogOut } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 
 const LoginAdmin = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  // Verificação em segundo plano
+  // Verificação em segundo plano mais segura
   useEffect(() => {
+    let mounted = true;
+    
     const checkUser = async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-             const { data } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
-             if (data?.role === 'admin') navigate('/admin');
+        try {
+            // Pequeno delay para garantir que o Supabase carregou o token do storage
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session && mounted) {
+                 const { data } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+                 if (data?.role === 'admin') {
+                     navigate('/admin', { replace: true });
+                     return;
+                 }
+            }
+        } catch (error) {
+            console.error("Erro na verificação automática:", error);
+        } finally {
+            if (mounted) setChecking(false);
         }
     };
+    
     checkUser();
+    return () => { mounted = false; };
   }, [navigate]);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
+
     setLoading(true);
     try {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        // 1. Limpa qualquer sessão anterior para evitar conflitos
+        await supabase.auth.signOut();
+
+        // 2. Tenta o login
+        const { data: authData, error } = await supabase.auth.signInWithPassword({ email, password });
         if(error) throw error;
         
-        const { data: { user } } = await supabase.auth.getUser();
-        if(user) {
-            const { data } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-            if(data?.role !== 'admin') {
+        if(authData.user) {
+            // 3. Verifica se é admin
+            const { data: profile } = await supabase.from('profiles').select('role').eq('id', authData.user.id).single();
+            
+            if(profile?.role !== 'admin') {
                 await supabase.auth.signOut();
                 throw new Error("Acesso negado: Este usuário não é um administrador.");
             }
-            navigate('/admin');
+            
+            // 4. Sucesso - Redireciona
+            navigate('/admin', { replace: true });
         }
     } catch (e: any) {
-        showError(e.message);
-    } finally {
-        setLoading(false);
+        showError(e.message || "Erro ao autenticar");
+        setLoading(false); // Só destrava se der erro
     }
+  };
+
+  const handleForceLogout = async () => {
+      await supabase.auth.signOut();
+      window.location.reload();
   };
 
   return (
@@ -83,17 +113,22 @@ const LoginAdmin = () => {
                            </div>
                        </div>
 
-                       <Button className="w-full bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-black font-black h-12 rounded-xl shadow-lg shadow-yellow-500/20 transition-all hover:scale-[1.02] active:scale-[0.98]" disabled={loading}>
-                           {loading ? <Loader2 className="animate-spin mr-2" /> : "AUTENTICAR SISTEMA"}
+                       <Button className="w-full bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-black font-black h-12 rounded-xl shadow-lg shadow-yellow-500/20 transition-all hover:scale-[1.02] active:scale-[0.98]" disabled={loading || checking}>
+                           {loading || checking ? <Loader2 className="animate-spin mr-2" /> : "AUTENTICAR SISTEMA"}
                        </Button>
                    </form>
                </CardContent>
            </Card>
 
-           <div className="mt-8 text-center">
+           <div className="mt-8 text-center space-y-2">
                <Button variant="ghost" className="text-slate-500 hover:text-white hover:bg-white/5 rounded-xl gap-2 transition-colors" onClick={() => navigate('/')}>
                    <ArrowLeft className="w-4 h-4" /> Voltar ao Início
                </Button>
+               
+               {/* Botão de emergência caso trave */}
+               <div onClick={handleForceLogout} className="text-[10px] text-slate-700 hover:text-red-500 cursor-pointer pt-4 uppercase font-bold tracking-widest flex items-center justify-center gap-1">
+                   <LogOut className="w-3 h-3" /> Limpar Sessão Travada
+               </div>
            </div>
        </div>
     </div>
