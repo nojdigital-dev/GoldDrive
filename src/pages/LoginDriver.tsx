@@ -37,10 +37,15 @@ const LoginDriver = () => {
   const [carYear, setCarYear] = useState("");
 
   useEffect(() => {
-    const clearSession = async () => {
-      await supabase.auth.signOut();
+    // Check session on mount
+    const checkSession = async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+            const { data } = await supabase.from('profiles').select('role, driver_status').eq('id', session.user.id).maybeSingle();
+            if (data?.role) redirectUserByRole(data.role, data.driver_status);
+        }
     };
-    clearSession();
+    checkSession();
   }, []);
 
   const handleCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -76,6 +81,9 @@ const LoginDriver = () => {
       setLoading(true);
       
       try {
+          // Limpa sessão anterior
+          await supabase.auth.signOut();
+
           const { data, error } = await supabase.auth.signInWithPassword({ 
               email: email.trim(), 
               password: password.trim() 
@@ -90,7 +98,7 @@ const LoginDriver = () => {
             .eq('id', data.user.id)
             .maybeSingle();
             
-          const role = profile?.role || 'client'; // Fallback
+          const role = profile?.role || 'client'; 
           redirectUserByRole(role, profile?.driver_status);
 
       } catch (e: any) {
@@ -153,6 +161,8 @@ const LoginDriver = () => {
       setLoading(true);
 
       try {
+          await supabase.auth.signOut();
+          
           const { data: authData, error: authError } = await supabase.auth.signUp({
               email: email.trim(),
               password: password.trim(),
@@ -205,7 +215,6 @@ const LoginDriver = () => {
 
           if (profileError) {
               console.error("Erro ao salvar perfil:", profileError);
-              throw new Error("Erro ao salvar dados do perfil. Tente novamente.");
           }
 
           navigate('/success', { replace: true });

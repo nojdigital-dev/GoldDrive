@@ -15,16 +15,21 @@ const LoginAdmin = () => {
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
-    // Limpeza forçada ao entrar
-    const clearSession = async () => {
-        await supabase.auth.signOut();
-        try {
-            // @ts-ignore
-            localStorage.removeItem(`sb-${new URL((supabase as any).supabaseUrl).hostname.split('.')[0]}-auth-token`);
-        } catch (e) { console.error(e); }
+    const checkSession = async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+            const { data } = await supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle();
+            if (data?.role) redirectUserByRole(data.role);
+        }
     };
-    clearSession();
+    checkSession();
   }, []);
+
+  const redirectUserByRole = (role: string) => {
+      if (role === 'admin') navigate('/admin', { replace: true });
+      else if (role === 'driver') navigate('/driver', { replace: true });
+      else navigate('/client', { replace: true });
+  };
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,6 +38,8 @@ const LoginAdmin = () => {
     setLoading(true);
     
     try {
+        await supabase.auth.signOut(); // Limpa sessão anterior
+
         const { data, error } = await supabase.auth.signInWithPassword({
             email: email.trim(),
             password: password.trim()
@@ -43,10 +50,7 @@ const LoginAdmin = () => {
         const { data: profile } = await supabase.from('profiles').select('role').eq('id', data.user.id).maybeSingle();
         const role = profile?.role || 'admin';
         
-        // Redirecionamento unificado
-        if (role === 'admin') navigate('/admin', { replace: true });
-        else if (role === 'driver') navigate('/driver', { replace: true });
-        else navigate('/client', { replace: true });
+        redirectUserByRole(role);
 
     } catch (e: any) {
         let msg = e.message || "Erro ao conectar.";

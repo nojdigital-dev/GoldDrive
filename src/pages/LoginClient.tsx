@@ -16,21 +16,27 @@ const LoginClient = () => {
   const [name, setName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
+  // Removido o useEffect que deslogava automaticamente ao montar
+  // Isso evita o loop de logout se o usuário for redirecionado de volta para cá
+
   useEffect(() => {
-    const clearSession = async () => {
-        await supabase.auth.signOut();
-        // @ts-ignore
-        localStorage.removeItem(`sb-${new URL((supabase as any).supabaseUrl).hostname.split('.')[0]}-auth-token`);
+    // Verifica se já existe sessão válida e redireciona (Opcional, mas boa UX)
+    const checkSession = async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+            const { data } = await supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle();
+            if (data?.role) redirectUserByRole(data.role);
+        }
     };
-    clearSession();
+    checkSession();
   }, []);
 
   const redirectUserByRole = (role: string) => {
-      console.log("Redirecionando para role:", role);
+      console.log("Redirecionando para:", role);
       switch(role) {
           case 'driver': navigate('/driver', { replace: true }); break;
           case 'admin': navigate('/admin', { replace: true }); break;
-          default: navigate('/client', { replace: true }); // client e outros
+          default: navigate('/client', { replace: true });
       }
   };
 
@@ -39,25 +45,28 @@ const LoginClient = () => {
           const { data } = await supabase.from('profiles').select('id, role').eq('id', userId).maybeSingle();
           if (data) return data.role;
 
-          console.warn("Perfil não encontrado no login, criando fallback de passageiro...");
+          console.warn("Perfil não encontrado, criando fallback...");
           const firstName = fullName.split(' ')[0] || "Usuário";
           const lastName = fullName.split(' ').slice(1).join(' ') || "";
           
-          const { error: insertError } = await supabase.from('profiles').insert({
+          // Tenta criar perfil
+          const { error } = await supabase.from('profiles').insert({
               id: userId,
               first_name: firstName,
               last_name: lastName,
-              role: 'client', // Default para quem loga aqui sem perfil
+              role: 'client',
               driver_status: 'APPROVED',
               updated_at: new Date().toISOString()
           });
 
-          if (insertError) throw insertError;
+          if (error) {
+              // Se erro for de duplicidade (race condition), ignora
+              if (!error.message.includes('duplicate')) throw error;
+          }
           return 'client';
-
       } catch (err: any) {
-          console.error("Erro ao garantir perfil:", err);
-          throw new Error("Erro de sincronização de perfil: " + err.message);
+          console.error("Erro perfil:", err);
+          return 'client'; // Fallback seguro
       }
   };
 
@@ -71,6 +80,9 @@ const LoginClient = () => {
     setLoading(true);
 
     try {
+        // Limpa sessão anterior explicitamente ANTES de tentar nova
+        await supabase.auth.signOut();
+
         let authData;
 
         if(isSignUp) {
@@ -90,14 +102,14 @@ const LoginClient = () => {
             authData = data;
             
             if (authData.user) {
-                const role = await ensureProfileExists(authData.user.id, name);
-                
-                if (data.session) {
-                    redirectUserByRole(role);
-                } else {
-                    showSuccess("Conta criada! Verifique seu email para confirmar.");
-                    setIsSignUp(false);
-                }
+                await ensureProfileExists(authData.user.id, name);
+            }
+
+            if (data.session) {
+                redirectUserByRole('client');
+            } else {
+                showSuccess("Conta criada! Faça login.");
+                setIsSignUp(false);
             }
 
         } else {
@@ -116,7 +128,7 @@ const LoginClient = () => {
         }
 
     } catch (e: any) {
-        console.error(e);
+        console.error("Login Error:", e);
         let msg = e.message || "Erro ao conectar.";
         if (msg.includes("Invalid login")) msg = "Email ou senha incorretos.";
         showError(msg);
