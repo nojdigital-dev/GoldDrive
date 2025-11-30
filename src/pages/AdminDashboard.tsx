@@ -5,7 +5,7 @@ import {
   Sun, Moon, PanelLeftClose, PanelLeftOpen, DollarSign, Clock, 
   CheckCircle, TrendingUp, Trash2, Edit, Mail, Search,
   CreditCard, BellRing, Save, AlertTriangle, Smartphone, Globe,
-  Menu, Banknote, FileText, Check, X, ExternalLink, Camera
+  Menu, Banknote, FileText, Check, X, ExternalLink, Camera, User
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -560,7 +560,7 @@ const AdminDashboard = () => {
         <DialogContent className="max-w-3xl bg-white dark:bg-slate-950 rounded-[32px] border-0 shadow-2xl p-0 overflow-hidden">
             {reviewDriver && (
                 <div className="flex flex-col h-[85vh]">
-                    {/* Header */}
+                    {/* Header Simplificado */}
                     <div className="bg-slate-900 text-white p-6 shrink-0 relative overflow-hidden">
                         {justApproved && (
                              <div className="absolute inset-0 bg-green-600 z-0 flex items-center justify-center animate-in fade-in duration-500">
@@ -569,21 +569,13 @@ const AdminDashboard = () => {
                         )}
                         <div className="flex items-center gap-4 relative z-10">
                             <Avatar className="w-16 h-16 border-4 border-white shadow-xl">
-                                <AvatarImage src={reviewDriver.face_photo_url || reviewDriver.avatar_url} />
+                                <AvatarImage src={reviewDriver.avatar_url} />
                                 <AvatarFallback className="text-black bg-yellow-500 font-bold text-xl">{reviewDriver.first_name[0]}</AvatarFallback>
                             </Avatar>
                             <div>
-                                <h2 className="text-2xl font-black">{justApproved ? "Motorista Aprovado!" : `${reviewDriver.first_name} ${reviewDriver.last_name}`}</h2>
-                                <div className="flex items-center gap-3 text-sm text-gray-300">
-                                    {!justApproved && (
-                                        <>
-                                            <span className="flex items-center gap-1"><Smartphone className="w-3 h-3" /> {reviewDriver.phone}</span>
-                                            <span className="w-1 h-1 bg-gray-500 rounded-full" />
-                                            <span className="font-mono">CPF: {reviewDriver.cpf}</span>
-                                        </>
-                                    )}
-                                    {justApproved && <span className="font-bold text-white flex items-center gap-2"><CheckCircle className="w-4 h-4"/> Acesso liberado no sistema.</span>}
-                                </div>
+                                <h2 className="text-2xl font-black">{justApproved ? "Motorista Aprovado!" : "Análise de Perfil"}</h2>
+                                {justApproved && <span className="font-bold text-white flex items-center gap-2 mt-1"><CheckCircle className="w-4 h-4"/> Acesso liberado no sistema.</span>}
+                                {!justApproved && <span className="text-sm text-gray-400">Verifique os dados abaixo com atenção.</span>}
                             </div>
                         </div>
                     </div>
@@ -592,6 +584,29 @@ const AdminDashboard = () => {
                     <ScrollArea className="flex-1 bg-gray-50 dark:bg-slate-900 p-6">
                         {!justApproved ? (
                             <div className="space-y-6">
+                                {/* CARD DE DADOS PESSOAIS */}
+                                <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-border/50">
+                                    <h3 className="text-sm font-bold uppercase text-muted-foreground mb-3 flex items-center gap-2">
+                                        <User className="w-4 h-4" /> Dados Pessoais
+                                    </h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl">
+                                            <p className="text-xs text-muted-foreground">Nome Completo</p>
+                                            <p className="font-bold truncate" title={`${reviewDriver.first_name} ${reviewDriver.last_name}`}>
+                                                {reviewDriver.first_name} {reviewDriver.last_name}
+                                            </p>
+                                        </div>
+                                        <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl">
+                                            <p className="text-xs text-muted-foreground">CPF</p>
+                                            <p className="font-bold font-mono">{reviewDriver.cpf}</p>
+                                        </div>
+                                        <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl">
+                                            <p className="text-xs text-muted-foreground">Telefone</p>
+                                            <p className="font-bold">{reviewDriver.phone}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 {/* Veículo Card */}
                                 <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-border/50">
                                     <h3 className="text-sm font-bold uppercase text-muted-foreground mb-3 flex items-center gap-2"><Car className="w-4 h-4" /> Dados do Veículo</h3>
