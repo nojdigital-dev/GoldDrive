@@ -6,7 +6,7 @@ import {
   CheckCircle, TrendingUp, Trash2, Edit, Mail, Search,
   CreditCard, BellRing, Save, AlertTriangle, Smartphone, Globe,
   Menu, Banknote, FileText, Check, X, ExternalLink, Camera, User,
-  Moon as MoonIcon, List, Plus, Power, Pencil
+  Moon as MoonIcon, List, Plus, Power, Pencil, Star, Calendar, ArrowUpRight, ArrowDownLeft
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -47,13 +47,19 @@ const AdminDashboard = () => {
   const [chartData, setChartData] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
 
-  // Estados de Gerenciamento
-  const [selectedUser, setSelectedUser] = useState<any>(null);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  // Estados de Gerenciamento Detalhado
+  const [detailUser, setDetailUser] = useState<any>(null);
+  const [detailUserHistory, setDetailUserHistory] = useState<any[]>([]);
+  const [detailUserStats, setDetailUserStats] = useState({ totalSpent: 0, totalRides: 0, avgRating: 5.0 });
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [isEditingInDetail, setIsEditingInDetail] = useState(false); // Modo edição dentro do modal
+
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [reviewDriver, setReviewDriver] = useState<any>(null);
   const [justApproved, setJustApproved] = useState(false);
-  const [editFormData, setEditFormData] = useState({ first_name: "", last_name: "", phone: "" });
+  
+  // Form de Edição
+  const [editFormData, setEditFormData] = useState({ first_name: "", last_name: "", phone: "", email: "" });
 
   // Configurações
   const [config, setConfig] = useState({
@@ -62,7 +68,7 @@ const AdminDashboard = () => {
       enableWallet: true,
   });
   
-  // Tabela de Preços, Configs Avançadas e Categorias
+  // Tabela de Preços e Configs
   const [pricingTiers, setPricingTiers] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [adminConfigs, setAdminConfigs] = useState({
@@ -107,11 +113,13 @@ const AdminDashboard = () => {
         const { data: profilesData } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
         const allProfiles = profilesData || [];
         setPassengers(allProfiles.filter((p: any) => p.role === 'client'));
+        
+        // Filtra motoristas aprovados e pendentes
         const allDrivers = allProfiles.filter((p: any) => p.role === 'driver');
         setDrivers(allDrivers);
         setPendingDrivers(allDrivers.filter((p: any) => p.driver_status === 'PENDING'));
 
-        // 3. Buscar Configurações Básicas (App Settings)
+        // 3. Buscar Configurações Básicas
         const { data: settingsData } = await supabase.from('app_settings').select('*');
         if (settingsData) {
             const cash = settingsData.find(s => s.key === 'enable_cash');
@@ -119,12 +127,12 @@ const AdminDashboard = () => {
             setConfig(prev => ({ ...prev, enableCash: cash ? cash.value : true, enableWallet: wallet ? wallet.value : true }));
         }
 
-        // 4. Buscar Tabela de Preços, Configs Admin e Categorias
-        const { data: pricingData } = await supabase.from('pricing_tiers').select('*').order('max_distance', { ascending: true });
+        // 4. Buscar Tabela de Preços e Categorias
+        const { data: pricingData } = await supabase.from('pricing_tiers').select('*').order('display_order', { ascending: true });
         if (pricingData) setPricingTiers(pricingData);
 
-        const { data: categoriesData } = await supabase.from('car_categories').select('*').order('base_fare', { ascending: true });
-        if (categoriesData) setCategories(categoriesData);
+        const { data: catData } = await supabase.from('car_categories').select('*').order('base_fare', { ascending: true });
+        if (catData) setCategories(catData);
 
         const { data: adminConfigData } = await supabase.from('admin_config').select('*');
         if (adminConfigData) {
@@ -173,13 +181,118 @@ const AdminDashboard = () => {
 
   const handleLogout = async () => {
     setLoading(true);
-    try { await supabase.auth.signOut({ scope: 'global' }); setAdminProfile(null); navigate('/login/admin', { replace: true }); } catch (error) { showError('Erro ao fazer logout'); } finally { setLoading(false); }
+    try {
+        await supabase.auth.signOut({ scope: 'global' });
+        localStorage.clear(); // Garante limpeza total
+        navigate('/login/admin', { replace: true });
+    } catch (error: any) {
+        showError('Erro ao sair: ' + error.message);
+        // Força saída mesmo com erro
+        localStorage.clear();
+        window.location.href = '/login/admin';
+    } finally {
+        setLoading(false);
+    }
   };
 
-  // --- ACTIONS DE GESTÃO ---
-  const handleSaveUser = async () => { if (!selectedUser) return; try { const { error } = await supabase.from('profiles').update(editFormData).eq('id', selectedUser.id); if (error) throw error; showSuccess("Usuário atualizado!"); setIsEditDialogOpen(false); fetchData(); } catch (e: any) { showError(e.message); } };
-  const handleDeleteUser = async () => { if (!selectedUser) return; try { const { error } = await supabase.from('profiles').delete().eq('id', selectedUser.id); if (error) throw error; showSuccess("Perfil removido do sistema."); setIsDeleteDialogOpen(false); fetchData(); } catch (e: any) { showError(e.message); } };
-  const handleResetPassword = async (email: string) => { try { const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + '/update-password' }); if (error) throw error; showSuccess(`Email de redefinição enviado para ${email}`); } catch (e: any) { showError(e.message); } };
+  // --- ACTIONS DE GESTÃO DETALHADA ---
+  
+  const openUserDetail = async (user: any) => {
+      setDetailUser(user);
+      setIsDetailLoading(true);
+      setIsEditingInDetail(false);
+      setEditFormData({ 
+          first_name: user.first_name || "", 
+          last_name: user.last_name || "", 
+          phone: user.phone || "",
+          email: user.email || "" // Email vem do profile, se tiver
+      });
+
+      try {
+          // 1. Busca Histórico de Corridas
+          const queryField = user.role === 'client' ? 'customer_id' : 'driver_id';
+          const { data: history } = await supabase
+            .from('rides')
+            .select('*')
+            .eq(queryField, user.id)
+            .order('created_at', { ascending: false });
+          
+          setDetailUserHistory(history || []);
+
+          // 2. Calcula Totais
+          const { data: totalData } = await supabase.rpc('get_user_lifetime_total', { target_user_id: user.id });
+          
+          // Calcula média de estrelas
+          let avgRating = 5.0;
+          if (history && history.length > 0) {
+              const ratings = history
+                .map((r: any) => user.role === 'client' ? r.customer_rating : r.driver_rating)
+                .filter((r: any) => r !== null);
+              
+              if (ratings.length > 0) {
+                  avgRating = ratings.reduce((a: any, b: any) => a + b, 0) / ratings.length;
+              }
+          }
+
+          setDetailUserStats({
+              totalSpent: Number(totalData) || 0,
+              totalRides: history?.length || 0,
+              avgRating
+          });
+
+      } catch (e) {
+          console.error(e);
+      } finally {
+          setIsDetailLoading(false);
+      }
+  };
+
+  const handleSaveUserDetail = async () => {
+      if (!detailUser) return;
+      try {
+          const { error } = await supabase.from('profiles').update({
+              first_name: editFormData.first_name,
+              last_name: editFormData.last_name,
+              phone: editFormData.phone
+          }).eq('id', detailUser.id);
+
+          if (error) throw error;
+          
+          showSuccess("Perfil atualizado com sucesso!");
+          setIsEditingInDetail(false);
+          // Atualiza dados locais
+          setDetailUser(prev => ({ ...prev, ...editFormData }));
+          fetchData(); // Atualiza lista de fundo
+      } catch (e: any) {
+          showError(e.message);
+      }
+  };
+
+  const handleDeleteUser = async () => {
+      if (!detailUser) return;
+      try {
+          const { error } = await supabase.from('profiles').delete().eq('id', detailUser.id);
+          if (error) throw error;
+          showSuccess("Perfil removido do sistema.");
+          setDetailUser(null);
+          setIsDeleteDialogOpen(false);
+          fetchData();
+      } catch (e: any) {
+          showError(e.message);
+      }
+  };
+
+  const handleResetPassword = async (email: string) => {
+      try {
+          const { error } = await supabase.auth.resetPasswordForEmail(email, {
+              redirectTo: window.location.origin + '/update-password',
+          });
+          if (error) throw error;
+          showSuccess(`Email de redefinição enviado para ${email}`);
+      } catch (e: any) {
+          showError(e.message);
+      }
+  };
   
   const handleSaveConfig = async () => {
       setLoading(true);
@@ -187,7 +300,7 @@ const AdminDashboard = () => {
           // Salva Configs Básicas
           await supabase.from('app_settings').upsert([ { key: 'enable_cash', value: config.enableCash }, { key: 'enable_wallet', value: config.enableWallet } ]);
           
-          // Salva Configs Admin (Horários e Taxas)
+          // Salva Configs Admin
           const adminConfigUpdates = Object.entries(adminConfigs).map(([key, value]) => ({ key, value }));
           await supabase.from('admin_config').upsert(adminConfigUpdates);
 
@@ -196,7 +309,7 @@ const AdminDashboard = () => {
               await supabase.from('pricing_tiers').update({ price: tier.price, label: tier.label }).eq('id', tier.id);
           }
 
-          // Salva Categorias (Nome e Ativo)
+          // Salva Categorias
           for (const cat of categories) {
               await supabase.from('car_categories').update({ name: cat.name, active: cat.active }).eq('id', cat.id);
           }
@@ -219,6 +332,7 @@ const AdminDashboard = () => {
 
   // --- APPROVAL LOGIC ---
   const openReview = (driver: any) => { setReviewDriver(driver); setJustApproved(false); };
+  
   const sendWhatsAppNotice = (driver: any) => {
       if (driver.phone) {
           const cleanPhone = driver.phone.replace(/\D/g, ''); 
@@ -230,12 +344,11 @@ const AdminDashboard = () => {
   
   const approveDriver = async (driver: any) => {
       try { 
-          // O banco agora deve ter a política correta
           const { error } = await supabase.from('profiles').update({ driver_status: 'APPROVED' }).eq('id', driver.id); 
           if (error) throw error; 
           showSuccess(`${driver.first_name} foi aprovado!`); 
           setJustApproved(true); 
-          fetchData(); 
+          await fetchData(); // Força atualização da lista de pendentes
       } catch (e: any) { 
           showError("Erro ao aprovar: " + e.message); 
       }
@@ -247,13 +360,13 @@ const AdminDashboard = () => {
           if (error) throw error; 
           showSuccess("Motorista reprovado."); 
           setReviewDriver(null); 
-          fetchData(); 
+          await fetchData(); 
       } catch (e: any) { 
           showError(e.message); 
       }
   };
 
-  // ... (UI Components Mantidos - StatCard, UserManagementTable)
+  // --- UI COMPONENTS ---
   const StatCard = ({ title, value, icon: Icon, colorClass, subtext }: any) => (
       <Card className="border-0 shadow-lg bg-white/50 dark:bg-slate-900/50 backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-xl group overflow-hidden relative">
           <div className={`absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity ${colorClass}`}>
@@ -287,12 +400,12 @@ const AdminDashboard = () => {
                           <div className="max-h-[60vh] overflow-y-auto custom-scrollbar">
                               <Table><TableHeader className="bg-slate-50/50 dark:bg-slate-800/50 sticky top-0 z-10 backdrop-blur-md"><TableRow><TableHead className="pl-8">Usuário</TableHead><TableHead>Contato</TableHead>{type === 'driver' && <TableHead>Status</TableHead>}<TableHead>Saldo</TableHead><TableHead className="text-right pr-8">Ações</TableHead></TableRow></TableHeader>
                                   <TableBody>{filtered.map(u => (
-                                          <TableRow key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 border-b border-border/50">
+                                          <TableRow key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 border-b border-border/50 cursor-pointer" onClick={() => openUserDetail(u)}>
                                               <TableCell className="pl-8"><div className="flex items-center gap-3"><Avatar className="w-10 h-10 border-2 border-white shadow-sm"><AvatarImage src={u.avatar_url}/><AvatarFallback>{u.first_name?.[0]}</AvatarFallback></Avatar><div><p className="font-bold text-sm">{u.first_name} {u.last_name}</p><p className="text-xs text-muted-foreground">ID: {u.id.substring(0,6)}</p></div></div></TableCell>
                                               <TableCell><div className="text-sm"><p>{u.email}</p><p className="text-muted-foreground text-xs">{u.phone || 'Sem telefone'}</p></div></TableCell>
                                               {type === 'driver' && <TableCell><Badge variant="secondary" className={u.driver_status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}>{u.driver_status}</Badge></TableCell>}
                                               <TableCell className="font-bold text-green-600">R$ {u.balance?.toFixed(2)}</TableCell>
-                                              <TableCell className="text-right pr-8"><div className="flex justify-end gap-2"><Button variant="ghost" size="icon" onClick={() => { setSelectedUser(u); setEditFormData({ first_name: u.first_name, last_name: u.last_name, phone: u.phone }); setIsEditDialogOpen(true); }}><Edit className="w-4 h-4 text-blue-500" /></Button><Button variant="ghost" size="icon" onClick={() => handleResetPassword(u.email)}><Mail className="w-4 h-4 text-yellow-500" /></Button><Button variant="ghost" size="icon" onClick={() => { setSelectedUser(u); setIsDeleteDialogOpen(true); }}><Trash2 className="w-4 h-4 text-red-500" /></Button></div></TableCell>
+                                              <TableCell className="text-right pr-8"><Button variant="ghost" size="sm" className="text-blue-500 font-bold hover:bg-blue-50">Detalhes <ArrowUpRight className="ml-1 w-4 h-4" /></Button></TableCell>
                                           </TableRow>
                                       ))}
                                   </TableBody>
@@ -376,7 +489,7 @@ const AdminDashboard = () => {
                       <div className="flex gap-3"><Button variant="outline" className="rounded-xl h-12" onClick={fetchData}><RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} /> Atualizar</Button><Button variant="destructive" className="rounded-xl h-12 font-bold px-6 shadow-red-500/20 shadow-lg" onClick={handleLogout}><LogOut className="w-4 h-4 mr-2" /> Sair</Button></div>
                   </div>
 
-                  {/* ... (TABS OVERVIEW, REQUESTS, RIDES, USERS, FINANCE permanecem iguais, apenas config muda) ... */}
+                  {/* --- TAB: OVERVIEW --- */}
                   {activeTab === 'overview' && (
                       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
                           {/* Stats Grid */}
@@ -553,7 +666,11 @@ const AdminDashboard = () => {
                                                               {pricingTiers.map((tier) => (
                                                                   <TableRow key={tier.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                                                                       <TableCell className="pl-6">
-                                                                          <span className="font-medium">{tier.label}</span>
+                                                                          <Input 
+                                                                              value={tier.label} 
+                                                                              onChange={(e) => updatePriceTier(tier.id, 'label', e.target.value)}
+                                                                              className="bg-transparent border-0 font-medium focus-visible:ring-0 px-0 h-auto"
+                                                                          />
                                                                       </TableCell>
                                                                       <TableCell>
                                                                           <div className="relative">
@@ -700,8 +817,6 @@ const AdminDashboard = () => {
                                 <div>
                                     <h3 className="text-sm font-bold uppercase text-muted-foreground mb-3 flex items-center gap-2"><Camera className="w-4 h-4" /> Fotos de Cadastro</h3>
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                        
-                                        {/* Selfie */}
                                         <div className="space-y-2">
                                             <p className="text-xs font-bold pl-2 text-blue-600">Selfie (Rosto)</p>
                                             <div className="aspect-[3/4] bg-black rounded-xl overflow-hidden shadow-lg border-2 border-blue-100 dark:border-blue-900 relative group cursor-pointer" onClick={() => window.open(reviewDriver.face_photo_url || reviewDriver.avatar_url, '_blank')}>
@@ -711,8 +826,6 @@ const AdminDashboard = () => {
                                                 </div>
                                             </div>
                                         </div>
-
-                                        {/* CNH Frente */}
                                         <div className="space-y-2">
                                             <p className="text-xs font-bold pl-2">CNH Frente</p>
                                             <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-lg border-2 border-slate-200 dark:border-slate-700 relative group cursor-pointer" onClick={() => window.open(reviewDriver.cnh_front_url, '_blank')}>
@@ -722,8 +835,6 @@ const AdminDashboard = () => {
                                                 </div>
                                             </div>
                                         </div>
-                                        
-                                        {/* CNH Verso */}
                                         <div className="space-y-2">
                                             <p className="text-xs font-bold pl-2">CNH Verso</p>
                                             <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-lg border-2 border-slate-200 dark:border-slate-700 relative group cursor-pointer" onClick={() => window.open(reviewDriver.cnh_back_url, '_blank')}>
@@ -779,9 +890,172 @@ const AdminDashboard = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ... (Outros dialogs iguais) ... */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}><DialogContent className="rounded-2xl"><DialogHeader><DialogTitle>Editar Usuário</DialogTitle></DialogHeader><div className="space-y-4 py-4"><div><Label>Nome</Label><Input value={editFormData.first_name} onChange={e => setEditFormData({...editFormData, first_name: e.target.value})} /></div><div><Label>Sobrenome</Label><Input value={editFormData.last_name} onChange={e => setEditFormData({...editFormData, last_name: e.target.value})} /></div><div><Label>Telefone</Label><Input value={editFormData.phone} onChange={e => setEditFormData({...editFormData, phone: e.target.value})} /></div></div><DialogFooter><Button onClick={handleSaveUser}>Salvar Alterações</Button></DialogFooter></DialogContent></Dialog>
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir Usuário?</AlertDialogTitle><AlertDialogDescription>Isso removerá o perfil do sistema.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={handleDeleteUser} className="bg-red-600">Excluir</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+      {/* NOVO MODAL DE DETALHES DE USUÁRIO */}
+      <Dialog open={!!detailUser} onOpenChange={(o) => !o && setDetailUser(null)}>
+          <DialogContent className="max-w-4xl bg-white dark:bg-slate-950 rounded-[32px] border-0 shadow-2xl p-0 overflow-hidden h-[90vh] flex flex-col">
+              {detailUser && (
+                  <>
+                      {/* Header do Modal */}
+                      <div className="bg-slate-900 p-8 shrink-0 relative overflow-hidden text-white">
+                          <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-yellow-500/10 to-transparent rounded-full blur-3xl pointer-events-none" />
+                          <div className="flex justify-between items-start relative z-10">
+                              <div className="flex items-center gap-6">
+                                  <Avatar className="w-24 h-24 border-4 border-white dark:border-slate-800 shadow-xl">
+                                      <AvatarImage src={detailUser.avatar_url} className="object-cover" />
+                                      <AvatarFallback className="text-2xl bg-yellow-500 text-black font-black">{detailUser.first_name?.[0]}</AvatarFallback>
+                                  </Avatar>
+                                  <div>
+                                      <div className="flex items-center gap-3 mb-1">
+                                          <h2 className="text-3xl font-black tracking-tight">{detailUser.first_name} {detailUser.last_name}</h2>
+                                          {detailUser.role === 'driver' && <Badge className="bg-yellow-500 text-black font-bold">Motorista</Badge>}
+                                          {detailUser.role === 'client' && <Badge variant="secondary" className="bg-white/20 text-white hover:bg-white/30">Passageiro</Badge>}
+                                      </div>
+                                      <p className="text-slate-400 flex items-center gap-2 text-sm">
+                                          <Mail className="w-3 h-3" /> {detailUser.email}
+                                          <span className="w-1 h-1 bg-slate-600 rounded-full" />
+                                          <Smartphone className="w-3 h-3" /> {detailUser.phone || "Sem telefone"}
+                                      </p>
+                                  </div>
+                              </div>
+                              <div className="text-right hidden md:block">
+                                  <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Saldo Atual</p>
+                                  <h3 className="text-4xl font-black text-green-500">R$ {detailUser.balance?.toFixed(2)}</h3>
+                              </div>
+                          </div>
+                      </div>
+
+                      {/* Conteúdo Principal */}
+                      <Tabs defaultValue="overview" className="flex-1 flex flex-col overflow-hidden">
+                          <div className="px-8 pt-4 border-b border-border/50 bg-white dark:bg-slate-950">
+                              <TabsList className="bg-transparent p-0 gap-6">
+                                  <TabsTrigger value="overview" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 border-slate-900 dark:border-white rounded-none px-0 pb-3 font-bold text-muted-foreground data-[state=active]:text-foreground transition-all">Visão Geral</TabsTrigger>
+                                  <TabsTrigger value="history" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 border-slate-900 dark:border-white rounded-none px-0 pb-3 font-bold text-muted-foreground data-[state=active]:text-foreground transition-all">Histórico de Corridas</TabsTrigger>
+                                  <TabsTrigger value="edit" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 border-slate-900 dark:border-white rounded-none px-0 pb-3 font-bold text-muted-foreground data-[state=active]:text-foreground transition-all">Editar Perfil</TabsTrigger>
+                              </TabsList>
+                          </div>
+
+                          <div className="flex-1 overflow-hidden bg-slate-50 dark:bg-slate-900/50">
+                              {isDetailLoading ? (
+                                  <div className="h-full flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-slate-300" /></div>
+                              ) : (
+                                  <>
+                                      <TabsContent value="overview" className="h-full overflow-y-auto p-8 m-0 space-y-8 custom-scrollbar">
+                                          {/* Cards de Estatísticas */}
+                                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                              <Card className="border-0 shadow-sm bg-white dark:bg-slate-800">
+                                                  <CardContent className="p-4 flex items-center gap-4">
+                                                      <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center text-yellow-600"><Star className="w-6 h-6 fill-yellow-600" /></div>
+                                                      <div><p className="text-xs text-muted-foreground font-bold uppercase">Nota Média</p><p className="text-xl font-black">{detailUserStats.avgRating.toFixed(1)}</p></div>
+                                                  </CardContent>
+                                              </Card>
+                                              <Card className="border-0 shadow-sm bg-white dark:bg-slate-800">
+                                                  <CardContent className="p-4 flex items-center gap-4">
+                                                      <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-600"><MapIcon className="w-6 h-6" /></div>
+                                                      <div><p className="text-xs text-muted-foreground font-bold uppercase">Total Viagens</p><p className="text-xl font-black">{detailUserStats.totalRides}</p></div>
+                                                  </CardContent>
+                                              </Card>
+                                              <Card className="border-0 shadow-sm bg-white dark:bg-slate-800 col-span-2">
+                                                  <CardContent className="p-4 flex items-center gap-4">
+                                                      <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center text-green-600"><DollarSign className="w-6 h-6" /></div>
+                                                      <div><p className="text-xs text-muted-foreground font-bold uppercase">{detailUser.role === 'driver' ? 'Total Ganho' : 'Total Gasto'}</p><p className="text-xl font-black">R$ {detailUserStats.totalSpent.toFixed(2)}</p></div>
+                                                  </CardContent>
+                                              </Card>
+                                          </div>
+
+                                          {/* Dados Pessoais Completos */}
+                                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                              <Card className="border-0 shadow-sm bg-white dark:bg-slate-800 md:col-span-2">
+                                                  <CardHeader><CardTitle className="text-base font-bold flex items-center gap-2"><User className="w-4 h-4"/> Informações Pessoais</CardTitle></CardHeader>
+                                                  <CardContent className="grid grid-cols-2 gap-6">
+                                                      <div><Label className="text-xs text-muted-foreground uppercase">Nome Completo</Label><p className="font-medium text-lg">{detailUser.first_name} {detailUser.last_name}</p></div>
+                                                      <div><Label className="text-xs text-muted-foreground uppercase">CPF</Label><p className="font-mono font-medium text-lg">{detailUser.cpf || 'Não informado'}</p></div>
+                                                      <div><Label className="text-xs text-muted-foreground uppercase">Telefone</Label><p className="font-medium text-lg">{detailUser.phone}</p></div>
+                                                      <div><Label className="text-xs text-muted-foreground uppercase">Data Cadastro</Label><p className="font-medium text-lg">{new Date(detailUser.created_at).toLocaleDateString()}</p></div>
+                                                  </CardContent>
+                                              </Card>
+
+                                              <div className="space-y-4">
+                                                  <Button className="w-full h-12 bg-slate-900 text-white font-bold rounded-xl" onClick={() => handleResetPassword(detailUser.email)}><Mail className="mr-2 w-4 h-4" /> Enviar Redefinição de Senha</Button>
+                                                  <Button variant="outline" className="w-full h-12 font-bold rounded-xl border-red-200 text-red-600 hover:bg-red-50" onClick={() => setIsDeleteDialogOpen(true)}><Trash2 className="mr-2 w-4 h-4" /> Excluir Conta</Button>
+                                              </div>
+                                          </div>
+
+                                          {/* Se for motorista, mostra Documentos */}
+                                          {detailUser.role === 'driver' && (
+                                              <div className="space-y-4">
+                                                  <h3 className="font-bold text-lg flex items-center gap-2"><FileText className="w-5 h-5"/> Documentação e Veículo</h3>
+                                                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                                      <div className="bg-white p-4 rounded-xl shadow-sm border border-border/50">
+                                                          <p className="text-xs text-muted-foreground uppercase mb-1">Veículo</p>
+                                                          <p className="font-bold">{detailUser.car_model}</p>
+                                                          <p className="text-sm text-muted-foreground">{detailUser.car_color} • {detailUser.car_year}</p>
+                                                          <Badge variant="outline" className="mt-2 font-mono">{detailUser.car_plate}</Badge>
+                                                      </div>
+                                                      {/* Cards de Imagem */}
+                                                      {['cnh_front_url', 'cnh_back_url', 'face_photo_url'].map((field) => (
+                                                          detailUser[field] && (
+                                                              <div key={field} className="aspect-video bg-black rounded-xl overflow-hidden relative group cursor-pointer" onClick={() => window.open(detailUser[field], '_blank')}>
+                                                                  <img src={detailUser[field]} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                                                                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 transition-opacity"><ExternalLink className="text-white w-6 h-6"/></div>
+                                                                  <div className="absolute bottom-2 left-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded font-bold uppercase">{field.replace('_url', '').replace('_', ' ')}</div>
+                                                              </div>
+                                                          )
+                                                      ))}
+                                                  </div>
+                                              </div>
+                                          )}
+                                      </TabsContent>
+
+                                      <TabsContent value="history" className="h-full overflow-y-auto p-0 m-0">
+                                          {detailUserHistory.length === 0 ? (
+                                              <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
+                                                  <MapIcon className="w-12 h-12 mb-2 opacity-20" />
+                                                  <p>Nenhuma corrida registrada.</p>
+                                              </div>
+                                          ) : (
+                                              <Table>
+                                                  <TableHeader className="bg-white dark:bg-slate-950 sticky top-0 z-10"><TableRow><TableHead className="pl-8">Data</TableHead><TableHead>Origem / Destino</TableHead><TableHead>Status</TableHead><TableHead className="text-right pr-8">Valor</TableHead></TableRow></TableHeader>
+                                                  <TableBody>
+                                                      {detailUserHistory.map(ride => (
+                                                          <TableRow key={ride.id} className="hover:bg-white/50">
+                                                              <TableCell className="pl-8 text-muted-foreground">{new Date(ride.created_at).toLocaleDateString()}</TableCell>
+                                                              <TableCell>
+                                                                  <div className="max-w-xs">
+                                                                      <p className="font-medium truncate">{ride.destination_address}</p>
+                                                                      <p className="text-xs text-muted-foreground truncate">{ride.pickup_address}</p>
+                                                                  </div>
+                                                              </TableCell>
+                                                              <TableCell><Badge variant="outline">{ride.status}</Badge></TableCell>
+                                                              <TableCell className="text-right pr-8 font-bold">R$ {Number(ride.price).toFixed(2)}</TableCell>
+                                                          </TableRow>
+                                                      ))}
+                                                  </TableBody>
+                                              </Table>
+                                          )}
+                                      </TabsContent>
+
+                                      <TabsContent value="edit" className="h-full p-8 m-0 overflow-y-auto">
+                                          <Card className="max-w-lg mx-auto border-0 shadow-none bg-transparent">
+                                              <CardContent className="space-y-6">
+                                                  <div className="grid grid-cols-2 gap-4">
+                                                      <div className="space-y-2"><Label>Nome</Label><Input value={editFormData.first_name} onChange={e => setEditFormData({...editFormData, first_name: e.target.value})} className="h-12 rounded-xl" /></div>
+                                                      <div className="space-y-2"><Label>Sobrenome</Label><Input value={editFormData.last_name} onChange={e => setEditFormData({...editFormData, last_name: e.target.value})} className="h-12 rounded-xl" /></div>
+                                                  </div>
+                                                  <div className="space-y-2"><Label>Telefone</Label><Input value={editFormData.phone} onChange={e => setEditFormData({...editFormData, phone: e.target.value})} className="h-12 rounded-xl" /></div>
+                                                  <Button onClick={handleSaveUserDetail} className="w-full h-12 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-lg">Salvar Alterações</Button>
+                                              </CardContent>
+                                          </Card>
+                                      </TabsContent>
+                                  </>
+                              )}
+                          </div>
+                      </Tabs>
+                  </>
+              )}
+          </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir Usuário?</AlertDialogTitle><AlertDialogDescription>Isso removerá o perfil do sistema permanentemente. O histórico de corridas será preservado anonimamente.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={handleDeleteUser} className="bg-red-600">Excluir Definitivamente</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
       <Dialog open={!!selectedRide} onOpenChange={(o) => !o && setSelectedRide(null)}><DialogContent className="max-w-md bg-white dark:bg-slate-900 rounded-[32px] border-0 shadow-2xl"><DialogHeader><DialogTitle>Detalhes da Corrida</DialogTitle></DialogHeader><div className="space-y-6 py-4"><div className="grid grid-cols-1 gap-4"><div><p className="text-xs font-bold text-muted-foreground uppercase">Origem</p><p className="font-medium text-lg">{selectedRide?.pickup_address}</p></div><div><p className="text-xs font-bold text-muted-foreground uppercase">Destino</p><p className="font-medium text-lg">{selectedRide?.destination_address}</p></div></div><div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl flex items-center justify-between"><div className="flex items-center gap-3"><Avatar><AvatarImage src={selectedRide?.driver?.avatar_url} /><AvatarFallback>DR</AvatarFallback></Avatar><div><p className="font-bold">{selectedRide?.driver?.first_name || 'Sem motorista'}</p></div></div><div className="text-right"><p className="text-xs text-muted-foreground uppercase font-bold">Data/Hora</p><p className="font-bold text-sm">{selectedRide ? new Date(selectedRide.created_at).toLocaleString('pt-BR') : '--'}</p></div></div><div className="bg-slate-50 dark:bg-slate-800 rounded-2xl p-4 space-y-3 border border-border/50"><div className="flex justify-between items-center pb-2 border-b border-border/50"><span className="text-sm text-muted-foreground font-medium">Preço Cobrado</span><span className="font-black text-lg">R$ {Number(selectedRide?.price).toFixed(2)}</span></div><div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">Repasse Motorista (80%)</span><span className="font-bold">R$ {Number(selectedRide?.driver_earnings).toFixed(2)}</span></div><div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">Taxa Plataforma (20%)</span><span className="font-bold text-green-600">R$ {Number(selectedRide?.platform_fee).toFixed(2)}</span></div>{selectedRide?.payment_method && (<div className="pt-2 flex justify-end"><Badge variant="outline" className="text-xs">{selectedRide.payment_method === 'WALLET' ? 'Pago via Carteira' : 'Pago em Dinheiro'}</Badge></div>)}</div></div></DialogContent></Dialog>
     </div>
   );
