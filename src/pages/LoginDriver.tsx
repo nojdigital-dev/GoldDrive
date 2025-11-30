@@ -52,29 +52,68 @@ const LoginDriver = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
       e.preventDefault();
+      if (loading) return;
       if (!email || !password) return showError("Preencha email e senha");
+      
       setLoading(true);
+      
+      // Timeout de segurança: Se demorar mais de 10s, destrava o botão
+      const timeoutId = setTimeout(() => {
+          setLoading((current) => {
+              if (current) {
+                  showError("O servidor demorou para responder. Tente novamente.");
+                  return false;
+              }
+              return false;
+          });
+      }, 10000);
+
       try {
-          const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: password.trim() });
+          const { data, error } = await supabase.auth.signInWithPassword({ 
+              email: email.trim(), 
+              password: password.trim() 
+          });
+          
           if (error) throw error;
-          
+          if (!data.user) throw new Error("Usuário não encontrado.");
+
           // Busca role e status do motorista
-          const { data: profile } = await supabase.from('profiles').select('role, driver_status').eq('id', data.user.id).maybeSingle();
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('role, driver_status')
+            .eq('id', data.user.id)
+            .maybeSingle();
           
+          if (profileError) {
+              console.error("Erro perfil:", profileError);
+              // Não trava o login se der erro no perfil, tenta redirecionar pro padrão
+          }
+
+          // Cancela o timeout pois deu certo
+          clearTimeout(timeoutId);
+          setLoading(false);
+
           if (profile?.role === 'driver') {
               // Se o status for PENDING, manda para a tela de análise/sucesso
               if (profile.driver_status === 'PENDING') {
-                  navigate('/success');
+                  navigate('/success', { replace: true });
               } else {
-                  navigate('/driver');
+                  navigate('/driver', { replace: true });
               }
           }
-          else if (profile?.role === 'admin') navigate('/admin');
-          else navigate('/client');
+          else if (profile?.role === 'admin') {
+              navigate('/admin', { replace: true });
+          }
+          else {
+              navigate('/client', { replace: true });
+          }
+
       } catch (e: any) {
-          showError(e.message || "Erro no login");
-      } finally {
+          clearTimeout(timeoutId);
           setLoading(false);
+          let msg = e.message || "Erro no login";
+          if (msg.includes("Invalid login")) msg = "Email ou senha incorretos.";
+          showError(msg);
       }
   };
 
@@ -127,6 +166,17 @@ const LoginDriver = () => {
       if (loading) return;
       setLoading(true);
 
+      // Timeout de segurança para cadastro também
+      const timeoutId = setTimeout(() => {
+          setLoading((current) => {
+             if(current) {
+                 showError("O envio está demorando. Verifique sua conexão.");
+                 return false;
+             }
+             return false;
+          });
+      }, 20000);
+
       try {
           // 1. CRIA O USUÁRIO
           const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -154,6 +204,7 @@ const LoginDriver = () => {
           }
 
           if (!userId) {
+              clearTimeout(timeoutId);
               setLoading(false);
               showSuccess("Verifique seu email.");
               return;
@@ -186,13 +237,15 @@ const LoginDriver = () => {
               updated_at: new Date().toISOString()
           });
 
+          clearTimeout(timeoutId);
+          setLoading(false);
           // SUCESSO
-          navigate('/success');
+          navigate('/success', { replace: true });
 
       } catch (e: any) {
-          showError(e.message);
-      } finally {
+          clearTimeout(timeoutId);
           setLoading(false);
+          showError(e.message);
       }
   };
 
@@ -226,7 +279,7 @@ const LoginDriver = () => {
       );
   }
 
-  // TELA DE CADASTRO
+  // TELA DE CADASTRO (Design Original Card Centered)
   return (
     <div className="min-h-screen relative flex items-center justify-center p-4 lg:p-8 font-sans overflow-hidden bg-slate-900">
         <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?q=80&w=2583')] bg-cover bg-center opacity-20" />
