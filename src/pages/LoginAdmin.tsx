@@ -13,16 +13,21 @@ const LoginAdmin = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  // Verificação em segundo plano
   useEffect(() => {
-    const checkUser = async () => {
+    // Verifica sessão existente apenas uma vez ao montar
+    const checkExistingSession = async () => {
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
              const { data } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
-             if (data?.role === 'admin') navigate('/admin');
+             if (data?.role === 'admin') {
+                 navigate('/admin', { replace: true });
+             } else {
+                 // Se tem sessão mas não é admin, faz logout silencioso para permitir login correto
+                 await supabase.auth.signOut();
+             }
         }
     };
-    checkUser();
+    checkExistingSession();
   }, [navigate]);
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -39,7 +44,7 @@ const LoginAdmin = () => {
                 await supabase.auth.signOut();
                 throw new Error("Acesso negado: Este usuário não é um administrador.");
             }
-            navigate('/admin');
+            navigate('/admin', { replace: true });
         }
     } catch (e: any) {
         showError(e.message);
