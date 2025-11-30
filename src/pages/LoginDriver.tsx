@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
-import { ArrowLeft, Loader2, ArrowRight, Car, CheckCircle2, User, FileText, Camera, ShieldCheck, Mail, Lock, Phone, CreditCard, Eye, EyeOff, AlertCircle, Clock } from "lucide-react";
+import { ArrowLeft, Loader2, ArrowRight, Car, User, FileText, Camera, ShieldCheck, Mail, Lock, Phone, CreditCard, Eye, EyeOff, AlertCircle, Clock } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -14,7 +14,6 @@ const LoginDriver = () => {
   const [step, setStep] = useState(1);
   const [isSignUp, setIsSignUp] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [registrationSuccess, setRegistrationSuccess] = useState(false);
   
   const [errors, setErrors] = useState<Record<string, boolean>>({});
 
@@ -120,7 +119,7 @@ const LoginDriver = () => {
       setLoading(true);
 
       try {
-          // 1. CRIA O USUÁRIO (Apenas dados básicos para não travar trigger)
+          // 1. CRIA O USUÁRIO (Trigger simplificado no banco lida com o básico)
           const { data: authData, error: authError } = await supabase.auth.signUp({
               email: email.trim(),
               password: password.trim(),
@@ -137,7 +136,6 @@ const LoginDriver = () => {
 
           if (authError) {
               if (authError.message.includes("already registered")) {
-                   // Tenta logar se já existe
                    const { data: loginData } = await supabase.auth.signInWithPassword({ email, password });
                    if (loginData.user) userId = loginData.user.id;
                    else throw authError;
@@ -152,15 +150,16 @@ const LoginDriver = () => {
               return;
           }
 
-          // 2. UPLOAD ARQUIVOS (Em background, não bloqueante)
+          // 2. UPLOAD ARQUIVOS (Em background)
           const [faceUrl, cnhFrontUrl, cnhBackUrl] = await Promise.all([
              uploadFileSafe(facePhoto!, `face/${userId}`),
              uploadFileSafe(cnhFront!, `cnh/${userId}`),
              uploadFileSafe(cnhBack!, `cnh/${userId}`)
           ]);
 
-          // 3. SALVA DADOS COMPLETOS (Upsert direto na tabela)
-          const { error: profileError } = await supabase.from('profiles').upsert({
+          // 3. UPSERT DOS DADOS RESTANTES
+          // Isso garante que tudo seja salvo mesmo que o trigger tenha falhado ou salvo apenas o básico
+          await supabase.from('profiles').upsert({
               id: userId,
               role: 'driver',
               email: email.trim(),
@@ -179,13 +178,8 @@ const LoginDriver = () => {
               updated_at: new Date().toISOString()
           });
 
-          if (profileError) {
-              console.error(profileError);
-              // Mesmo com erro no perfil, o usuário foi criado, então redirecionamos para tentar arrumar depois
-          }
-
-          setRegistrationSuccess(true);
-          window.scrollTo(0,0);
+          // SUCESSO: Redireciona para a nova página
+          navigate('/success');
 
       } catch (e: any) {
           showError(e.message);
@@ -194,26 +188,7 @@ const LoginDriver = () => {
       }
   };
 
-  if (registrationSuccess) {
-      return (
-          <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6">
-              <Card className="w-full max-w-md bg-white border-0 shadow-2xl rounded-[32px] overflow-hidden animate-in zoom-in">
-                  <div className="bg-yellow-500 p-8 flex flex-col items-center justify-center text-center">
-                      <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center mb-4">
-                           <Clock className="w-10 h-10 text-white animate-pulse" />
-                      </div>
-                      <h2 className="text-2xl font-black text-slate-900">Cadastro Enviado!</h2>
-                  </div>
-                  <CardContent className="p-8 text-center space-y-6">
-                      <p className="text-gray-600">Seus dados foram salvos. Nossa equipe irá analisar.</p>
-                      <Button onClick={() => navigate('/')} className="w-full h-12 rounded-xl bg-slate-900 text-white font-bold">Voltar ao Início</Button>
-                  </CardContent>
-              </Card>
-          </div>
-      );
-  }
-
-  // TELA DE LOGIN (Design Original Split)
+  // TELA DE LOGIN (Design Original)
   if (!isSignUp) {
       return (
         <div className="min-h-screen relative flex items-center justify-center font-sans overflow-hidden bg-slate-900">
@@ -233,7 +208,7 @@ const LoginDriver = () => {
                     </div>
                     <form onSubmit={handleLogin} className="space-y-5">
                         <div className="space-y-1"><Label>Email</Label><Input type="email" value={email} onChange={e => setEmail(e.target.value)} className="h-12" placeholder="seu@email.com"/></div>
-                        <div className="space-y-1"><Label>Senha</Label><Input type="password" value={password} onChange={e => setPassword(e.target.value)} className="h-12" placeholder="••••••"/></div>
+                        <div className="space-y-1"><Label>Senha</Label><div className="relative"><Input type={showPassword?"text":"password"} value={password} onChange={e => setPassword(e.target.value)} className="h-12 pr-10" placeholder="••••••"/><button type="button" onClick={()=>setShowPassword(!showPassword)} className="absolute right-3 top-3 text-gray-400"><Eye className="w-5 h-5"/></button></div></div>
                         <Button className="w-full h-14 font-bold bg-slate-900 text-white rounded-xl mt-4" disabled={loading}>{loading ? <Loader2 className="animate-spin" /> : "Acessar Painel"}</Button>
                     </form>
                     <div className="mt-8 text-center pt-6 border-t border-gray-100"><Button variant="outline" onClick={() => setIsSignUp(true)} className="w-full h-12 font-bold rounded-xl">Criar Cadastro Gratuito</Button></div>
