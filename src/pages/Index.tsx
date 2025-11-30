@@ -10,45 +10,55 @@ const Index = () => {
   const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
+
     const checkUser = async () => {
+      // Timeout de segurança: se o Supabase demorar mais de 2s, libera a tela
+      const timer = setTimeout(() => {
+        if (mounted && checkingSession) {
+             console.log("Timeout de verificação de sessão.");
+             setCheckingSession(false);
+        }
+      }, 2000);
+
       try {
         const { data: { session } } = await supabase.auth.getSession();
         
         if (session) {
-          // Usuário já logado, verifica a role para redirecionar
+          // Busca role de forma segura
           const { data: profile } = await supabase
             .from('profiles')
             .select('role')
             .eq('id', session.user.id)
-            .single();
+            .maybeSingle();
 
-          if (profile?.role === 'admin') {
-            navigate('/admin');
-            return;
-          } else if (profile?.role === 'driver') {
-            navigate('/driver');
-            return;
-          } else if (profile?.role === 'client') {
-            navigate('/client');
-            return;
+          if (!mounted) return;
+
+          if (profile) {
+            if (profile.role === 'admin') navigate('/admin');
+            else if (profile.role === 'driver') navigate('/driver');
+            else navigate('/client');
+            return; // Navegou, não precisa rodar o resto
           }
         }
       } catch (error) {
-        console.error("Erro ao verificar sessão:", error);
+        console.error("Erro ao verificar sessão (Index):", error);
       } finally {
-        // Se não tiver sessão ou der erro, libera a home page
-        setCheckingSession(false);
+        clearTimeout(timer);
+        if (mounted) setCheckingSession(false);
       }
     };
 
     checkUser();
+
+    return () => { mounted = false; };
   }, [navigate]);
 
   if (checkingSession) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-950">
         <Loader2 className="w-10 h-10 text-yellow-500 animate-spin mb-4" />
-        <p className="text-gray-400 text-sm animate-pulse">Verificando acesso...</p>
+        <p className="text-gray-400 text-sm animate-pulse">Iniciando sistema...</p>
       </div>
     );
   }
