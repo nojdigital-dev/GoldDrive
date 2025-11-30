@@ -4,20 +4,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
-import { ArrowLeft, Loader2, ArrowRight, Car, Upload, CheckCircle2, User, FileText, Camera, ShieldCheck, Mail, Lock, Phone, CreditCard } from "lucide-react";
+import { ArrowLeft, Loader2, ArrowRight, Car, CheckCircle2, User, FileText, Camera, ShieldCheck, Mail, Lock, Phone, CreditCard, Eye, EyeOff, AlertCircle } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 
 const LoginDriver = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(1); // 1: Login/Dados, 2: Docs, 3: Carro
   const [isSignUp, setIsSignUp] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   
+  // Estado de Erros
+  const [errors, setErrors] = useState<Record<string, boolean>>({});
+
   // Dados Pessoais
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
   const [cpf, setCpf] = useState("");
   const [phone, setPhone] = useState("");
@@ -33,9 +37,44 @@ const LoginDriver = () => {
   const [carColor, setCarColor] = useState("");
   const [carYear, setCarYear] = useState("");
 
+  // --- MÁSCARAS ---
+  const handleCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let value = e.target.value.replace(/\D/g, "");
+    if (value.length > 11) value = value.slice(0, 11);
+    value = value.replace(/(\d{3})(\d)/, "$1.$2");
+    value = value.replace(/(\d{3})(\d)/, "$1.$2");
+    value = value.replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+    setCpf(value);
+    if (errors.cpf) setErrors(prev => ({ ...prev, cpf: false }));
+  };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let value = e.target.value.replace(/\D/g, "");
+    if (value.length > 11) value = value.slice(0, 11);
+    value = value.replace(/(\d{2})(\d)/, "($1) $2");
+    value = value.replace(/(\d{5})(\d)/, "$1-$2");
+    setPhone(value);
+    if (errors.phone) setErrors(prev => ({ ...prev, phone: false }));
+  };
+
+  const validateField = (field: string, value: any) => {
+      const isValid = !!value;
+      setErrors(prev => ({ ...prev, [field]: !isValid }));
+      return isValid;
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
       e.preventDefault();
-      if (!email || !password) return showError("Preencha email e senha");
+      const newErrors: Record<string, boolean> = {};
+      if (!email) newErrors.email = true;
+      if (!password) newErrors.password = true;
+      
+      setErrors(newErrors);
+      if (Object.keys(newErrors).length > 0) {
+          showError("Preencha os campos obrigatórios");
+          return;
+      }
+
       setLoading(true);
       try {
           const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -69,14 +108,45 @@ const LoginDriver = () => {
   };
 
   const handleNextStep = async () => {
+      const newErrors: Record<string, boolean> = {};
+      let isValid = true;
+
       if (step === 1) {
-          if (!name || !email || !password || !cpf || !phone) return showError("Preencha todos os campos pessoais");
-          setStep(2);
+          if (!name) newErrors.name = true;
+          if (!email) newErrors.email = true;
+          if (!password) newErrors.password = true;
+          if (password !== confirmPassword) {
+               showError("As senhas não coincidem");
+               newErrors.confirmPassword = true;
+               isValid = false;
+          }
+          if (!cpf || cpf.length < 14) newErrors.cpf = true;
+          if (!phone || phone.length < 14) newErrors.phone = true;
       } else if (step === 2) {
-          if (!facePhoto || !cnhFront || !cnhBack) return showError("Faça upload de todos os documentos");
-          setStep(3);
+          if (!facePhoto) newErrors.facePhoto = true;
+          if (!cnhFront) newErrors.cnhFront = true;
+          if (!cnhBack) newErrors.cnhBack = true;
       } else if (step === 3) {
-          if (!carModel || !carPlate || !carColor || !carYear) return showError("Preencha os dados do veículo");
+          if (!carModel) newErrors.carModel = true;
+          if (!carPlate) newErrors.carPlate = true;
+          if (!carColor) newErrors.carColor = true;
+          if (!carYear) newErrors.carYear = true;
+      }
+
+      if (Object.keys(newErrors).length > 0) {
+          setErrors(newErrors);
+          isValid = false;
+          // Feedback tátil/visual extra
+          if (step === 2) showError("Envie todos os documentos");
+          else showError("Verifique os campos em vermelho");
+      }
+
+      if (!isValid) return;
+
+      if (step < 3) {
+          setStep(step + 1);
+          setErrors({});
+      } else {
           await submitRegistration();
       }
   };
@@ -131,87 +201,96 @@ const LoginDriver = () => {
       }
   };
 
-  // --- RENDER LOGIN VIEW (Split Screen) ---
+  // --- RENDER LOGIN VIEW ---
   if (!isSignUp) {
       return (
-        <div className="min-h-screen bg-white flex">
-            {/* Esquerda: Imagem e Branding (Desktop) */}
-            <div className="hidden lg:flex lg:w-1/2 relative bg-black items-center justify-center overflow-hidden">
-                <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?q=80&w=2070')] bg-cover bg-center opacity-60" />
-                <div className="absolute inset-0 bg-gradient-to-r from-black/80 to-transparent" />
-                <div className="relative z-10 p-12 text-white max-w-lg">
-                    <div className="w-16 h-16 bg-yellow-500 rounded-2xl flex items-center justify-center mb-6 shadow-glow">
-                        <Car className="w-8 h-8 text-black" />
-                    </div>
-                    <h1 className="text-5xl font-black mb-6 tracking-tight">Dirija com a <br/><span className="text-yellow-500">GoldDrive</span></h1>
-                    <ul className="space-y-4 text-lg text-gray-300">
-                        <li className="flex items-center gap-3"><CheckCircle2 className="text-yellow-500 w-5 h-5"/> Ganhos superiores ao mercado</li>
-                        <li className="flex items-center gap-3"><CheckCircle2 className="text-yellow-500 w-5 h-5"/> Pagamento rápido e seguro</li>
-                        <li className="flex items-center gap-3"><CheckCircle2 className="text-yellow-500 w-5 h-5"/> Suporte 24 horas</li>
-                    </ul>
-                </div>
-            </div>
+        <div className="min-h-screen relative flex items-center justify-center font-sans overflow-hidden">
+            {/* Background Image Full Screen with Overlay */}
+            <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?q=80&w=2070')] bg-cover bg-center" />
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" />
 
-            {/* Direita: Formulário */}
-            <div className="w-full lg:w-1/2 flex flex-col justify-center p-6 sm:p-12 lg:p-24 bg-gray-50">
-                <div className="mb-8">
-                     <Button variant="ghost" onClick={() => navigate('/')} className="pl-0 hover:bg-transparent hover:text-yellow-600 mb-4">
-                        <ArrowLeft className="mr-2 w-4 h-4" /> Voltar ao início
-                     </Button>
-                     <h2 className="text-3xl font-black text-slate-900 mb-2">Login Parceiro</h2>
-                     <p className="text-slate-500">Digite suas credenciais para acessar o painel.</p>
+            {/* Content Container */}
+            <div className="relative z-10 w-full max-w-6xl flex flex-col lg:flex-row h-full lg:h-auto min-h-screen lg:min-h-[600px] lg:rounded-[32px] lg:overflow-hidden lg:shadow-2xl lg:bg-white animate-in fade-in zoom-in-95 duration-500">
+                
+                {/* Esquerda: Branding (Agora visível e integrada no mobile como topo) */}
+                <div className="lg:w-1/2 p-8 lg:p-12 flex flex-col justify-center text-white lg:bg-slate-900 relative">
+                     {/* No desktop, o fundo é preto sólido. No mobile, é transparente para mostrar a imagem de fundo global */}
+                     <div className="absolute inset-0 bg-gradient-to-b from-black/80 to-transparent lg:hidden" />
+                     
+                     <div className="relative z-10 text-center lg:text-left mt-10 lg:mt-0">
+                        <div className="w-16 h-16 bg-yellow-500 rounded-2xl flex items-center justify-center mb-6 shadow-glow mx-auto lg:mx-0">
+                            <Car className="w-8 h-8 text-black" />
+                        </div>
+                        <h1 className="text-4xl lg:text-5xl font-black mb-4 tracking-tight drop-shadow-lg lg:drop-shadow-none">Gold<span className="text-yellow-500">Drive</span></h1>
+                        <p className="text-lg text-gray-200 lg:text-gray-400 max-w-sm mx-auto lg:mx-0 drop-shadow-md lg:drop-shadow-none">A plataforma definitiva para motoristas que exigem excelência.</p>
+                     </div>
                 </div>
 
-                <form onSubmit={handleLogin} className="space-y-5 max-w-md w-full">
-                    <div className="space-y-1">
-                        <Label className="text-slate-900 font-bold">Email</Label>
-                        <div className="relative">
-                            <Mail className="absolute left-4 top-3.5 w-5 h-5 text-gray-400" />
-                            <Input 
-                                type="email" 
-                                placeholder="motorista@email.com" 
-                                className="h-12 pl-12 bg-white border-gray-200 text-slate-900 focus:ring-2 focus:ring-yellow-500 rounded-xl" 
-                                value={email} 
-                                onChange={e => setEmail(e.target.value)} 
-                                disabled={loading} 
-                            />
-                        </div>
-                    </div>
-                    <div className="space-y-1">
-                        <Label className="text-slate-900 font-bold">Senha</Label>
-                        <div className="relative">
-                            <Lock className="absolute left-4 top-3.5 w-5 h-5 text-gray-400" />
-                            <Input 
-                                type="password" 
-                                placeholder="••••••••" 
-                                className="h-12 pl-12 bg-white border-gray-200 text-slate-900 focus:ring-2 focus:ring-yellow-500 rounded-xl" 
-                                value={password} 
-                                onChange={e => setPassword(e.target.value)} 
-                                disabled={loading} 
-                            />
-                        </div>
+                {/* Direita: Formulário (Card Flutuante no Mobile) */}
+                <div className="flex-1 bg-white rounded-t-[32px] lg:rounded-none p-8 lg:p-12 flex flex-col justify-center mt-auto lg:mt-0 shadow-2xl lg:shadow-none">
+                    <div className="mb-8">
+                         <Button variant="ghost" onClick={() => navigate('/')} className="pl-0 hover:bg-transparent text-slate-500 hover:text-yellow-600 mb-2">
+                            <ArrowLeft className="mr-2 w-4 h-4" /> Voltar
+                         </Button>
+                         <h2 className="text-3xl font-black text-slate-900">Login Parceiro</h2>
                     </div>
 
-                    <Button className="w-full h-14 text-lg font-bold rounded-xl bg-slate-900 hover:bg-black text-white mt-4 shadow-lg transition-transform active:scale-[0.98]" disabled={loading}>
-                        {loading ? <Loader2 className="animate-spin" /> : "Entrar no Painel"}
-                    </Button>
-                </form>
+                    <form onSubmit={handleLogin} className="space-y-5">
+                        <div className="space-y-1.5">
+                            <Label className="text-slate-900 font-bold ml-1">Email</Label>
+                            <div className="relative group">
+                                <Mail className={`absolute left-4 top-3.5 w-5 h-5 transition-colors ${errors.email ? 'text-red-500' : 'text-gray-400 group-focus-within:text-yellow-500'}`} />
+                                <Input 
+                                    type="email" 
+                                    className={`h-12 pl-12 bg-slate-50 border-slate-200 text-slate-900 rounded-xl transition-all ${errors.email ? 'border-red-500 ring-1 ring-red-500 bg-red-50' : 'focus:ring-2 focus:ring-yellow-500'}`} 
+                                    value={email} 
+                                    onChange={e => { setEmail(e.target.value); if(errors.email) setErrors({...errors, email: false}) }} 
+                                    disabled={loading} 
+                                />
+                            </div>
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label className="text-slate-900 font-bold ml-1">Senha</Label>
+                            <div className="relative group">
+                                <Lock className={`absolute left-4 top-3.5 w-5 h-5 transition-colors ${errors.password ? 'text-red-500' : 'text-gray-400 group-focus-within:text-yellow-500'}`} />
+                                <Input 
+                                    type={showPassword ? "text" : "password"}
+                                    className={`h-12 pl-12 pr-12 bg-slate-50 border-slate-200 text-slate-900 rounded-xl transition-all ${errors.password ? 'border-red-500 ring-1 ring-red-500 bg-red-50' : 'focus:ring-2 focus:ring-yellow-500'}`} 
+                                    value={password} 
+                                    onChange={e => { setPassword(e.target.value); if(errors.password) setErrors({...errors, password: false}) }} 
+                                    disabled={loading} 
+                                />
+                                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-3.5 text-gray-400 hover:text-slate-900">
+                                    {showPassword ? <EyeOff className="w-5 h-5"/> : <Eye className="w-5 h-5"/>}
+                                </button>
+                            </div>
+                        </div>
 
-                <div className="mt-8 max-w-md w-full text-center border-t border-gray-200 pt-6">
-                    <p className="text-slate-600">Ainda não é parceiro?</p>
-                    <Button variant="link" onClick={() => setIsSignUp(true)} className="text-yellow-600 font-bold text-base p-0 hover:text-yellow-700">
-                        Fazer Cadastro Gratuito
-                    </Button>
+                        <Button className="w-full h-14 text-lg font-bold rounded-xl bg-slate-900 hover:bg-black text-white mt-4 shadow-xl transition-transform active:scale-[0.98]" disabled={loading}>
+                            {loading ? <Loader2 className="animate-spin" /> : "Acessar Painel"}
+                        </Button>
+                    </form>
+
+                    <div className="mt-8 text-center pt-6 border-t border-gray-100">
+                        <p className="text-slate-500 mb-2">Não tem conta?</p>
+                        <Button variant="outline" onClick={() => setIsSignUp(true)} className="w-full h-12 rounded-xl border-slate-200 hover:border-yellow-500 hover:text-yellow-600 font-bold">
+                            Criar Cadastro Gratuito
+                        </Button>
+                    </div>
                 </div>
             </div>
         </div>
       );
   }
 
-  // --- RENDER SIGNUP VIEW (Centered Card Step-by-Step) ---
+  // --- RENDER SIGNUP VIEW ---
   return (
-    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 lg:p-8 font-sans">
-        <Card className="w-full max-w-2xl bg-white shadow-2xl rounded-[32px] overflow-hidden border-0">
+    <div className="min-h-screen relative flex items-center justify-center p-4 lg:p-8 font-sans overflow-hidden bg-slate-900">
+        {/* Animated Background */}
+        <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?q=80&w=2583')] bg-cover bg-center opacity-20" />
+        <div className="absolute inset-0 bg-gradient-to-br from-black via-slate-900/90 to-slate-900/80" />
+
+        <Card className="w-full max-w-2xl bg-white/95 backdrop-blur-xl shadow-2xl rounded-[32px] overflow-hidden border-0 relative z-10 animate-in slide-in-from-bottom-10 duration-500">
             {/* Header com Progresso */}
             <div className="bg-slate-900 p-8 text-white relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-yellow-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
@@ -221,57 +300,119 @@ const LoginDriver = () => {
                         <Button variant="ghost" onClick={() => step === 1 ? setIsSignUp(false) : setStep(step - 1)} className="text-white hover:bg-white/10 p-0 w-8 h-8 rounded-full h-auto">
                             <ArrowLeft className="w-6 h-6" />
                         </Button>
-                        <span className="font-bold text-yellow-500 tracking-widest text-xs uppercase">ETAPA {step} DE 3</span>
+                        <span className="font-bold text-yellow-500 tracking-widest text-xs uppercase bg-yellow-500/10 px-3 py-1 rounded-full">ETAPA {step} / 3</span>
                     </div>
                     
-                    <h2 className="text-3xl font-black mb-2">
-                        {step === 1 && "Vamos começar"}
-                        {step === 2 && "Envio de Documentos"}
-                        {step === 3 && "Dados do Veículo"}
+                    <h2 className="text-3xl font-black mb-2 tracking-tight">
+                        {step === 1 && "Seus Dados"}
+                        {step === 2 && "Documentação"}
+                        {step === 3 && "Seu Veículo"}
                     </h2>
-                    <p className="text-slate-400 mb-6">
-                        {step === 1 && "Preencha seus dados básicos para criar o acesso."}
-                        {step === 2 && "Precisamos validar sua identidade e habilitação."}
-                        {step === 3 && "Cadastre o carro que você usará para trabalhar."}
+                    <p className="text-slate-400 mb-6 font-light">
+                        {step === 1 && "Crie suas credenciais de acesso seguro."}
+                        {step === 2 && "Precisamos validar sua habilitação (CNH)."}
+                        {step === 3 && "Qual carro você vai usar para faturar?"}
                     </p>
 
                     <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
                         <div 
-                            className="h-full bg-yellow-500 transition-all duration-500 ease-out" 
+                            className="h-full bg-yellow-500 transition-all duration-500 ease-out shadow-[0_0_10px_#eab308]" 
                             style={{ width: `${(step / 3) * 100}%` }}
                         />
                     </div>
                 </div>
             </div>
 
-            <CardContent className="p-8">
+            <CardContent className="p-6 lg:p-10">
                 {/* ETAPA 1: DADOS PESSOAIS */}
                 {step === 1 && (
                     <div className="space-y-5 animate-in slide-in-from-right fade-in duration-300">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                             <div className="space-y-1.5">
-                                <Label className="text-slate-700 font-bold">Nome Completo</Label>
-                                <div className="relative"><User className="absolute left-4 top-4 w-5 h-5 text-gray-400"/><Input placeholder="Ex: João Silva" value={name} onChange={e => setName(e.target.value)} className="h-14 pl-12 bg-slate-50 border-slate-200 text-slate-900 rounded-xl focus:ring-2 focus:ring-yellow-500" /></div>
+                                <Label className="text-slate-700 font-bold ml-1">Nome Completo</Label>
+                                <div className="relative group">
+                                    <User className={`absolute left-4 top-4 w-5 h-5 transition-colors ${errors.name ? 'text-red-500' : 'text-gray-400 group-focus-within:text-yellow-600'}`}/>
+                                    <Input 
+                                        placeholder="Ex: João Silva" 
+                                        value={name} 
+                                        onChange={e => { setName(e.target.value); if(errors.name) setErrors({...errors, name: false}) }}
+                                        className={`h-14 pl-12 bg-slate-50 border-slate-200 text-slate-900 rounded-xl transition-all ${errors.name ? 'border-red-500 bg-red-50 ring-1 ring-red-500' : 'focus:ring-2 focus:ring-yellow-500'}`} 
+                                    />
+                                </div>
                             </div>
                             <div className="space-y-1.5">
-                                <Label className="text-slate-700 font-bold">CPF</Label>
-                                <div className="relative"><ShieldCheck className="absolute left-4 top-4 w-5 h-5 text-gray-400"/><Input placeholder="000.000.000-00" value={cpf} onChange={e => setCpf(e.target.value)} className="h-14 pl-12 bg-slate-50 border-slate-200 text-slate-900 rounded-xl focus:ring-2 focus:ring-yellow-500" /></div>
+                                <Label className="text-slate-700 font-bold ml-1">CPF</Label>
+                                <div className="relative group">
+                                    <ShieldCheck className={`absolute left-4 top-4 w-5 h-5 transition-colors ${errors.cpf ? 'text-red-500' : 'text-gray-400 group-focus-within:text-yellow-600'}`}/>
+                                    <Input 
+                                        placeholder="000.000.000-00" 
+                                        value={cpf} 
+                                        onChange={handleCpfChange} 
+                                        maxLength={14}
+                                        className={`h-14 pl-12 bg-slate-50 border-slate-200 text-slate-900 rounded-xl transition-all ${errors.cpf ? 'border-red-500 bg-red-50 ring-1 ring-red-500' : 'focus:ring-2 focus:ring-yellow-500'}`} 
+                                    />
+                                </div>
                             </div>
                         </div>
 
                         <div className="space-y-1.5">
-                            <Label className="text-slate-700 font-bold">Celular / WhatsApp</Label>
-                            <div className="relative"><Phone className="absolute left-4 top-4 w-5 h-5 text-gray-400"/><Input placeholder="(11) 99999-9999" value={phone} onChange={e => setPhone(e.target.value)} className="h-14 pl-12 bg-slate-50 border-slate-200 text-slate-900 rounded-xl focus:ring-2 focus:ring-yellow-500" /></div>
+                            <Label className="text-slate-700 font-bold ml-1">Celular</Label>
+                            <div className="relative group">
+                                <Phone className={`absolute left-4 top-4 w-5 h-5 transition-colors ${errors.phone ? 'text-red-500' : 'text-gray-400 group-focus-within:text-yellow-600'}`}/>
+                                <Input 
+                                    placeholder="(11) 99999-9999" 
+                                    value={phone} 
+                                    onChange={handlePhoneChange} 
+                                    maxLength={15}
+                                    className={`h-14 pl-12 bg-slate-50 border-slate-200 text-slate-900 rounded-xl transition-all ${errors.phone ? 'border-red-500 bg-red-50 ring-1 ring-red-500' : 'focus:ring-2 focus:ring-yellow-500'}`} 
+                                    />
+                            </div>
                         </div>
 
                         <div className="space-y-1.5">
-                            <Label className="text-slate-700 font-bold">Email de Acesso</Label>
-                            <div className="relative"><Mail className="absolute left-4 top-4 w-5 h-5 text-gray-400"/><Input type="email" placeholder="seu@email.com" value={email} onChange={e => setEmail(e.target.value)} className="h-14 pl-12 bg-slate-50 border-slate-200 text-slate-900 rounded-xl focus:ring-2 focus:ring-yellow-500" /></div>
+                            <Label className="text-slate-700 font-bold ml-1">Email</Label>
+                            <div className="relative group">
+                                <Mail className={`absolute left-4 top-4 w-5 h-5 transition-colors ${errors.email ? 'text-red-500' : 'text-gray-400 group-focus-within:text-yellow-600'}`}/>
+                                <Input 
+                                    type="email" 
+                                    placeholder="seu@email.com" 
+                                    value={email} 
+                                    onChange={e => { setEmail(e.target.value); if(errors.email) setErrors({...errors, email: false}) }}
+                                    className={`h-14 pl-12 bg-slate-50 border-slate-200 text-slate-900 rounded-xl transition-all ${errors.email ? 'border-red-500 bg-red-50 ring-1 ring-red-500' : 'focus:ring-2 focus:ring-yellow-500'}`} 
+                                    />
+                            </div>
                         </div>
 
-                        <div className="space-y-1.5">
-                            <Label className="text-slate-700 font-bold">Crie uma Senha</Label>
-                            <div className="relative"><Lock className="absolute left-4 top-4 w-5 h-5 text-gray-400"/><Input type="password" placeholder="Mínimo 6 caracteres" value={password} onChange={e => setPassword(e.target.value)} className="h-14 pl-12 bg-slate-50 border-slate-200 text-slate-900 rounded-xl focus:ring-2 focus:ring-yellow-500" /></div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                            <div className="space-y-1.5">
+                                <Label className="text-slate-700 font-bold ml-1">Senha</Label>
+                                <div className="relative group">
+                                    <Lock className={`absolute left-4 top-4 w-5 h-5 transition-colors ${errors.password ? 'text-red-500' : 'text-gray-400 group-focus-within:text-yellow-600'}`}/>
+                                    <Input 
+                                        type={showPassword ? "text" : "password"} 
+                                        placeholder="Mínimo 6 caracteres" 
+                                        value={password} 
+                                        onChange={e => { setPassword(e.target.value); if(errors.password) setErrors({...errors, password: false}) }}
+                                        className={`h-14 pl-12 pr-10 bg-slate-50 border-slate-200 text-slate-900 rounded-xl transition-all ${errors.password ? 'border-red-500 bg-red-50 ring-1 ring-red-500' : 'focus:ring-2 focus:ring-yellow-500'}`} 
+                                        />
+                                </div>
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label className="text-slate-700 font-bold ml-1">Confirmar Senha</Label>
+                                <div className="relative group">
+                                    <Lock className={`absolute left-4 top-4 w-5 h-5 transition-colors ${errors.confirmPassword ? 'text-red-500' : 'text-gray-400 group-focus-within:text-yellow-600'}`}/>
+                                    <Input 
+                                        type={showPassword ? "text" : "password"} 
+                                        placeholder="Repita a senha" 
+                                        value={confirmPassword} 
+                                        onChange={e => { setConfirmPassword(e.target.value); if(errors.confirmPassword) setErrors({...errors, confirmPassword: false}) }}
+                                        className={`h-14 pl-12 pr-10 bg-slate-50 border-slate-200 text-slate-900 rounded-xl transition-all ${errors.confirmPassword ? 'border-red-500 bg-red-50 ring-1 ring-red-500' : 'focus:ring-2 focus:ring-yellow-500'}`} 
+                                        />
+                                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-4 text-gray-400 hover:text-slate-900">
+                                        {showPassword ? <EyeOff className="w-5 h-5"/> : <Eye className="w-5 h-5"/>}
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 )}
@@ -279,27 +420,26 @@ const LoginDriver = () => {
                 {/* ETAPA 2: DOCUMENTOS */}
                 {step === 2 && (
                     <div className="space-y-6 animate-in slide-in-from-right fade-in duration-300">
-                        <div className="bg-yellow-50 border border-yellow-100 rounded-xl p-4 flex gap-3 text-yellow-800 text-sm">
+                        <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex gap-3 text-blue-800 text-sm">
                             <ShieldCheck className="w-5 h-5 shrink-0" />
-                            <p>Suas fotos são armazenadas de forma segura e usadas apenas para validação cadastral.</p>
+                            <p>Suas fotos são criptografadas. Tire fotos nítidas e sem reflexo.</p>
                         </div>
 
                         <div className="space-y-2">
-                            <Label className="font-bold text-slate-800">Foto do Rosto (Selfie)</Label>
-                            <div className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all group ${facePhoto ? 'border-green-500 bg-green-50' : 'border-slate-300 hover:border-yellow-500 hover:bg-slate-50'}`}>
-                                <input type="file" accept="image/*" className="hidden" id="face" onChange={e => setFacePhoto(e.target.files?.[0] || null)} />
+                            <Label className="font-bold text-slate-800 ml-1">Selfie (Rosto)</Label>
+                            <div className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all group ${errors.facePhoto ? 'border-red-500 bg-red-50' : facePhoto ? 'border-green-500 bg-green-50' : 'border-slate-300 hover:border-yellow-500 hover:bg-slate-50'}`}>
+                                <input type="file" accept="image/*" className="hidden" id="face" onChange={e => { setFacePhoto(e.target.files?.[0] || null); if(errors.facePhoto) setErrors({...errors, facePhoto: false}) }} />
                                 <label htmlFor="face" className="cursor-pointer w-full h-full block">
                                     {facePhoto ? (
-                                        <div className="flex flex-col items-center text-green-700">
+                                        <div className="flex flex-col items-center text-green-700 animate-in zoom-in">
                                             <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-2"><CheckCircle2 className="w-6 h-6"/></div>
-                                            <span className="font-bold">Foto Carregada</span>
+                                            <span className="font-bold">Foto Carregada!</span>
                                             <span className="text-xs opacity-75">{facePhoto.name}</span>
                                         </div>
                                     ) : (
                                         <div className="flex flex-col items-center text-slate-500 group-hover:text-yellow-600">
-                                            <div className="w-12 h-12 bg-slate-100 group-hover:bg-yellow-100 rounded-full flex items-center justify-center mb-2 transition-colors"><Camera className="w-6 h-6"/></div>
-                                            <span className="font-medium">Toque para tirar uma selfie</span>
-                                            <span className="text-xs opacity-60 mt-1">Sem óculos ou boné</span>
+                                            {errors.facePhoto ? <AlertCircle className="w-10 h-10 text-red-500 mb-2" /> : <Camera className="w-10 h-10 mb-2"/>}
+                                            <span className="font-medium">{errors.facePhoto ? "Foto obrigatória" : "Toque para tirar uma selfie"}</span>
                                         </div>
                                     )}
                                 </label>
@@ -308,20 +448,20 @@ const LoginDriver = () => {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <Label className="font-bold text-slate-800">CNH Frente</Label>
-                                <div className={`border-2 border-dashed rounded-2xl p-4 text-center cursor-pointer transition-all h-32 flex items-center justify-center ${cnhFront ? 'border-green-500 bg-green-50' : 'border-slate-300 hover:border-yellow-500 hover:bg-slate-50'}`}>
-                                    <input type="file" accept="image/*" className="hidden" id="cnhf" onChange={e => setCnhFront(e.target.files?.[0] || null)} />
+                                <Label className="font-bold text-slate-800 ml-1">CNH Frente</Label>
+                                <div className={`border-2 border-dashed rounded-2xl p-4 text-center cursor-pointer transition-all h-36 flex items-center justify-center ${errors.cnhFront ? 'border-red-500 bg-red-50' : cnhFront ? 'border-green-500 bg-green-50' : 'border-slate-300 hover:border-yellow-500 hover:bg-slate-50'}`}>
+                                    <input type="file" accept="image/*" className="hidden" id="cnhf" onChange={e => { setCnhFront(e.target.files?.[0] || null); if(errors.cnhFront) setErrors({...errors, cnhFront: false}) }} />
                                     <label htmlFor="cnhf" className="cursor-pointer w-full block">
-                                        {cnhFront ? <div className="text-green-700 font-bold flex flex-col items-center"><CheckCircle2 className="mb-1"/> Carregado</div> : <div className="text-slate-400 flex flex-col items-center"><FileText className="mb-1 w-6 h-6"/> Frente</div>}
+                                        {cnhFront ? <div className="text-green-700 font-bold flex flex-col items-center animate-in zoom-in"><CheckCircle2 className="mb-1"/> Ok</div> : <div className="text-slate-400 flex flex-col items-center"><FileText className={`mb-1 w-6 h-6 ${errors.cnhFront ? 'text-red-500' : ''}`}/> Frente</div>}
                                     </label>
                                 </div>
                             </div>
                             <div className="space-y-2">
-                                <Label className="font-bold text-slate-800">CNH Verso</Label>
-                                <div className={`border-2 border-dashed rounded-2xl p-4 text-center cursor-pointer transition-all h-32 flex items-center justify-center ${cnhBack ? 'border-green-500 bg-green-50' : 'border-slate-300 hover:border-yellow-500 hover:bg-slate-50'}`}>
-                                    <input type="file" accept="image/*" className="hidden" id="cnhb" onChange={e => setCnhBack(e.target.files?.[0] || null)} />
+                                <Label className="font-bold text-slate-800 ml-1">CNH Verso</Label>
+                                <div className={`border-2 border-dashed rounded-2xl p-4 text-center cursor-pointer transition-all h-36 flex items-center justify-center ${errors.cnhBack ? 'border-red-500 bg-red-50' : cnhBack ? 'border-green-500 bg-green-50' : 'border-slate-300 hover:border-yellow-500 hover:bg-slate-50'}`}>
+                                    <input type="file" accept="image/*" className="hidden" id="cnhb" onChange={e => { setCnhBack(e.target.files?.[0] || null); if(errors.cnhBack) setErrors({...errors, cnhBack: false}) }} />
                                     <label htmlFor="cnhb" className="cursor-pointer w-full block">
-                                        {cnhBack ? <div className="text-green-700 font-bold flex flex-col items-center"><CheckCircle2 className="mb-1"/> Carregado</div> : <div className="text-slate-400 flex flex-col items-center"><FileText className="mb-1 w-6 h-6"/> Verso</div>}
+                                        {cnhBack ? <div className="text-green-700 font-bold flex flex-col items-center animate-in zoom-in"><CheckCircle2 className="mb-1"/> Ok</div> : <div className="text-slate-400 flex flex-col items-center"><FileText className={`mb-1 w-6 h-6 ${errors.cnhBack ? 'text-red-500' : ''}`}/> Verso</div>}
                                     </label>
                                 </div>
                             </div>
@@ -333,23 +473,47 @@ const LoginDriver = () => {
                 {step === 3 && (
                     <div className="space-y-5 animate-in slide-in-from-right fade-in duration-300">
                         <div className="space-y-1.5">
-                            <Label className="text-slate-700 font-bold">Modelo do Carro</Label>
-                            <Input placeholder="Ex: Hyundai HB20, Fiat Argo" value={carModel} onChange={e => setCarModel(e.target.value)} className="h-14 bg-slate-50 border-slate-200 text-slate-900 rounded-xl focus:ring-2 focus:ring-yellow-500" />
+                            <Label className="text-slate-700 font-bold ml-1">Modelo do Carro</Label>
+                            <Input 
+                                placeholder="Ex: Hyundai HB20" 
+                                value={carModel} 
+                                onChange={e => { setCarModel(e.target.value); if(errors.carModel) setErrors({...errors, carModel: false}) }}
+                                className={`h-14 bg-slate-50 border-slate-200 text-slate-900 rounded-xl transition-all ${errors.carModel ? 'border-red-500 bg-red-50 ring-1 ring-red-500' : 'focus:ring-2 focus:ring-yellow-500'}`} 
+                            />
                         </div>
                         
                         <div className="space-y-1.5">
-                            <Label className="text-slate-700 font-bold">Placa</Label>
-                            <div className="relative"><CreditCard className="absolute left-4 top-4 w-5 h-5 text-gray-400"/><Input placeholder="ABC-1234" value={carPlate} onChange={e => setCarPlate(e.target.value.toUpperCase())} className="h-14 pl-12 bg-slate-50 border-slate-200 text-slate-900 rounded-xl focus:ring-2 focus:ring-yellow-500 uppercase font-mono" /></div>
+                            <Label className="text-slate-700 font-bold ml-1">Placa</Label>
+                            <div className="relative group">
+                                <CreditCard className={`absolute left-4 top-4 w-5 h-5 transition-colors ${errors.carPlate ? 'text-red-500' : 'text-gray-400 group-focus-within:text-yellow-600'}`}/>
+                                <Input 
+                                    placeholder="ABC-1234" 
+                                    value={carPlate} 
+                                    onChange={e => { setCarPlate(e.target.value.toUpperCase()); if(errors.carPlate) setErrors({...errors, carPlate: false}) }}
+                                    className={`h-14 pl-12 bg-slate-50 border-slate-200 text-slate-900 rounded-xl font-mono uppercase transition-all ${errors.carPlate ? 'border-red-500 bg-red-50 ring-1 ring-red-500' : 'focus:ring-2 focus:ring-yellow-500'}`} 
+                                />
+                            </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-5">
                             <div className="space-y-1.5">
-                                <Label className="text-slate-700 font-bold">Cor</Label>
-                                <Input placeholder="Prata, Preto..." value={carColor} onChange={e => setCarColor(e.target.value)} className="h-14 bg-slate-50 border-slate-200 text-slate-900 rounded-xl focus:ring-2 focus:ring-yellow-500" />
+                                <Label className="text-slate-700 font-bold ml-1">Cor</Label>
+                                <Input 
+                                    placeholder="Prata" 
+                                    value={carColor} 
+                                    onChange={e => { setCarColor(e.target.value); if(errors.carColor) setErrors({...errors, carColor: false}) }}
+                                    className={`h-14 bg-slate-50 border-slate-200 text-slate-900 rounded-xl transition-all ${errors.carColor ? 'border-red-500 bg-red-50 ring-1 ring-red-500' : 'focus:ring-2 focus:ring-yellow-500'}`} 
+                                />
                             </div>
                             <div className="space-y-1.5">
-                                <Label className="text-slate-700 font-bold">Ano</Label>
-                                <Input type="number" placeholder="2020" value={carYear} onChange={e => setCarYear(e.target.value)} className="h-14 bg-slate-50 border-slate-200 text-slate-900 rounded-xl focus:ring-2 focus:ring-yellow-500" />
+                                <Label className="text-slate-700 font-bold ml-1">Ano</Label>
+                                <Input 
+                                    type="number" 
+                                    placeholder="2020" 
+                                    value={carYear} 
+                                    onChange={e => { setCarYear(e.target.value); if(errors.carYear) setErrors({...errors, carYear: false}) }}
+                                    className={`h-14 bg-slate-50 border-slate-200 text-slate-900 rounded-xl transition-all ${errors.carYear ? 'border-red-500 bg-red-50 ring-1 ring-red-500' : 'focus:ring-2 focus:ring-yellow-500'}`} 
+                                />
                             </div>
                         </div>
                     </div>
