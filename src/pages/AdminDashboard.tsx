@@ -5,7 +5,8 @@ import {
   Sun, Moon, PanelLeftClose, PanelLeftOpen, DollarSign, Clock, 
   CheckCircle, TrendingUp, Trash2, Edit, Mail, Search,
   CreditCard, BellRing, Save, AlertTriangle, Smartphone, Globe,
-  Menu, Banknote, FileText, Check, X, ExternalLink, Camera, User
+  Menu, Banknote, FileText, Check, X, ExternalLink, Camera, User,
+  Moon as MoonIcon, List, Plus
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -27,6 +28,7 @@ import { useTheme } from "@/components/theme-provider";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2 } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -41,19 +43,16 @@ const AdminDashboard = () => {
   const [rides, setRides] = useState<any[]>([]);
   const [passengers, setPassengers] = useState<any[]>([]);
   const [drivers, setDrivers] = useState<any[]>([]);
-  const [pendingDrivers, setPendingDrivers] = useState<any[]>([]); // Novo estado para pendentes
+  const [pendingDrivers, setPendingDrivers] = useState<any[]>([]); 
   const [chartData, setChartData] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
 
-  // Estados de Gerenciamento (Edit/Delete/Review)
+  // Estados de Gerenciamento
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  
-  // Review Driver State
   const [reviewDriver, setReviewDriver] = useState<any>(null);
-  const [justApproved, setJustApproved] = useState(false); // Estado para controlar tela de sucesso
-
+  const [justApproved, setJustApproved] = useState(false);
   const [editFormData, setEditFormData] = useState({ first_name: "", last_name: "", phone: "" });
 
   // Configurações
@@ -61,6 +60,15 @@ const AdminDashboard = () => {
       platformFee: "20",
       enableCash: true,
       enableWallet: true,
+  });
+  
+  // Tabela de Preços e Configs Avançadas
+  const [pricingTiers, setPricingTiers] = useState<any[]>([]);
+  const [adminConfigs, setAdminConfigs] = useState({
+      night_start: "21:00",
+      night_end: "00:00",
+      night_increase: "3",
+      midnight_min_price: "25"
   });
 
   // Filtros
@@ -95,18 +103,14 @@ const AdminDashboard = () => {
         setRides(currentRides);
 
         // 2. Buscar Perfis
-        const { data: profilesData, error: profileError } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
-        if (profileError) console.error("Erro profiles:", profileError);
-
+        const { data: profilesData } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
         const allProfiles = profilesData || [];
         setPassengers(allProfiles.filter((p: any) => p.role === 'client'));
-        
-        // Filtra motoristas aprovados e pendentes
         const allDrivers = allProfiles.filter((p: any) => p.role === 'driver');
         setDrivers(allDrivers);
         setPendingDrivers(allDrivers.filter((p: any) => p.driver_status === 'PENDING'));
 
-        // 3. Buscar Configurações
+        // 3. Buscar Configurações Básicas (App Settings)
         const { data: settingsData } = await supabase.from('app_settings').select('*');
         if (settingsData) {
             const cash = settingsData.find(s => s.key === 'enable_cash');
@@ -114,7 +118,18 @@ const AdminDashboard = () => {
             setConfig(prev => ({ ...prev, enableCash: cash ? cash.value : true, enableWallet: wallet ? wallet.value : true }));
         }
 
-        // 4. Calcular Estatísticas
+        // 4. Buscar Tabela de Preços e Configs Admin
+        const { data: pricingData } = await supabase.from('pricing_tiers').select('*').order('display_order', { ascending: true });
+        if (pricingData) setPricingTiers(pricingData);
+
+        const { data: adminConfigData } = await supabase.from('admin_config').select('*');
+        if (adminConfigData) {
+            const newConf: any = {};
+            adminConfigData.forEach((item: any) => newConf[item.key] = item.value);
+            setAdminConfigs(prev => ({ ...prev, ...newConf }));
+        }
+
+        // 5. Calcular Estatísticas
         const today = new Date().toDateString();
         const ridesTodayCount = currentRides.filter(r => new Date(r.created_at).toDateString() === today).length;
         const totalRevenue = currentRides.filter(r => r.status === 'COMPLETED').reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
@@ -166,59 +181,47 @@ const AdminDashboard = () => {
   
   const handleSaveConfig = async () => {
       setLoading(true);
-      try { const { error } = await supabase.from('app_settings').upsert([ { key: 'enable_cash', value: config.enableCash }, { key: 'enable_wallet', value: config.enableWallet } ]); if (error) throw error; showSuccess("Configurações salvas no sistema!"); } catch (e: any) { showError(e.message); } finally { setLoading(false); }
+      try { 
+          // Salva Configs Básicas
+          await supabase.from('app_settings').upsert([ { key: 'enable_cash', value: config.enableCash }, { key: 'enable_wallet', value: config.enableWallet } ]);
+          
+          // Salva Configs Admin (Horários e Taxas)
+          const adminConfigUpdates = Object.entries(adminConfigs).map(([key, value]) => ({ key, value }));
+          await supabase.from('admin_config').upsert(adminConfigUpdates);
+
+          // Salva Tabela de Preços
+          for (const tier of pricingTiers) {
+              await supabase.from('pricing_tiers').update({ price: tier.price, label: tier.label }).eq('id', tier.id);
+          }
+
+          showSuccess("Todas as configurações foram salvas!"); 
+      } catch (e: any) { 
+          showError(e.message); 
+      } finally { 
+          setLoading(false); 
+      }
+  };
+
+  const updatePriceTier = (id: string, field: string, value: any) => {
+      setPricingTiers(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t));
   };
 
   // --- APPROVAL LOGIC ---
-  const openReview = (driver: any) => {
-      setReviewDriver(driver);
-      setJustApproved(false);
-  };
-
+  const openReview = (driver: any) => { setReviewDriver(driver); setJustApproved(false); };
   const sendWhatsAppNotice = (driver: any) => {
       if (driver.phone) {
           const cleanPhone = driver.phone.replace(/\D/g, ''); 
           const finalPhone = cleanPhone.length <= 11 ? `55${cleanPhone}` : cleanPhone;
-          
-          const message = encodeURIComponent(
-              `Olá ${driver.first_name}! 🚗💨\n\n` +
-              `Sua conta de motorista na GoldDrive foi *APROVADA* com sucesso! 🎉\n\n` +
-              `Você já pode acessar o aplicativo e começar a aceitar corridas.\n\n` +
-              `Boas viagens!\nEquipe GoldDrive`
-          );
-          
+          const message = encodeURIComponent(`Olá ${driver.first_name}! 🚗💨\n\nSua conta de motorista na GoldDrive foi *APROVADA* com sucesso! 🎉\n\nVocê já pode acessar o aplicativo e começar a aceitar corridas.\n\nBoas viagens!\nEquipe GoldDrive`);
           window.open(`https://wa.me/${finalPhone}?text=${message}`, '_blank');
-      } else {
-          showError("Motorista sem telefone cadastrado.");
-      }
+      } else { showError("Motorista sem telefone cadastrado."); }
   };
-
   const approveDriver = async (driver: any) => {
-      try {
-          const { error } = await supabase.from('profiles').update({ driver_status: 'APPROVED' }).eq('id', driver.id);
-          if (error) throw error;
-
-          showSuccess(`${driver.first_name} foi aprovado!`);
-          
-          setJustApproved(true); // Muda a tela para sucesso
-          fetchData(); // Atualiza a lista de fundo
-      } catch (e: any) {
-          showError("Erro ao aprovar: " + e.message);
-      }
+      try { const { error } = await supabase.from('profiles').update({ driver_status: 'APPROVED' }).eq('id', driver.id); if (error) throw error; showSuccess(`${driver.first_name} foi aprovado!`); setJustApproved(true); fetchData(); } catch (e: any) { showError("Erro: " + e.message); }
   };
-
   const rejectDriver = async (driver: any) => {
-      try {
-          const { error } = await supabase.from('profiles').update({ driver_status: 'REJECTED' }).eq('id', driver.id);
-          if (error) throw error;
-          showSuccess("Motorista reprovado.");
-          setReviewDriver(null);
-          fetchData();
-      } catch (e: any) {
-          showError(e.message);
-      }
+      try { const { error } = await supabase.from('profiles').update({ driver_status: 'REJECTED' }).eq('id', driver.id); if (error) throw error; showSuccess("Motorista reprovado."); setReviewDriver(null); fetchData(); } catch (e: any) { showError(e.message); }
   };
-
 
   // --- UI COMPONENTS ---
   const StatCard = ({ title, value, icon: Icon, colorClass, subtext }: any) => (
@@ -508,47 +511,155 @@ const AdminDashboard = () => {
                       </div>
                   )}
 
-                  {/* --- TAB: CONFIGURAÇÕES --- */}
+                  {/* --- TAB: CONFIGURAÇÕES (NOVO LAYOUT) --- */}
                   {activeTab === 'config' && (
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in fade-in slide-in-from-bottom-8">
-                          <Card className="border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] h-fit">
-                              <CardHeader>
-                                  <CardTitle className="flex items-center gap-2"><Settings className="w-5 h-5" /> Parâmetros do Sistema</CardTitle>
-                                  <CardDescription>Ajuste as variáveis globais da plataforma.</CardDescription>
-                              </CardHeader>
-                              <CardContent className="space-y-6">
-                                  <div className="space-y-2">
-                                      <Label>Taxa da Plataforma (%)</Label>
-                                      <div className="flex gap-2 items-center">
-                                          <Input type="number" value={config.platformFee} onChange={e => setConfig({...config, platformFee: e.target.value})} className="rounded-xl h-12" />
-                                          <span className="text-muted-foreground font-bold">%</span>
-                                      </div>
-                                  </div>
+                      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8">
+                          <Tabs defaultValue="general" className="w-full">
+                              <TabsList className="bg-slate-200 dark:bg-slate-800 rounded-xl p-1 mb-6">
+                                  <TabsTrigger value="general" className="rounded-lg">Geral</TabsTrigger>
+                                  <TabsTrigger value="values" className="rounded-lg">Valores & Tabela</TabsTrigger>
+                              </TabsList>
 
-                                  <Separator />
-                                  
-                                  <div className="space-y-4">
-                                      <div className="flex items-center justify-between">
-                                          <div className="space-y-0.5">
-                                              <Label className="text-base font-bold flex items-center gap-2"><Banknote className="w-4 h-4 text-green-600" /> Dinheiro / PIX</Label>
-                                              <p className="text-sm text-muted-foreground">Permitir pagamentos diretos ao motorista.</p>
-                                          </div>
-                                          <Switch checked={config.enableCash} onCheckedChange={(val) => setConfig({...config, enableCash: val})} />
+                              <TabsContent value="general">
+                                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                      <Card className="border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] h-fit">
+                                          <CardHeader>
+                                              <CardTitle className="flex items-center gap-2"><Settings className="w-5 h-5" /> Configurações Gerais</CardTitle>
+                                              <CardDescription>Parâmetros globais da plataforma.</CardDescription>
+                                          </CardHeader>
+                                          <CardContent className="space-y-6">
+                                              <div className="space-y-2">
+                                                  <Label>Taxa da Plataforma (%)</Label>
+                                                  <div className="flex gap-2 items-center">
+                                                      <Input type="number" value={config.platformFee} onChange={e => setConfig({...config, platformFee: e.target.value})} className="rounded-xl h-12" />
+                                                      <span className="text-muted-foreground font-bold">%</span>
+                                                  </div>
+                                              </div>
+                                              <Separator />
+                                              <div className="space-y-4">
+                                                  <div className="flex items-center justify-between">
+                                                      <div className="space-y-0.5">
+                                                          <Label className="text-base font-bold flex items-center gap-2"><Banknote className="w-4 h-4 text-green-600" /> Dinheiro / PIX</Label>
+                                                          <p className="text-sm text-muted-foreground">Permitir pagamentos diretos.</p>
+                                                      </div>
+                                                      <Switch checked={config.enableCash} onCheckedChange={(val) => setConfig({...config, enableCash: val})} />
+                                                  </div>
+                                                  <div className="flex items-center justify-between">
+                                                      <div className="space-y-0.5">
+                                                          <Label className="text-base font-bold flex items-center gap-2"><Wallet className="w-4 h-4 text-blue-600" /> Carteira Digital</Label>
+                                                          <p className="text-sm text-muted-foreground">Permitir uso do saldo do app.</p>
+                                                      </div>
+                                                      <Switch checked={config.enableWallet} onCheckedChange={(val) => setConfig({...config, enableWallet: val})} />
+                                                  </div>
+                                              </div>
+                                          </CardContent>
+                                          <CardFooter>
+                                              <Button onClick={handleSaveConfig} disabled={loading} className="w-full h-12 rounded-xl font-bold bg-slate-900 text-white"><Save className="w-4 h-4 mr-2" /> Salvar Tudo</Button>
+                                          </CardFooter>
+                                      </Card>
+                                  </div>
+                              </TabsContent>
+
+                              <TabsContent value="values">
+                                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                                      {/* Coluna Esquerda: Horários e Infos */}
+                                      <div className="space-y-6">
+                                          <Card className="border-0 shadow-xl bg-slate-900 text-white rounded-[32px] overflow-hidden">
+                                              <CardHeader>
+                                                  <CardTitle className="flex items-center gap-2 text-yellow-500"><MoonIcon className="w-5 h-5" /> Taxa Noturna</CardTitle>
+                                                  <CardDescription className="text-slate-400">Configuração de valores para a noite.</CardDescription>
+                                              </CardHeader>
+                                              <CardContent className="space-y-4">
+                                                  <div className="grid grid-cols-2 gap-4">
+                                                      <div className="space-y-2">
+                                                          <Label className="text-slate-300">Início (21h)</Label>
+                                                          <Input type="time" value={adminConfigs.night_start} onChange={e => setAdminConfigs({...adminConfigs, night_start: e.target.value})} className="bg-slate-800 border-0 text-white rounded-xl" />
+                                                      </div>
+                                                      <div className="space-y-2">
+                                                          <Label className="text-slate-300">Fim (00h)</Label>
+                                                          <Input type="time" value={adminConfigs.night_end} onChange={e => setAdminConfigs({...adminConfigs, night_end: e.target.value})} className="bg-slate-800 border-0 text-white rounded-xl" />
+                                                      </div>
+                                                  </div>
+                                                  <div className="space-y-2">
+                                                      <Label className="text-slate-300">Acréscimo no Valor (R$)</Label>
+                                                      <Input type="number" value={adminConfigs.night_increase} onChange={e => setAdminConfigs({...adminConfigs, night_increase: e.target.value})} className="bg-slate-800 border-0 text-white rounded-xl font-bold text-lg" />
+                                                      <p className="text-xs text-slate-500">Valor somado à tabela normal neste horário.</p>
+                                                  </div>
+                                                  <div className="space-y-2">
+                                                      <Label className="text-slate-300">Mínima após 00h (R$)</Label>
+                                                      <Input type="number" value={adminConfigs.midnight_min_price} onChange={e => setAdminConfigs({...adminConfigs, midnight_min_price: e.target.value})} className="bg-slate-800 border-0 text-white rounded-xl font-bold text-lg" />
+                                                      <p className="text-xs text-slate-500">Nenhuma corrida será menor que este valor na madrugada.</p>
+                                                  </div>
+                                              </CardContent>
+                                          </Card>
+
+                                          <Card className="border-0 bg-yellow-100 border-yellow-200 text-yellow-900 rounded-[32px]">
+                                              <CardContent className="p-6">
+                                                  <h4 className="font-bold mb-2 flex items-center gap-2"><AlertTriangle className="w-4 h-4"/> Regras Importantes</h4>
+                                                  <ul className="text-sm space-y-2 list-disc list-inside">
+                                                      <li>Acima de 8 km o valor é negociado ou calculado livremente.</li>
+                                                      <li>Paradas e "Bate e Volta" devem ser combinados no chat.</li>
+                                                      <li>Estas configurações afetam o cálculo automático do app para o passageiro.</li>
+                                                  </ul>
+                                              </CardContent>
+                                          </Card>
                                       </div>
-                                      
-                                      <div className="flex items-center justify-between">
-                                          <div className="space-y-0.5">
-                                              <Label className="text-base font-bold flex items-center gap-2"><Wallet className="w-4 h-4 text-blue-600" /> Carteira Digital</Label>
-                                              <p className="text-sm text-muted-foreground">Permitir uso do saldo do app.</p>
-                                          </div>
-                                          <Switch checked={config.enableWallet} onCheckedChange={(val) => setConfig({...config, enableWallet: val})} />
+
+                                      {/* Coluna Direita: Tabela de Preços */}
+                                      <div className="lg:col-span-2">
+                                          <Card className="border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] overflow-hidden">
+                                              <CardHeader className="flex flex-row items-center justify-between">
+                                                  <div>
+                                                      <CardTitle className="flex items-center gap-2"><List className="w-5 h-5" /> Tabela de Preços Fixa</CardTitle>
+                                                      <CardDescription>Defina o valor cobrado por distância.</CardDescription>
+                                                  </div>
+                                                  <Button onClick={handleSaveConfig} disabled={loading} className="bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-lg"><Save className="w-4 h-4 mr-2" /> Salvar Alterações</Button>
+                                              </CardHeader>
+                                              <CardContent className="p-0">
+                                                  <div className="max-h-[600px] overflow-y-auto custom-scrollbar">
+                                                      <Table>
+                                                          <TableHeader className="bg-slate-100 dark:bg-slate-800 sticky top-0 z-10">
+                                                              <TableRow>
+                                                                  <TableHead className="pl-6 w-1/2">Faixa de Distância (Descrição)</TableHead>
+                                                                  <TableHead className="w-1/4">Valor (R$)</TableHead>
+                                                                  <TableHead className="w-1/4"></TableHead>
+                                                              </TableRow>
+                                                          </TableHeader>
+                                                          <TableBody>
+                                                              {pricingTiers.map((tier) => (
+                                                                  <TableRow key={tier.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                                                                      <TableCell className="pl-6">
+                                                                          <Input 
+                                                                              value={tier.label} 
+                                                                              onChange={(e) => updatePriceTier(tier.id, 'label', e.target.value)}
+                                                                              className="bg-transparent border-0 font-medium focus-visible:ring-0 px-0 h-auto"
+                                                                          />
+                                                                      </TableCell>
+                                                                      <TableCell>
+                                                                          <div className="relative">
+                                                                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-bold">R$</span>
+                                                                              <Input 
+                                                                                  type="number" 
+                                                                                  value={tier.price} 
+                                                                                  onChange={(e) => updatePriceTier(tier.id, 'price', e.target.value)}
+                                                                                  className="pl-9 font-bold bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 rounded-xl"
+                                                                              />
+                                                                          </div>
+                                                                      </TableCell>
+                                                                      <TableCell className="text-xs text-muted-foreground text-right pr-6">
+                                                                          Editável
+                                                                      </TableCell>
+                                                                  </TableRow>
+                                                              ))}
+                                                          </TableBody>
+                                                      </Table>
+                                                  </div>
+                                              </CardContent>
+                                          </Card>
                                       </div>
                                   </div>
-                              </CardContent>
-                              <CardFooter>
-                                  <Button onClick={handleSaveConfig} disabled={loading} className="w-full h-12 rounded-xl font-bold bg-slate-900 text-white"><Save className="w-4 h-4 mr-2" /> {loading ? "Salvando..." : "Salvar Alterações"}</Button>
-                              </CardFooter>
-                          </Card>
+                              </TabsContent>
+                          </Tabs>
                       </div>
                   )}
               </div>
@@ -569,7 +680,7 @@ const AdminDashboard = () => {
                         )}
                         <div className="flex items-center gap-4 relative z-10">
                             <Avatar className="w-16 h-16 border-4 border-white shadow-xl">
-                                <AvatarImage src={reviewDriver.avatar_url} />
+                                <AvatarImage src={reviewDriver.face_photo_url || reviewDriver.avatar_url} />
                                 <AvatarFallback className="text-black bg-yellow-500 font-bold text-xl">{reviewDriver.first_name[0]}</AvatarFallback>
                             </Avatar>
                             <div>
