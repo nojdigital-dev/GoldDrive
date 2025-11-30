@@ -5,7 +5,7 @@ import {
   Sun, Moon, PanelLeftClose, PanelLeftOpen, DollarSign, Clock, 
   CheckCircle, TrendingUp, Trash2, Edit, Mail, Search,
   CreditCard, BellRing, Save, AlertTriangle, Smartphone, Globe,
-  Menu, Banknote, FileText, Check, X, ExternalLink
+  Menu, Banknote, FileText, Check, X, ExternalLink, Camera
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -49,7 +49,11 @@ const AdminDashboard = () => {
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [reviewDriver, setReviewDriver] = useState<any>(null); // Estado para o modal de análise
+  
+  // Review Driver State
+  const [reviewDriver, setReviewDriver] = useState<any>(null);
+  const [justApproved, setJustApproved] = useState(false); // Estado para controlar tela de sucesso
+
   const [editFormData, setEditFormData] = useState({ first_name: "", last_name: "", phone: "" });
 
   // Configurações
@@ -166,31 +170,38 @@ const AdminDashboard = () => {
   };
 
   // --- APPROVAL LOGIC ---
+  const openReview = (driver: any) => {
+      setReviewDriver(driver);
+      setJustApproved(false);
+  };
+
+  const sendWhatsAppNotice = (driver: any) => {
+      if (driver.phone) {
+          const cleanPhone = driver.phone.replace(/\D/g, ''); 
+          const finalPhone = cleanPhone.length <= 11 ? `55${cleanPhone}` : cleanPhone;
+          
+          const message = encodeURIComponent(
+              `Olá ${driver.first_name}! 🚗💨\n\n` +
+              `Sua conta de motorista na GoldDrive foi *APROVADA* com sucesso! 🎉\n\n` +
+              `Você já pode acessar o aplicativo e começar a aceitar corridas.\n\n` +
+              `Boas viagens!\nEquipe GoldDrive`
+          );
+          
+          window.open(`https://wa.me/${finalPhone}?text=${message}`, '_blank');
+      } else {
+          showError("Motorista sem telefone cadastrado.");
+      }
+  };
+
   const approveDriver = async (driver: any) => {
       try {
-          // Atualiza status
           const { error } = await supabase.from('profiles').update({ driver_status: 'APPROVED' }).eq('id', driver.id);
           if (error) throw error;
 
           showSuccess(`${driver.first_name} foi aprovado!`);
-          setReviewDriver(null);
-          fetchData(); // Atualiza listas
-
-          // Integração WhatsApp
-          if (driver.phone) {
-              const cleanPhone = driver.phone.replace(/\D/g, ''); // Remove formatação
-              // Adiciona 55 se não tiver (assumindo BR)
-              const finalPhone = cleanPhone.length <= 11 ? `55${cleanPhone}` : cleanPhone;
-              
-              const message = encodeURIComponent(
-                  `Olá ${driver.first_name}! 🚗💨\n\n` +
-                  `Sua conta de motorista na GoldDrive foi *APROVADA* com sucesso! 🎉\n\n` +
-                  `Você já pode acessar o aplicativo e começar a aceitar corridas.\n\n` +
-                  `Boas viagens!\nEquipe GoldDrive`
-              );
-              
-              window.open(`https://wa.me/${finalPhone}?text=${message}`, '_blank');
-          }
+          
+          setJustApproved(true); // Muda a tela para sucesso
+          fetchData(); // Atualiza a lista de fundo
       } catch (e: any) {
           showError("Erro ao aprovar: " + e.message);
       }
@@ -408,7 +419,7 @@ const AdminDashboard = () => {
                                                 <TableCell><Badge variant="outline" className="font-mono">{driver.car_model || 'N/A'} • {driver.car_plate}</Badge></TableCell>
                                                 <TableCell className="text-muted-foreground">{new Date(driver.created_at).toLocaleDateString()}</TableCell>
                                                 <TableCell className="text-right pr-8">
-                                                    <Button onClick={() => setReviewDriver(driver)} className="bg-slate-900 text-white hover:bg-black font-bold h-10 px-6 rounded-xl shadow-lg shadow-slate-900/10">Analisar</Button>
+                                                    <Button onClick={() => openReview(driver)} className="bg-slate-900 text-white hover:bg-black font-bold h-10 px-6 rounded-xl shadow-lg shadow-slate-900/10">Analisar</Button>
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -550,18 +561,28 @@ const AdminDashboard = () => {
             {reviewDriver && (
                 <div className="flex flex-col h-[85vh]">
                     {/* Header */}
-                    <div className="bg-slate-900 text-white p-6 shrink-0">
-                        <div className="flex items-center gap-4">
-                            <Avatar className="w-16 h-16 border-4 border-yellow-500 shadow-xl">
-                                <AvatarImage src={reviewDriver.avatar_url} />
+                    <div className="bg-slate-900 text-white p-6 shrink-0 relative overflow-hidden">
+                        {justApproved && (
+                             <div className="absolute inset-0 bg-green-600 z-0 flex items-center justify-center animate-in fade-in duration-500">
+                                 <div className="absolute inset-0 bg-black/10 pattern-dots" />
+                             </div>
+                        )}
+                        <div className="flex items-center gap-4 relative z-10">
+                            <Avatar className="w-16 h-16 border-4 border-white shadow-xl">
+                                <AvatarImage src={reviewDriver.face_photo_url || reviewDriver.avatar_url} />
                                 <AvatarFallback className="text-black bg-yellow-500 font-bold text-xl">{reviewDriver.first_name[0]}</AvatarFallback>
                             </Avatar>
                             <div>
-                                <h2 className="text-2xl font-black">{reviewDriver.first_name} {reviewDriver.last_name}</h2>
+                                <h2 className="text-2xl font-black">{justApproved ? "Motorista Aprovado!" : `${reviewDriver.first_name} ${reviewDriver.last_name}`}</h2>
                                 <div className="flex items-center gap-3 text-sm text-gray-300">
-                                    <span className="flex items-center gap-1"><Smartphone className="w-3 h-3" /> {reviewDriver.phone}</span>
-                                    <span className="w-1 h-1 bg-gray-500 rounded-full" />
-                                    <span className="font-mono">CPF: {reviewDriver.cpf}</span>
+                                    {!justApproved && (
+                                        <>
+                                            <span className="flex items-center gap-1"><Smartphone className="w-3 h-3" /> {reviewDriver.phone}</span>
+                                            <span className="w-1 h-1 bg-gray-500 rounded-full" />
+                                            <span className="font-mono">CPF: {reviewDriver.cpf}</span>
+                                        </>
+                                    )}
+                                    {justApproved && <span className="font-bold text-white flex items-center gap-2"><CheckCircle className="w-4 h-4"/> Acesso liberado no sistema.</span>}
                                 </div>
                             </div>
                         </div>
@@ -569,73 +590,109 @@ const AdminDashboard = () => {
 
                     {/* Content Scrollable */}
                     <ScrollArea className="flex-1 bg-gray-50 dark:bg-slate-900 p-6">
-                        <div className="space-y-6">
-                            {/* Veículo Card */}
-                            <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-border/50">
-                                <h3 className="text-sm font-bold uppercase text-muted-foreground mb-3 flex items-center gap-2"><Car className="w-4 h-4" /> Dados do Veículo</h3>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl">
-                                        <p className="text-xs text-muted-foreground">Modelo</p>
-                                        <p className="font-bold">{reviewDriver.car_model}</p>
-                                    </div>
-                                    <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl">
-                                        <p className="text-xs text-muted-foreground">Placa</p>
-                                        <p className="font-bold font-mono uppercase">{reviewDriver.car_plate}</p>
-                                    </div>
-                                    <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl">
-                                        <p className="text-xs text-muted-foreground">Cor</p>
-                                        <p className="font-bold">{reviewDriver.car_color}</p>
-                                    </div>
-                                    <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl">
-                                        <p className="text-xs text-muted-foreground">Ano</p>
-                                        <p className="font-bold">{reviewDriver.car_year}</p>
+                        {!justApproved ? (
+                            <div className="space-y-6">
+                                {/* Veículo Card */}
+                                <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-border/50">
+                                    <h3 className="text-sm font-bold uppercase text-muted-foreground mb-3 flex items-center gap-2"><Car className="w-4 h-4" /> Dados do Veículo</h3>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                        <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl">
+                                            <p className="text-xs text-muted-foreground">Modelo</p>
+                                            <p className="font-bold">{reviewDriver.car_model}</p>
+                                        </div>
+                                        <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl">
+                                            <p className="text-xs text-muted-foreground">Placa</p>
+                                            <p className="font-bold font-mono uppercase">{reviewDriver.car_plate}</p>
+                                        </div>
+                                        <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl">
+                                            <p className="text-xs text-muted-foreground">Cor</p>
+                                            <p className="font-bold">{reviewDriver.car_color}</p>
+                                        </div>
+                                        <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl">
+                                            <p className="text-xs text-muted-foreground">Ano</p>
+                                            <p className="font-bold">{reviewDriver.car_year}</p>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
 
-                            {/* Documentos */}
-                            <div>
-                                <h3 className="text-sm font-bold uppercase text-muted-foreground mb-3 flex items-center gap-2"><FileText className="w-4 h-4" /> Documentação (CNH)</h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <p className="text-xs font-bold pl-2">Frente</p>
-                                        <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-lg border-2 border-slate-200 dark:border-slate-700 relative group cursor-pointer" onClick={() => window.open(reviewDriver.cnh_front_url, '_blank')}>
-                                            <img src={reviewDriver.cnh_front_url} className="w-full h-full object-cover transition-transform group-hover:scale-105" alt="CNH Frente" />
-                                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                                <ExternalLink className="text-white w-8 h-8" />
+                                {/* Fotos e Documentos */}
+                                <div>
+                                    <h3 className="text-sm font-bold uppercase text-muted-foreground mb-3 flex items-center gap-2"><Camera className="w-4 h-4" /> Fotos de Cadastro</h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        
+                                        {/* Selfie */}
+                                        <div className="space-y-2">
+                                            <p className="text-xs font-bold pl-2 text-blue-600">Selfie (Rosto)</p>
+                                            <div className="aspect-[3/4] bg-black rounded-xl overflow-hidden shadow-lg border-2 border-blue-100 dark:border-blue-900 relative group cursor-pointer" onClick={() => window.open(reviewDriver.face_photo_url || reviewDriver.avatar_url, '_blank')}>
+                                                <img src={reviewDriver.face_photo_url || reviewDriver.avatar_url} className="w-full h-full object-cover transition-transform group-hover:scale-105" alt="Selfie" />
+                                                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                                    <ExternalLink className="text-white w-8 h-8" />
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <p className="text-xs font-bold pl-2">Verso</p>
-                                        <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-lg border-2 border-slate-200 dark:border-slate-700 relative group cursor-pointer" onClick={() => window.open(reviewDriver.cnh_back_url, '_blank')}>
-                                            <img src={reviewDriver.cnh_back_url} className="w-full h-full object-cover transition-transform group-hover:scale-105" alt="CNH Verso" />
-                                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                                <ExternalLink className="text-white w-8 h-8" />
+
+                                        {/* CNH Frente */}
+                                        <div className="space-y-2">
+                                            <p className="text-xs font-bold pl-2">CNH Frente</p>
+                                            <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-lg border-2 border-slate-200 dark:border-slate-700 relative group cursor-pointer" onClick={() => window.open(reviewDriver.cnh_front_url, '_blank')}>
+                                                <img src={reviewDriver.cnh_front_url} className="w-full h-full object-cover transition-transform group-hover:scale-105" alt="CNH Frente" />
+                                                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                                    <ExternalLink className="text-white w-8 h-8" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        {/* CNH Verso */}
+                                        <div className="space-y-2">
+                                            <p className="text-xs font-bold pl-2">CNH Verso</p>
+                                            <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-lg border-2 border-slate-200 dark:border-slate-700 relative group cursor-pointer" onClick={() => window.open(reviewDriver.cnh_back_url, '_blank')}>
+                                                <img src={reviewDriver.cnh_back_url} className="w-full h-full object-cover transition-transform group-hover:scale-105" alt="CNH Verso" />
+                                                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                                    <ExternalLink className="text-white w-8 h-8" />
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
+                        ) : (
+                            <div className="h-full flex flex-col items-center justify-center text-center p-8 animate-in zoom-in duration-300">
+                                <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mb-6 shadow-green-200 shadow-xl">
+                                    <CheckCircle className="w-12 h-12 text-green-600" />
+                                </div>
+                                <h2 className="text-3xl font-black text-slate-900 mb-2">Sucesso!</h2>
+                                <p className="text-gray-500 max-w-md mb-8">
+                                    O motorista foi aprovado e o acesso ao aplicativo já foi liberado. Envie uma notificação para avisá-lo.
+                                </p>
+                                <Button 
+                                    className="h-16 px-8 rounded-2xl bg-green-600 hover:bg-green-700 text-white font-bold text-lg shadow-xl shadow-green-600/20 w-full max-w-sm animate-bounce"
+                                    onClick={() => sendWhatsAppNotice(reviewDriver)}
+                                >
+                                    <Smartphone className="mr-2 w-6 h-6" /> Enviar Aviso no WhatsApp
+                                </Button>
+                                <Button variant="ghost" className="mt-4" onClick={() => setReviewDriver(null)}>Fechar Janela</Button>
+                            </div>
+                        )}
                     </ScrollArea>
 
                     {/* Footer Actions */}
-                    <div className="p-4 bg-white dark:bg-slate-950 border-t border-border flex gap-3 shrink-0">
-                        <Button 
-                            variant="destructive" 
-                            className="flex-1 h-14 rounded-xl font-bold text-lg" 
-                            onClick={() => rejectDriver(reviewDriver)}
-                        >
-                            <X className="mr-2 w-5 h-5" /> Reprovar
-                        </Button>
-                        <Button 
-                            className="flex-[2] h-14 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold text-lg shadow-lg shadow-green-600/20" 
-                            onClick={() => approveDriver(reviewDriver)}
-                        >
-                            <Check className="mr-2 w-5 h-5" /> Aprovar e Notificar
-                        </Button>
-                    </div>
+                    {!justApproved && (
+                        <div className="p-4 bg-white dark:bg-slate-950 border-t border-border flex gap-3 shrink-0">
+                            <Button 
+                                variant="destructive" 
+                                className="flex-1 h-14 rounded-xl font-bold text-lg" 
+                                onClick={() => rejectDriver(reviewDriver)}
+                            >
+                                <X className="mr-2 w-5 h-5" /> Reprovar
+                            </Button>
+                            <Button 
+                                className="flex-[2] h-14 bg-slate-900 hover:bg-black text-white rounded-xl font-bold text-lg shadow-lg" 
+                                onClick={() => approveDriver(reviewDriver)}
+                            >
+                                <Check className="mr-2 w-5 h-5" /> Aprovar Cadastro
+                            </Button>
+                        </div>
+                    )}
                 </div>
             )}
         </DialogContent>
