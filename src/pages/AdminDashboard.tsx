@@ -5,7 +5,8 @@ import {
   Sun, Moon, PanelLeftClose, PanelLeftOpen, DollarSign, Clock, 
   TrendingUp, Trash2, Edit, Mail, Search,
   CreditCard, Loader2, Save, AlertTriangle, Menu,
-  Phone, Calendar, Star, CheckCircle2, FileText, XCircle, Banknote
+  Phone, Calendar, Star, CheckCircle2, FileText, XCircle, Banknote,
+  MapPin, Navigation, ArrowRight, KeyRound
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -24,6 +25,7 @@ import { showSuccess, showError } from "@/utils/toast";
 import { ResponsiveContainer, AreaChart, Area, CartesianGrid, XAxis, YAxis, Tooltip } from 'recharts';
 import { useTheme } from "@/components/theme-provider";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -45,20 +47,23 @@ const AdminDashboard = () => {
   // Estados de Gerenciamento
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [viewUserData, setViewUserData] = useState<any>(null);
+  const [userRidesList, setUserRidesList] = useState<any[]>([]); // Lista de corridas do usuário selecionado
   const [userStats, setUserStats] = useState({ totalRides: 0, totalMoney: 0, lastRide: '', canceledRides: 0 });
   const [requestModalOpen, setRequestModalOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
   
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [editFormData, setEditFormData] = useState({ first_name: "", last_name: "", phone: "" });
+  const [editFormData, setEditFormData] = useState({ first_name: "", last_name: "", phone: "", cpf: "" });
+
+  // Detalhes da Corrida (NOVO)
+  const [viewRideData, setViewRideData] = useState<any>(null);
 
   // Configurações
   const [paymentSettings, setPaymentSettings] = useState({ wallet: true, cash: true });
   const [platformFee, setPlatformFee] = useState("20");
 
   // Filtros
-  const [selectedRide, setSelectedRide] = useState<any>(null);
   const [filterStatus, setFilterStatus] = useState("ALL");
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -75,7 +80,7 @@ const AdminDashboard = () => {
             setAdminProfile(profileData);
         }
 
-        // Buscas
+        // Buscas Otimizadas
         const { data: ridesData } = await supabase.rpc('get_admin_rides');
         const currentRides = Array.isArray(ridesData) ? ridesData : [];
         setRides(currentRides);
@@ -94,7 +99,7 @@ const AdminDashboard = () => {
             setPaymentSettings({ wallet, cash });
         }
 
-        // Stats Calc
+        // Stats
         const today = new Date().toDateString();
         setStats({
             revenue: currentRides.filter((r: any) => r.status === 'COMPLETED').reduce((acc: number, curr: any) => acc + (Number(curr.price) || 0), 0),
@@ -103,7 +108,7 @@ const AdminDashboard = () => {
             activeRides: currentRides.filter((r: any) => ['SEARCHING', 'ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(r.status)).length
         });
 
-        // Chart Data
+        // Chart
         const chartMap = new Map();
         for(let i=6; i>=0; i--) {
             const d = new Date(); d.setDate(d.getDate() - i);
@@ -117,6 +122,17 @@ const AdminDashboard = () => {
             }
         });
         setChartData(Array.from(chartMap.values()));
+
+        // Transactions Mock
+        const recentTrans = currentRides.slice(0, 15).map((r: any) => ({
+            id: r.id, 
+            date: r.created_at, 
+            amount: Number(r.platform_fee || 0), 
+            description: `Taxa Corrida #${r.id.substring(0,4)}`,
+            status: 'completed',
+            user: r.driver?.first_name || 'Motorista'
+        }));
+        setTransactions(recentTrans);
 
     } catch (e: any) { showError("Erro: " + e.message); } finally { setLoading(false); }
   };
@@ -142,20 +158,57 @@ const AdminDashboard = () => {
       }
   };
 
-  // Funções Auxiliares (View/Edit User) mantidas iguais ao anterior...
+  // User Actions
   const openViewUser = (user: any) => {
       const userRides = rides.filter(r => user.role === 'driver' ? r.driver_id === user.id : r.customer_id === user.id);
       const completed = userRides.filter(r => r.status === 'COMPLETED');
       const canceled = userRides.filter(r => r.status === 'CANCELLED');
       const total = completed.reduce((acc, curr) => acc + (user.role === 'driver' ? Number(curr.driver_earnings||0) : Number(curr.price||0)), 0);
-      setUserStats({ totalRides: completed.length, canceledRides: canceled.length, totalMoney: total, lastRide: userRides[0] ? new Date(userRides[0].created_at).toLocaleDateString() : 'Nunca' });
+      
+      setUserStats({ 
+          totalRides: completed.length, 
+          canceledRides: canceled.length, 
+          totalMoney: total, 
+          lastRide: userRides[0] ? new Date(userRides[0].created_at).toLocaleDateString() : 'Nunca' 
+      });
+      setUserRidesList(userRides);
       setViewUserData(user);
   };
-  const openEditUser = (user: any) => { setSelectedUser(user); setEditFormData({ first_name: user.first_name || "", last_name: user.last_name || "", phone: user.phone || "" }); setIsEditDialogOpen(true); };
-  const handleSaveUser = async () => { if (!selectedUser) return; await supabase.from('profiles').update(editFormData).eq('id', selectedUser.id); showSuccess("Atualizado!"); setIsEditDialogOpen(false); fetchData(); };
+
+  const openEditUser = (user: any) => { 
+      setSelectedUser(user); 
+      setEditFormData({ 
+          first_name: user.first_name || "", 
+          last_name: user.last_name || "", 
+          phone: user.phone || "",
+          cpf: user.cpf || ""
+      }); 
+      setIsEditDialogOpen(true); 
+  };
+
+  const handleSaveUser = async () => { 
+      if (!selectedUser) return; 
+      await supabase.from('profiles').update(editFormData).eq('id', selectedUser.id); 
+      showSuccess("Dados atualizados!"); 
+      setIsEditDialogOpen(false); 
+      fetchData(); 
+  };
+
   const openDeleteUser = (user: any) => { setSelectedUser(user); setIsDeleteDialogOpen(true); };
-  const handleDeleteUser = async () => { if (!selectedUser) return; await supabase.from('profiles').delete().eq('id', selectedUser.id); showSuccess("Removido."); setIsDeleteDialogOpen(false); fetchData(); };
-  const handleResetPassword = async (email: string) => { await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + '/update-password' }); showSuccess("Email de reset enviado."); };
+  
+  const handleDeleteUser = async () => { 
+      if (!selectedUser) return; 
+      await supabase.from('profiles').delete().eq('id', selectedUser.id); 
+      showSuccess("Usuário removido."); 
+      setIsDeleteDialogOpen(false); 
+      fetchData(); 
+  };
+
+  const handleResetPassword = async (email: string) => { 
+      if (!email) return showError("Email inválido");
+      await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + '/update-password' }); 
+      showSuccess(`Email enviado para ${email}`); 
+  };
 
   // --- COMPONENTS ---
 
@@ -169,6 +222,60 @@ const AdminDashboard = () => {
           </CardContent>
       </Card>
   );
+
+  const UserManagementTable = ({ data, type }: { data: any[], type: 'client' | 'driver' }) => {
+      const filtered = data.filter(u => 
+        (u.first_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) || 
+        (u.email?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+      );
+
+      return (
+          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
+              <div className="flex flex-col md:flex-row justify-between items-center bg-white/40 dark:bg-slate-900/40 p-4 rounded-2xl backdrop-blur-md gap-4">
+                   <div className="flex gap-4 text-sm font-bold text-muted-foreground w-full md:w-auto">
+                       <div className="flex items-center gap-2"><Users className="w-4 h-4"/> Total: <span className="text-foreground">{data.length}</span></div>
+                   </div>
+                   <div className="relative w-full md:w-64">
+                       <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                       <Input placeholder="Buscar..." className="pl-9 bg-white/50 dark:bg-slate-900/50 border-0 rounded-xl" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                   </div>
+              </div>
+
+              <Card className="border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] overflow-hidden">
+                  <CardHeader><CardTitle>Gerenciar {type === 'client' ? 'Passageiros' : 'Motoristas'}</CardTitle></CardHeader>
+                  <CardContent className="p-0">
+                      {loading ? (
+                          <div className="p-10 text-center flex flex-col items-center gap-2"><Loader2 className="animate-spin w-8 h-8 text-yellow-500" /><p className="text-muted-foreground">Carregando...</p></div>
+                      ) : filtered.length === 0 ? (
+                          <div className="p-10 text-center text-muted-foreground"><p>Nenhum usuário encontrado.</p></div>
+                      ) : (
+                          <div className="max-h-[60vh] overflow-y-auto custom-scrollbar">
+                              <Table>
+                                  <TableHeader className="bg-slate-50/50 dark:bg-slate-800/50 sticky top-0 z-10 backdrop-blur-md"><TableRow><TableHead className="pl-8">Usuário</TableHead><TableHead>Contato</TableHead>{type === 'driver' && <TableHead>Veículo</TableHead>}<TableHead>Saldo</TableHead><TableHead className="text-right pr-8">Ações</TableHead></TableRow></TableHeader>
+                                  <TableBody>
+                                      {filtered.map(u => (
+                                          <TableRow key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 border-b border-border/50 cursor-pointer" onClick={() => openViewUser(u)}>
+                                              <TableCell className="pl-8"><div className="flex items-center gap-3"><Avatar className="w-10 h-10 border-2 border-white shadow-sm"><AvatarImage src={u.avatar_url}/><AvatarFallback>{u.first_name?.[0]}</AvatarFallback></Avatar><div><p className="font-bold text-sm">{u.first_name} {u.last_name}</p><p className="text-xs text-muted-foreground">ID: {u.id.substring(0,6)}</p></div></div></TableCell>
+                                              <TableCell><div className="text-sm"><p>{u.email}</p><p className="text-muted-foreground text-xs">{u.phone || 'Sem telefone'}</p></div></TableCell>
+                                              {type === 'driver' && <TableCell><Badge variant="secondary" className="font-mono">{u.car_model || 'N/A'} • {u.car_plate}</Badge></TableCell>}
+                                              <TableCell className="font-bold text-green-600">R$ {Number(u.balance || 0).toFixed(2)}</TableCell>
+                                              <TableCell className="text-right pr-8">
+                                                  <div className="flex justify-end gap-2" onClick={e => e.stopPropagation()}>
+                                                      <Button variant="ghost" size="icon" onClick={() => openEditUser(u)}><Edit className="w-4 h-4 text-blue-500" /></Button>
+                                                      <Button variant="ghost" size="icon" onClick={() => openDeleteUser(u)}><Trash2 className="w-4 h-4 text-red-500" /></Button>
+                                                  </div>
+                                              </TableCell>
+                                          </TableRow>
+                                      ))}
+                                  </TableBody>
+                              </Table>
+                          </div>
+                      )}
+                  </CardContent>
+              </Card>
+          </div>
+      );
+  };
 
   return (
     <div className="flex h-screen bg-slate-50 dark:bg-slate-950 font-sans text-foreground overflow-hidden">
@@ -218,7 +325,7 @@ const AdminDashboard = () => {
                       </div>
                   )}
 
-                  {/* REQUESTS (SOLICITAÇÕES) */}
+                  {/* REQUESTS */}
                   {activeTab === 'requests' && (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in">
                           {pendingDrivers.length === 0 ? <div className="col-span-3 text-center py-20 text-gray-400">Nenhuma solicitação pendente.</div> : 
@@ -236,10 +343,33 @@ const AdminDashboard = () => {
                       </div>
                   )}
 
-                  {/* USERS/DRIVERS/RIDES (Tabelas Simplificadas para brevidade, lógica completa igual anterior) */}
-                  {activeTab === 'users' && <div className="space-y-4">{passengers.map(u => <div key={u.id} className="bg-white p-4 rounded-xl flex justify-between items-center shadow-sm cursor-pointer" onClick={() => openViewUser(u)}><div className="flex gap-3 items-center"><Avatar><AvatarImage src={u.avatar_url}/></Avatar><span className="font-bold">{u.first_name}</span></div><span>R$ {Number(u.balance).toFixed(2)}</span></div>)}</div>}
-                  {activeTab === 'drivers' && <div className="space-y-4">{drivers.map(u => <div key={u.id} className="bg-white p-4 rounded-xl flex justify-between items-center shadow-sm cursor-pointer" onClick={() => openViewUser(u)}><div className="flex gap-3 items-center"><Avatar><AvatarImage src={u.avatar_url}/></Avatar><div><p className="font-bold">{u.first_name}</p><p className="text-xs text-gray-500">{u.car_model}</p></div></div><span>R$ {Number(u.balance).toFixed(2)}</span></div>)}</div>}
-                  {activeTab === 'rides' && <div className="space-y-4">{rides.slice(0, 50).map(r => <div key={r.id} className="bg-white p-4 rounded-xl flex justify-between items-center shadow-sm"><span className="font-mono text-xs">#{r.id.slice(0,6)}</span><Badge variant="outline">{r.status}</Badge><span className="font-bold">R$ {Number(r.price).toFixed(2)}</span></div>)}</div>}
+                  {/* USERS/DRIVERS */}
+                  {activeTab === 'users' && <UserManagementTable data={passengers} type="client" />}
+                  {activeTab === 'drivers' && <UserManagementTable data={drivers} type="driver" />}
+
+                  {/* RIDES (LISTA GERAL) */}
+                  {activeTab === 'rides' && (
+                      <Card className="border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] overflow-hidden animate-in fade-in slide-in-from-bottom-8">
+                           <CardHeader className="flex flex-row items-center justify-between px-8 pt-8"><div><CardTitle className="text-2xl">Gerenciamento de Corridas</CardTitle><CardDescription>Total de {rides.length} corridas</CardDescription></div><div className="flex items-center gap-3"><Select value={filterStatus} onValueChange={setFilterStatus}><SelectTrigger className="w-[180px] h-10 rounded-xl bg-white dark:bg-slate-800"><SelectValue placeholder="Status" /></SelectTrigger><SelectContent><SelectItem value="ALL">Todos os Status</SelectItem><SelectItem value="COMPLETED">Finalizadas</SelectItem><SelectItem value="CANCELLED">Canceladas</SelectItem><SelectItem value="IN_PROGRESS">Em Andamento</SelectItem></SelectContent></Select></div></CardHeader>
+                           <CardContent className="p-0">
+                               <Table>
+                                   <TableHeader className="bg-slate-50/50 dark:bg-slate-800/50"><TableRow><TableHead className="pl-8">ID</TableHead><TableHead>Passageiro</TableHead><TableHead>Motorista</TableHead><TableHead>Status</TableHead><TableHead>Taxa App</TableHead><TableHead className="text-right pr-8">Valor Total</TableHead></TableRow></TableHeader>
+                                   <TableBody>
+                                       {rides.filter((r: any) => filterStatus === 'ALL' ? true : r.status === filterStatus).map((r: any) => (
+                                           <TableRow key={r.id} onClick={()=>setViewRideData(r)} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-border/50">
+                                               <TableCell className="pl-8 font-mono text-xs opacity-50">#{r.id.substring(0,8)}</TableCell>
+                                               <TableCell><div className="flex items-center gap-3"><Avatar className="w-8 h-8"><AvatarImage src={r.customer?.avatar_url}/><AvatarFallback>{r.customer?.first_name?.[0]}</AvatarFallback></Avatar><span className="font-medium">{r.customer?.first_name || 'Usuário'}</span></div></TableCell>
+                                               <TableCell>{r.driver ? <div className="flex items-center gap-3"><Avatar className="w-8 h-8"><AvatarImage src={r.driver?.avatar_url}/><AvatarFallback>{r.driver?.first_name?.[0]}</AvatarFallback></Avatar><div><p className="font-medium text-sm">{r.driver.first_name}</p></div></div> : <span className="text-muted-foreground text-sm italic">--</span>}</TableCell>
+                                               <TableCell><Badge className={`rounded-lg px-3 py-1 ${r.status === 'COMPLETED' ? 'bg-green-100 text-green-700' : r.status === 'CANCELLED' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>{r.status}</Badge></TableCell>
+                                               <TableCell className="font-bold text-slate-500">R$ {Number(r.platform_fee || 0).toFixed(2)}</TableCell>
+                                               <TableCell className="text-right pr-8 font-bold text-base">R$ {Number(r.price).toFixed(2)}</TableCell>
+                                           </TableRow>
+                                       ))}
+                                   </TableBody>
+                               </Table>
+                           </CardContent>
+                      </Card>
+                  )}
 
                   {/* CONFIGURAÇÕES */}
                   {activeTab === 'config' && (
@@ -267,7 +397,7 @@ const AdminDashboard = () => {
           </div>
       </main>
 
-      {/* MODAL DE APROVAÇÃO (KYC) */}
+      {/* MODAL: KYC REQUEST (Aprovação) */}
       <Dialog open={requestModalOpen} onOpenChange={setRequestModalOpen}>
           <DialogContent className="max-w-4xl bg-white rounded-[32px] border-0 p-0 overflow-hidden max-h-[90vh] overflow-y-auto">
               <div className="bg-slate-900 p-6 text-white flex justify-between items-center">
@@ -298,9 +428,215 @@ const AdminDashboard = () => {
           </DialogContent>
       </Dialog>
       
-      {/* Modais de User View/Edit/Delete reutilizados */}
-      <Dialog open={!!viewUserData} onOpenChange={(o) => !o && setViewUserData(null)}><DialogContent className="rounded-2xl bg-white"><div className="text-center p-6"><Avatar className="w-24 h-24 mx-auto mb-4"><AvatarImage src={viewUserData?.avatar_url}/></Avatar><h2 className="text-2xl font-black">{viewUserData?.first_name}</h2><p className="text-gray-500">{viewUserData?.email}</p><div className="grid grid-cols-2 gap-4 mt-6"><div className="bg-gray-50 p-4 rounded-xl"><p className="text-xs font-bold text-gray-400">SALDO</p><p className="font-black text-xl">R$ {Number(viewUserData?.balance || 0).toFixed(2)}</p></div><div className="bg-gray-50 p-4 rounded-xl"><p className="text-xs font-bold text-gray-400">CORRIDAS</p><p className="font-black text-xl">{userStats.totalRides}</p></div></div></div></DialogContent></Dialog>
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}><DialogContent className="rounded-2xl"><DialogHeader><DialogTitle>Editar</DialogTitle></DialogHeader><div className="space-y-4"><Input value={editFormData.first_name} onChange={e => setEditFormData({...editFormData, first_name: e.target.value})} /><Input value={editFormData.last_name} onChange={e => setEditFormData({...editFormData, last_name: e.target.value})} /><Input value={editFormData.phone} onChange={e => setEditFormData({...editFormData, phone: e.target.value})} /></div><DialogFooter><Button onClick={handleSaveUser}>Salvar</Button></DialogFooter></DialogContent></Dialog>
+      {/* MODAL: DETALHES DO USUÁRIO + LISTA DE CORRIDAS */}
+      <Dialog open={!!viewUserData} onOpenChange={(o) => !o && setViewUserData(null)}>
+        <DialogContent className="max-w-2xl bg-white dark:bg-slate-900 rounded-[32px] border-0 shadow-2xl overflow-hidden p-0 max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <div className={`h-32 w-full relative ${viewUserData?.role === 'driver' ? 'bg-yellow-500' : 'bg-slate-800'}`}>
+                <div className="absolute -bottom-10 left-8">
+                    <Avatar className="w-24 h-24 border-4 border-white dark:border-slate-900 shadow-lg bg-white"><AvatarImage src={viewUserData?.avatar_url} className="object-cover" /><AvatarFallback className="text-2xl font-bold bg-slate-100">{viewUserData?.first_name?.[0]}</AvatarFallback></Avatar>
+                </div>
+                <div className="absolute bottom-4 right-8 flex gap-2">
+                     <Badge className="bg-black/20 hover:bg-black/30 text-white backdrop-blur-md border-0 h-8 px-4">ID: {viewUserData?.id.substring(0,6)}</Badge>
+                     <Badge className="bg-white text-black hover:bg-gray-100 border-0 font-bold uppercase h-8 px-4">{viewUserData?.role === 'client' ? 'Passageiro' : 'Motorista'}</Badge>
+                </div>
+            </div>
+
+            <div className="pt-12 px-8 pb-8">
+                {/* Info Principal */}
+                <div className="flex flex-col sm:flex-row justify-between items-start mb-8 gap-4">
+                    <div>
+                        <h2 className="text-3xl font-black text-slate-900 dark:text-white leading-tight">{viewUserData?.first_name} {viewUserData?.last_name}</h2>
+                        <div className="flex flex-col gap-1 mt-2">
+                            <p className="text-muted-foreground flex items-center gap-2 font-medium"><Phone className="w-4 h-4 text-slate-400" /> {viewUserData?.phone || 'Sem telefone cadastrado'}</p>
+                            <p className="text-muted-foreground text-sm flex items-center gap-2"><Calendar className="w-4 h-4 text-slate-400" /> Cadastrado em: {viewUserData?.created_at ? new Date(viewUserData.created_at).toLocaleDateString() : '--'}</p>
+                        </div>
+                    </div>
+                    <div className="text-left sm:text-right w-full sm:w-auto bg-slate-50 dark:bg-slate-800 sm:bg-transparent sm:dark:bg-transparent p-4 sm:p-0 rounded-2xl">
+                        <p className="text-sm font-bold text-muted-foreground uppercase">Saldo em Carteira</p>
+                        <h3 className={`text-4xl font-black ${Number(viewUserData?.balance) < 0 ? 'text-red-500' : 'text-green-600'}`}>R$ {Number(viewUserData?.balance || 0).toFixed(2)}</h3>
+                    </div>
+                </div>
+
+                {/* Grid Estatísticas */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+                    <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700"><p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">{viewUserData?.role === 'driver' ? 'Total Ganho' : 'Total Gasto'}</p><p className="text-xl font-black text-slate-900 dark:text-white truncate">R$ {userStats.totalMoney.toFixed(2)}</p></div>
+                    <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700"><p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Viagens Feitas</p><p className="text-xl font-black text-slate-900 dark:text-white">{userStats.totalRides}</p></div>
+                    <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700"><p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Cancelamentos</p><p className="text-xl font-black text-red-600 dark:text-red-400">{userStats.canceledRides}</p></div>
+                    <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700"><p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Última Vez</p><p className="text-sm font-bold text-slate-900 dark:text-white truncate" title={userStats.lastRide}>{userStats.lastRide.split(' ')[0] || 'Nunca'}</p></div>
+                </div>
+
+                {/* Info Específica Motorista */}
+                {viewUserData?.role === 'driver' && (
+                    <div className="bg-yellow-50 dark:bg-yellow-900/10 p-5 rounded-2xl border border-yellow-100 dark:border-yellow-900/30 mb-8 flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left">
+                        <div className="w-16 h-16 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center text-yellow-600 dark:text-yellow-500 shrink-0"><Car className="w-8 h-8" /></div>
+                        <div className="flex-1">
+                            <p className="text-xs font-bold text-yellow-600 dark:text-yellow-500 uppercase mb-1">Veículo Cadastrado</p>
+                            <p className="font-black text-slate-900 dark:text-white text-xl">{viewUserData.car_model || 'Modelo não informado'}</p>
+                            <div className="flex flex-wrap justify-center sm:justify-start gap-2 mt-2">
+                                <span className="bg-white dark:bg-black/20 px-3 py-1 rounded-lg border border-black/5 font-mono font-bold text-sm shadow-sm">{viewUserData.car_plate || 'SEM-PLACA'}</span>
+                                <span className="bg-white dark:bg-black/20 px-3 py-1 rounded-lg border border-black/5 text-sm">{viewUserData.car_color}</span>
+                                <span className="bg-white dark:bg-black/20 px-3 py-1 rounded-lg border border-black/5 text-sm">{viewUserData.car_year}</span>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* HISTÓRICO DE CORRIDAS DO USUÁRIO */}
+                <div className="mb-8">
+                    <h3 className="text-sm font-bold text-muted-foreground uppercase mb-4 flex items-center gap-2"><MapIcon className="w-4 h-4"/> Histórico de Viagens</h3>
+                    <ScrollArea className="h-[250px] pr-4">
+                        <div className="space-y-3">
+                            {userRidesList.length === 0 ? <p className="text-center py-6 text-gray-400">Nenhuma viagem encontrada.</p> : 
+                            userRidesList.map(ride => (
+                                <div key={ride.id} onClick={() => setViewRideData(ride)} className="group flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer border border-transparent hover:border-slate-200">
+                                    <div className="flex items-center gap-3">
+                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${ride.status === 'COMPLETED' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                                            {ride.status === 'COMPLETED' ? <CheckCircle2 className="w-5 h-5"/> : <XCircle className="w-5 h-5"/>}
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-slate-900 dark:text-white text-sm">{new Date(ride.created_at).toLocaleDateString()} <span className="text-muted-foreground font-normal">• {new Date(ride.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span></p>
+                                            <p className="text-xs text-muted-foreground truncate max-w-[150px] md:max-w-[200px]">{ride.destination_address}</p>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="font-black text-slate-900 dark:text-white">R$ {Number(ride.price).toFixed(2)}</p>
+                                        <span className="text-[10px] text-blue-500 font-bold group-hover:underline flex items-center justify-end gap-1">Ver Detalhes <ArrowRight className="w-3 h-3"/></span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </ScrollArea>
+                </div>
+
+                <DialogFooter className="gap-3 sm:gap-0 flex-col sm:flex-row">
+                    <Button variant="outline" className="flex-1 h-14 rounded-xl text-base" onClick={() => setViewUserData(null)}>Fechar</Button>
+                    <Button className="flex-1 h-14 rounded-xl bg-slate-900 text-white font-bold text-base shadow-xl" onClick={() => { setViewUserData(null); openEditUser(viewUserData); }}><Edit className="w-4 h-4 mr-2" /> Editar Dados</Button>
+                </DialogFooter>
+            </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL: EDIÇÃO DE USUÁRIO (Dados + Senha) */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="rounded-2xl bg-white dark:bg-slate-900 border-0 shadow-2xl">
+              <DialogHeader><DialogTitle>Editar Usuário</DialogTitle></DialogHeader>
+              <div className="space-y-4 py-4">
+                  <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2"><Label>Nome</Label><Input className="h-12 rounded-xl" value={editFormData.first_name} onChange={e => setEditFormData({...editFormData, first_name: e.target.value})} /></div>
+                      <div className="space-y-2"><Label>Sobrenome</Label><Input className="h-12 rounded-xl" value={editFormData.last_name} onChange={e => setEditFormData({...editFormData, last_name: e.target.value})} /></div>
+                  </div>
+                  <div className="space-y-2"><Label>CPF</Label><Input className="h-12 rounded-xl" value={editFormData.cpf} onChange={e => setEditFormData({...editFormData, cpf: e.target.value})} placeholder="000.000.000-00" /></div>
+                  <div className="space-y-2"><Label>Telefone</Label><Input className="h-12 rounded-xl" value={editFormData.phone} onChange={e => setEditFormData({...editFormData, phone: e.target.value})} /></div>
+                  
+                  <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl mt-4 border border-blue-100 dark:border-blue-900/50">
+                      <h4 className="text-sm font-bold text-blue-800 dark:text-blue-300 mb-2 flex items-center gap-2"><KeyRound className="w-4 h-4"/> Segurança</h4>
+                      <p className="text-xs text-blue-600 dark:text-blue-400 mb-3">Envie um email para o usuário redefinir a senha.</p>
+                      <Button variant="secondary" className="w-full bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900" onClick={() => handleResetPassword(selectedUser?.email)}>Enviar Email de Redefinição</Button>
+                  </div>
+              </div>
+              <DialogFooter><Button className="w-full h-12 rounded-xl font-bold bg-slate-900 text-white" onClick={handleSaveUser}>Salvar Alterações</Button></DialogFooter>
+          </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <AlertDialogContent className="rounded-2xl bg-white dark:bg-slate-900 border-0"><AlertDialogHeader><AlertDialogTitle>Excluir Usuário?</AlertDialogTitle><AlertDialogDescription>Isso removerá o perfil do sistema. Esta ação não pode ser desfeita.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel className="rounded-xl h-12">Cancelar</AlertDialogCancel><AlertDialogAction onClick={handleDeleteUser} className="bg-red-600 hover:bg-red-700 rounded-xl h-12 font-bold">Excluir Definitivamente</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+      </AlertDialog>
+
+      {/* MODAL: DETALHES COMPLETOS DA CORRIDA (PREMIUM) */}
+      <Dialog open={!!viewRideData} onOpenChange={(o) => !o && setViewRideData(null)}>
+          <DialogContent className="max-w-2xl bg-white dark:bg-slate-900 rounded-[32px] border-0 shadow-2xl p-0 overflow-hidden max-h-[90vh] overflow-y-auto custom-scrollbar">
+              {/* Header Visual da Corrida */}
+              <div className={`h-24 w-full relative flex items-center justify-between px-8 ${viewRideData?.status === 'COMPLETED' ? 'bg-green-600' : viewRideData?.status === 'CANCELLED' ? 'bg-red-600' : 'bg-blue-600'}`}>
+                  <div className="text-white">
+                      <p className="text-xs font-bold opacity-80 uppercase tracking-widest">Corrida #{viewRideData?.id.substring(0,8)}</p>
+                      <h2 className="text-2xl font-black">{viewRideData?.status === 'COMPLETED' ? 'FINALIZADA' : viewRideData?.status === 'CANCELLED' ? 'CANCELADA' : 'EM ANDAMENTO'}</h2>
+                  </div>
+                  <div className="bg-white/20 backdrop-blur-md p-2 rounded-xl text-white">
+                      {viewRideData?.status === 'COMPLETED' ? <CheckCircle2 className="w-8 h-8"/> : <XCircle className="w-8 h-8"/>}
+                  </div>
+              </div>
+
+              <div className="p-8 space-y-8">
+                  {/* Rota */}
+                  <div className="relative pl-6 space-y-8">
+                      <div className="absolute left-[7px] top-2 bottom-6 w-0.5 bg-gray-200 dark:bg-gray-700"></div>
+                      <div className="relative">
+                          <div className="absolute -left-6 top-1 w-3 h-3 rounded-full bg-slate-900 dark:bg-white ring-4 ring-slate-100 dark:ring-slate-800"></div>
+                          <p className="text-xs text-muted-foreground font-bold uppercase mb-1">Origem</p>
+                          <p className="text-lg font-medium leading-tight">{viewRideData?.pickup_address}</p>
+                      </div>
+                      <div className="relative">
+                          <div className="absolute -left-6 top-1 w-3 h-3 rounded-full bg-yellow-500 ring-4 ring-yellow-100 dark:ring-yellow-900/30"></div>
+                          <p className="text-xs text-muted-foreground font-bold uppercase mb-1">Destino</p>
+                          <p className="text-lg font-medium leading-tight">{viewRideData?.destination_address}</p>
+                      </div>
+                  </div>
+
+                  {/* Participantes */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Card Passageiro */}
+                      <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700">
+                          <p className="text-xs font-bold text-muted-foreground uppercase mb-3">Passageiro</p>
+                          <div className="flex items-center gap-3">
+                              <Avatar className="w-12 h-12 border-2 border-white shadow-sm"><AvatarImage src={viewRideData?.customer?.avatar_url}/><AvatarFallback>P</AvatarFallback></Avatar>
+                              <div>
+                                  <p className="font-bold text-sm">{viewRideData?.customer?.first_name || 'Desconhecido'}</p>
+                                  <p className="text-xs text-muted-foreground">{viewRideData?.customer?.phone || '--'}</p>
+                              </div>
+                          </div>
+                      </div>
+                      {/* Card Motorista */}
+                      <div className="bg-yellow-50 dark:bg-yellow-900/10 p-4 rounded-2xl border border-yellow-100 dark:border-yellow-900/30">
+                          <p className="text-xs font-bold text-yellow-600 dark:text-yellow-500 uppercase mb-3">Motorista</p>
+                          {viewRideData?.driver ? (
+                              <div className="flex items-center gap-3">
+                                  <Avatar className="w-12 h-12 border-2 border-white shadow-sm"><AvatarImage src={viewRideData?.driver?.avatar_url}/><AvatarFallback>M</AvatarFallback></Avatar>
+                                  <div>
+                                      <p className="font-bold text-sm text-slate-900 dark:text-white">{viewRideData.driver.first_name}</p>
+                                      <p className="text-xs text-slate-500">{viewRideData.driver.car_model || '--'}</p>
+                                  </div>
+                              </div>
+                          ) : <p className="text-sm italic text-muted-foreground">Não atribuído</p>}
+                      </div>
+                  </div>
+
+                  {/* Detalhes Financeiros e Avaliação */}
+                  <div className="bg-slate-50 dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700">
+                      <div className="grid grid-cols-3 gap-4 mb-6 text-center border-b border-slate-200 dark:border-slate-600 pb-6">
+                          <div><p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Total</p><p className="font-black text-xl">R$ {Number(viewRideData?.price).toFixed(2)}</p></div>
+                          <div><p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Motorista</p><p className="font-bold text-lg text-green-600">R$ {Number(viewRideData?.driver_earnings).toFixed(2)}</p></div>
+                          <div><p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Taxa App</p><p className="font-bold text-lg text-blue-600">R$ {Number(viewRideData?.platform_fee).toFixed(2)}</p></div>
+                      </div>
+                      
+                      {/* Avaliação */}
+                      {(viewRideData?.driver_rating || viewRideData?.customer_rating) && (
+                          <div className="space-y-4">
+                              <h4 className="text-sm font-bold uppercase text-muted-foreground flex items-center gap-2"><Star className="w-4 h-4 text-yellow-500"/> Avaliações</h4>
+                              {viewRideData?.driver_rating && (
+                                  <div className="flex justify-between items-center text-sm">
+                                      <span>Nota para o Motorista:</span>
+                                      <div className="flex items-center gap-1"><span className="font-bold">{viewRideData.driver_rating}</span> <Star className="w-3 h-3 fill-yellow-500 text-yellow-500"/></div>
+                                  </div>
+                              )}
+                              {viewRideData?.review_comment && (
+                                  <div className="bg-white dark:bg-slate-900 p-3 rounded-xl text-sm italic text-slate-600 dark:text-slate-300">
+                                      "{viewRideData.review_comment}"
+                                  </div>
+                              )}
+                          </div>
+                      )}
+
+                      <div className="flex justify-between items-center pt-4 mt-2">
+                           <span className="text-xs text-muted-foreground font-mono">ID: {viewRideData?.id}</span>
+                           <span className="text-xs font-bold text-slate-400">{viewRideData ? new Date(viewRideData.created_at).toLocaleString() : ''}</span>
+                      </div>
+                  </div>
+              </div>
+              <DialogFooter className="p-6 bg-slate-50 dark:bg-slate-800 border-t">
+                  <Button className="w-full h-12 rounded-xl font-bold bg-slate-900 text-white" onClick={() => setViewRideData(null)}>Fechar Detalhes</Button>
+              </DialogFooter>
+          </DialogContent>
+      </Dialog>
     </div>
   );
 };
