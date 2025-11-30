@@ -10,12 +10,9 @@ import Index from "./pages/Index";
 import LoginClient from "./pages/LoginClient";
 import LoginDriver from "./pages/LoginDriver";
 import LoginAdmin from "./pages/LoginAdmin";
-import AdminLoginSecure from "./pages/AdminLoginSecure"; 
-import AdminSuccessTest from "./pages/AdminSuccessTest";
 import ClientDashboard from "./pages/ClientDashboard";
 import DriverDashboard from "./pages/DriverDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
-import DriverSuccess from "./pages/DriverSuccess"; // Nova página
 import Profile from "./pages/Profile";
 import Wallet from "./pages/Wallet";
 import NotFound from "./pages/NotFound";
@@ -26,23 +23,17 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
+      {/* Configuração atualizada do Toast (Sonner) */}
       <Sonner position="top-right" closeButton richColors theme="light" />
       <RideProvider>
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
             
-            {/* Rotas de Login */}
-            <Route path="/login" element={<LoginClient />} />
+            {/* Rotas de Login Separadas */}
+            <Route path="/login" element={<LoginClient />} /> {/* Default / Passageiro */}
             <Route path="/login/driver" element={<LoginDriver />} />
             <Route path="/login/admin" element={<LoginAdmin />} />
-            
-            {/* Rota de Sucesso (Pública) */}
-            <Route path="/success" element={<DriverSuccess />} />
-            
-            {/* Rota de Login Seguro e Teste */}
-            <Route path="/admin-secure" element={<AdminLoginSecure />} />
-            <Route path="/admin-test-success" element={<AdminSuccessTest />} />
             
             {/* Rotas Protegidas de Cliente */}
             <Route path="/client" element={
@@ -65,7 +56,7 @@ const App = () => (
               </ProtectedRoute>
             } />
 
-            {/* Rotas Comuns */}
+            {/* Rotas Comuns (Acessíveis a todos os logados) */}
             <Route path="/profile" element={
               <ProtectedRoute allowedRoles={['client', 'driver', 'admin']}>
                 <Profile />

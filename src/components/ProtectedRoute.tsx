@@ -9,56 +9,59 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
-  const [status, setStatus] = useState<'loading' | 'authorized' | 'unauthorized'>('loading');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const location = useLocation();
 
   useEffect(() => {
     let mounted = true;
 
-    const checkAccess = async () => {
-        try {
-            // 1. Verifica Sessão
-            const { data: { session } } = await supabase.auth.getSession();
-            
-            if (!session) {
-                if (mounted) setStatus('unauthorized');
-                return;
-            }
-
-            // 2. Tenta obter role do metadata (mais rápido)
-            let role = session.user.user_metadata?.role;
-
-            // 3. Se não tiver no metadata, busca no banco (fonte da verdade)
-            if (!role) {
-                const { data: profile } = await supabase
-                    .from('profiles')
-                    .select('role')
-                    .eq('id', session.user.id)
-                    .maybeSingle();
-                role = profile?.role;
-            }
-
-            // 4. Validação final
+    const checkSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session) {
             if (mounted) {
-                if (role && allowedRoles.includes(role)) {
-                    setStatus('authorized');
-                } else {
-                    console.warn(`Acesso negado. Role encontrada: ${role}, Permitidas: ${allowedRoles.join(', ')}`);
-                    setStatus('unauthorized');
-                }
+                setIsAuthenticated(false);
+                setIsLoading(false);
             }
-        } catch (error) {
-            console.error("Erro ao verificar acesso:", error);
-            if (mounted) setStatus('unauthorized');
+            return;
         }
+
+        // Se tem sessão, busca a role
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', session.user.id)
+            .single();
+
+        if (mounted) {
+            if (profile) {
+                setUserRole(profile.role);
+                setIsAuthenticated(true);
+            } else {
+                // Sessão existe mas perfil não (erro raro)
+                setIsAuthenticated(false);
+            }
+            setIsLoading(false);
+        }
+      } catch (error) {
+        console.error("Auth Check Error:", error);
+        if (mounted) {
+            setIsAuthenticated(false);
+            setIsLoading(false);
+        }
+      }
     };
 
-    checkAccess();
+    checkSession();
 
-    // Listener para mudanças de estado (ex: logout em outra aba)
+    // Listener para mudanças (logout, etc)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
         if (event === 'SIGNED_OUT') {
-            setStatus('unauthorized');
+            setIsAuthenticated(false);
+            setUserRole(null);
         }
     });
 
@@ -66,24 +69,29 @@ const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
         mounted = false;
         subscription.unsubscribe();
     };
-  }, [allowedRoles]);
+  }, []);
 
-  if (status === 'loading') {
+  if (isLoading) {
     return (
-        <div className="h-screen w-full flex flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950 gap-4">
-            <Loader2 className="w-10 h-10 animate-spin text-yellow-500" />
-            <p className="text-sm text-gray-400 font-medium animate-pulse">Verificando credenciais...</p>
-        </div>
+      <div className="h-screen w-full flex flex-col items-center justify-center bg-zinc-950 gap-4">
+        <Loader2 className="w-12 h-12 text-yellow-500 animate-spin" />
+        <p className="text-gray-400 text-sm animate-pulse">Verificando credenciais...</p>
+      </div>
     );
   }
 
-  if (status === 'unauthorized') {
-      // Redireciona para o login correto baseado na rota tentada
-      let target = "/login";
-      if (location.pathname.includes('/admin')) target = "/login/admin";
-      else if (location.pathname.includes('/driver')) target = "/login/driver";
-      
-      return <Navigate to={target} replace />;
+  if (!isAuthenticated) {
+    // Redirecionamento inteligente baseado na URL que tentou acessar
+    if (location.pathname.includes('/admin')) return <Navigate to="/login/admin" replace />;
+    if (location.pathname.includes('/driver')) return <Navigate to="/login/driver" replace />;
+    return <Navigate to="/login" replace />;
+  }
+
+  // Verifica permissão de Role
+  if (userRole && !allowedRoles.includes(userRole)) {
+      if (userRole === 'admin') return <Navigate to="/admin" replace />;
+      if (userRole === 'driver') return <Navigate to="/driver" replace />;
+      return <Navigate to="/client" replace />;
   }
 
   return <>{children}</>;
