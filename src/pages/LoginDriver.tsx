@@ -18,7 +18,7 @@ const LoginDriver = () => {
   
   const [errors, setErrors] = useState<Record<string, boolean>>({});
 
-  // Dados
+  // Dados Pessoais
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -75,16 +75,27 @@ const LoginDriver = () => {
   const uploadFileSafe = async (file: File, path: string) => {
       if (!file) return null;
       try {
+          // Sanitiza o nome do arquivo para evitar erros de caracteres especiais
           const fileExt = file.name.split('.').pop();
-          const fileName = `${Date.now()}_${Math.random().toString(36).substr(2,9)}.${fileExt}`;
+          const safeName = file.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+          const fileName = `${Date.now()}_${safeName}.${fileExt}`;
           const filePath = `${path}/${fileName}`;
           
-          const { error } = await supabase.storage.from('documents').upload(filePath, file);
-          if (error) return null; // Falha silenciosa para não travar cadastro
+          // Tenta upload com upsert true
+          const { error: uploadError } = await supabase.storage.from('documents').upload(filePath, file, {
+              upsert: true,
+              cacheControl: '3600'
+          });
+          
+          if (uploadError) {
+              console.error("Erro Upload:", uploadError);
+              return null; 
+          }
           
           const { data } = supabase.storage.from('documents').getPublicUrl(filePath);
           return data.publicUrl;
-      } catch {
+      } catch (err) {
+          console.error("Exceção Upload:", err);
           return null;
       }
   };
@@ -126,22 +137,21 @@ const LoginDriver = () => {
       if (loading) return;
       setLoading(true);
 
-      // Timeout de segurança: Se travar por 15s, libera erro
       const timeoutId = setTimeout(() => {
           if (loading) {
               setLoading(false);
-              showError("Tempo limite excedido. Tente novamente.");
+              showError("O servidor demorou para responder, mas seu cadastro pode ter sido salvo. Tente fazer login.");
           }
-      }, 15000);
+      }, 20000); // Aumentei timeout para 20s por causa das imagens
 
       try {
-          // 1. TENTA CRIAR USUÁRIO (METADADOS SÃO A GARANTIA PRINCIPAL)
+          // 1. Criar Usuário
           const metaData = {
               role: 'driver',
               first_name: name.split(' ')[0],
               last_name: name.split(' ').slice(1).join(' '),
-              phone,
               cpf,
+              phone,
               car_model: carModel,
               car_plate: carPlate.toUpperCase(),
               car_color: carColor,
@@ -156,7 +166,7 @@ const LoginDriver = () => {
 
           let userId = authData?.user?.id;
 
-          // Se deu erro de "já existe", tenta logar para atualizar dados
+          // Se der erro de "já existe", tenta logar para aproveitar o ID
           if (authError) {
               if (authError.message.includes("already registered") || authError.status === 422) {
                   const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({ 
@@ -177,33 +187,46 @@ const LoginDriver = () => {
               return;
           }
 
-          // 2. UPLOAD EM BACKGROUND (Não trava a UI se falhar)
-          // Tenta subir arquivos. Se falhar, salva string vazia.
+          // 2. Upload Docs (Com tratamento de erro individual)
+          // Se uma foto falhar, não impede o cadastro, mas loga o erro
           const [faceUrl, cnhFrontUrl, cnhBackUrl] = await Promise.all([
-             uploadFileSafe(facePhoto!, `face/${userId}`),
-             uploadFileSafe(cnhFront!, `cnh/${userId}`),
-             uploadFileSafe(cnhBack!, `cnh/${userId}`)
+             facePhoto ? uploadFileSafe(facePhoto, `face/${userId}`) : Promise.resolve(""),
+             cnhFront ? uploadFileSafe(cnhFront, `cnh/${userId}`) : Promise.resolve(""),
+             cnhBack ? uploadFileSafe(cnhBack, `cnh/${userId}`) : Promise.resolve("")
           ]);
 
-          // 3. UPSERT FINAL (Garante persistência mesmo se trigger falhar)
-          await supabase.from('profiles').upsert({
-              id: userId,
-              role: 'driver',
-              email: email.trim(),
-              first_name: metaData.first_name,
-              last_name: metaData.last_name,
-              cpf: metaData.cpf,
-              phone: metaData.phone,
-              car_model: metaData.car_model,
-              car_plate: metaData.car_plate,
-              car_color: metaData.car_color,
-              car_year: metaData.car_year,
-              face_photo_url: faceUrl || "",
-              cnh_front_url: cnhFrontUrl || "",
-              cnh_back_url: cnhBackUrl || "",
+          // 3. Atualizar Perfil
+          // Forçamos o update para garantir que as URLs entrem, mesmo se o trigger tiver rodado antes
+          const { error: updateError } = await supabase.from('profiles').update({
+              cpf,
+              phone,
+              car_model: carModel,
+              car_plate: carPlate.toUpperCase(),
+              car_color: carColor,
+              car_year: carYear,
+              face_photo_url: faceUrl || null,
+              cnh_front_url: cnhFrontUrl || null,
+              cnh_back_url: cnhBackUrl || null,
               driver_status: 'PENDING',
               updated_at: new Date().toISOString()
-          });
+          }).eq('id', userId);
+
+          if (updateError) {
+              console.error("Erro Update Profile:", updateError);
+              // Tenta upsert se o update falhar (caso perfil nao exista)
+               await supabase.from('profiles').upsert({
+                  id: userId,
+                  role: 'driver',
+                  email: email.trim(),
+                  first_name: metaData.first_name,
+                  last_name: metaData.last_name,
+                  ...metaData,
+                  face_photo_url: faceUrl || null,
+                  cnh_front_url: cnhFrontUrl || null,
+                  cnh_back_url: cnhBackUrl || null,
+                  driver_status: 'PENDING'
+              });
+          }
 
           clearTimeout(timeoutId);
           setRegistrationSuccess(true);
@@ -223,14 +246,14 @@ const LoginDriver = () => {
           <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6">
               <Card className="w-full max-w-md bg-white border-0 shadow-2xl rounded-[32px] overflow-hidden animate-in zoom-in">
                   <div className="bg-yellow-500 p-8 flex flex-col items-center justify-center text-center">
-                      <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center mb-4">
+                      <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center mb-4 shadow-inner">
                            <Clock className="w-10 h-10 text-white animate-pulse" />
                       </div>
-                      <h2 className="text-2xl font-black text-slate-900">Cadastro Enviado!</h2>
-                      <p className="text-slate-800 font-medium opacity-90">Em Análise</p>
+                      <h2 className="text-2xl font-black text-slate-900">Cadastro Recebido!</h2>
+                      <p className="text-slate-800 font-medium opacity-90">Status: Em Análise</p>
                   </div>
                   <CardContent className="p-8 text-center space-y-6">
-                      <p className="text-gray-600">Seus dados foram salvos com sucesso. Nossa equipe irá analisar sua documentação.</p>
+                      <p className="text-gray-600">Seus documentos foram enviados. Nossa equipe de segurança irá analisar seu perfil.</p>
                       <Button onClick={() => navigate('/')} className="w-full h-12 rounded-xl bg-slate-900 text-white font-bold">Voltar ao Início</Button>
                   </CardContent>
               </Card>
@@ -238,71 +261,76 @@ const LoginDriver = () => {
       );
   }
 
+  // Login View
+  if (!isSignUp) {
+      return (
+        <div className="min-h-screen relative flex items-center justify-center font-sans overflow-hidden bg-slate-900">
+            <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?q=80&w=2070')] bg-cover bg-center opacity-40" />
+            <div className="relative z-10 w-full max-w-6xl flex flex-col lg:flex-row h-full lg:h-auto min-h-screen lg:min-h-[600px] lg:rounded-[32px] lg:overflow-hidden lg:shadow-2xl lg:bg-white animate-in fade-in zoom-in-95 duration-500">
+                <div className="lg:w-1/2 p-8 lg:p-12 flex flex-col justify-center text-white lg:bg-slate-900/90 relative">
+                     <div className="relative z-10 text-center lg:text-left">
+                        <div className="w-16 h-16 bg-yellow-500 rounded-2xl flex items-center justify-center mb-6 shadow-glow mx-auto lg:mx-0"><Car className="w-8 h-8 text-black" /></div>
+                        <h1 className="text-4xl lg:text-5xl font-black mb-4">Gold<span className="text-yellow-500">Drive</span></h1>
+                        <p className="text-lg text-gray-300">A plataforma definitiva para motoristas.</p>
+                     </div>
+                </div>
+                <div className="flex-1 bg-white p-8 lg:p-12 flex flex-col justify-center">
+                    <div className="mb-8">
+                         <Button variant="ghost" onClick={() => navigate('/')} className="pl-0 hover:bg-transparent text-slate-500 mb-2"><ArrowLeft className="mr-2 w-4 h-4" /> Voltar</Button>
+                         <h2 className="text-3xl font-black text-slate-900">Login Parceiro</h2>
+                    </div>
+                    <form onSubmit={handleLogin} className="space-y-5">
+                        <div className="space-y-1"><Label>Email</Label><Input type="email" value={email} onChange={e => setEmail(e.target.value)} className="h-12" placeholder="seu@email.com"/></div>
+                        <div className="space-y-1"><Label>Senha</Label><div className="relative"><Input type={showPassword?"text":"password"} value={password} onChange={e => setPassword(e.target.value)} className="h-12 pr-10" placeholder="••••••"/><button type="button" onClick={()=>setShowPassword(!showPassword)} className="absolute right-3 top-3 text-gray-400"><Eye className="w-5 h-5"/></button></div></div>
+                        <Button className="w-full h-14 font-bold bg-slate-900 text-white rounded-xl mt-4" disabled={loading}>{loading ? <Loader2 className="animate-spin" /> : "Acessar Painel"}</Button>
+                    </form>
+                    <div className="mt-8 text-center pt-6 border-t border-gray-100"><Button variant="outline" onClick={() => setIsSignUp(true)} className="w-full h-12 font-bold rounded-xl">Criar Cadastro Gratuito</Button></div>
+                </div>
+            </div>
+        </div>
+      );
+  }
+
+  // Signup View
   return (
     <div className="min-h-screen relative flex items-center justify-center p-4 lg:p-8 font-sans overflow-hidden bg-slate-900">
-        <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?q=80&w=2583')] bg-cover bg-center opacity-20" />
-        
-        <Card className="w-full max-w-2xl bg-white/95 backdrop-blur-xl shadow-2xl rounded-[32px] overflow-hidden border-0 relative z-10 animate-in slide-in-from-bottom-5">
+        <Card className="w-full max-w-2xl bg-white/95 backdrop-blur-xl shadow-2xl rounded-[32px] overflow-hidden border-0 relative z-10 animate-in slide-in-from-bottom-10 duration-500">
             <div className="bg-slate-900 p-8 text-white relative">
                 <div className="flex justify-between items-center mb-6">
                     <Button variant="ghost" onClick={() => step === 1 ? setIsSignUp(false) : setStep(step - 1)} className="text-white hover:bg-white/10 p-0 w-8 h-8 rounded-full h-auto"><ArrowLeft className="w-6 h-6" /></Button>
                     <span className="font-bold text-yellow-500 tracking-widest text-xs uppercase bg-yellow-500/10 px-3 py-1 rounded-full">ETAPA {step} / 3</span>
                 </div>
                 <h2 className="text-3xl font-black mb-2">{step === 1 ? "Seus Dados" : step === 2 ? "Documentação" : "Seu Veículo"}</h2>
-                <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden mt-4"><div className="h-full bg-yellow-500 transition-all duration-500 ease-out" style={{ width: `${(step / 3) * 100}%` }}/></div>
+                <div className="h-1.5 w-full bg-slate-800 rounded-full mt-4"><div className="h-full bg-yellow-500 transition-all duration-500" style={{ width: `${(step / 3) * 100}%` }}/></div>
             </div>
-
             <CardContent className="p-6 lg:p-10">
-                {!isSignUp ? (
-                    <div className="space-y-6">
-                         <h2 className="text-2xl font-black text-center mb-4">Bem-vindo Motorista</h2>
-                         <div className="space-y-4">
-                            <div className="space-y-1"><Label>Email</Label><Input value={email} onChange={e => setEmail(e.target.value)} className="h-12" placeholder="seu@email.com"/></div>
-                            <div className="space-y-1"><Label>Senha</Label><Input type="password" value={password} onChange={e => setPassword(e.target.value)} className="h-12" placeholder="••••••"/></div>
-                         </div>
-                         <Button onClick={handleLogin} disabled={loading} className="w-full h-14 text-lg font-bold bg-slate-900 text-white rounded-xl mt-4">{loading ? <Loader2 className="animate-spin"/> : "Entrar"}</Button>
-                         <Button variant="outline" onClick={() => setIsSignUp(true)} className="w-full h-14 font-bold rounded-xl mt-2">Criar Cadastro</Button>
+                {step === 1 && (
+                    <div className="space-y-5 animate-in slide-in-from-right fade-in">
+                        <div className="grid md:grid-cols-2 gap-4"><div className="space-y-1"><Label>Nome</Label><Input value={name} onChange={e => setName(e.target.value)} className={errors.name ? "border-red-500" : ""} placeholder="Nome Completo"/></div><div className="space-y-1"><Label>CPF</Label><Input value={cpf} onChange={handleCpfChange} maxLength={14} className={errors.cpf ? "border-red-500" : ""} placeholder="000.000.000-00"/></div></div>
+                        <div className="space-y-1"><Label>Celular</Label><Input value={phone} onChange={handlePhoneChange} maxLength={15} className={errors.phone ? "border-red-500" : ""} placeholder="(11) 99999-9999"/></div>
+                        <div className="space-y-1"><Label>Email</Label><Input type="email" value={email} onChange={e => setEmail(e.target.value)} className={errors.email ? "border-red-500" : ""} placeholder="email@exemplo.com"/></div>
+                        <div className="grid md:grid-cols-2 gap-4"><div className="space-y-1"><Label>Senha</Label><Input type="password" value={password} onChange={e => setPassword(e.target.value)} className={errors.password ? "border-red-500" : ""} placeholder="Senha"/></div><div className="space-y-1"><Label>Confirmar</Label><Input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className={errors.confirmPassword ? "border-red-500" : ""} placeholder="Repita a senha"/></div></div>
                     </div>
-                ) : (
-                    <>
-                        {step === 1 && (
-                            <div className="space-y-4 animate-in fade-in">
-                                <div className="space-y-1"><Label>Nome Completo</Label><Input value={name} onChange={e => setName(e.target.value)} className={errors.name ? "border-red-500" : ""} placeholder="Nome Sobrenome"/></div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-1"><Label>CPF</Label><Input value={cpf} onChange={handleCpfChange} maxLength={14} className={errors.cpf ? "border-red-500" : ""} placeholder="000.000.000-00"/></div>
-                                    <div className="space-y-1"><Label>Celular</Label><Input value={phone} onChange={handlePhoneChange} maxLength={15} className={errors.phone ? "border-red-500" : ""} placeholder="(11) 99999-9999"/></div>
-                                </div>
-                                <div className="space-y-1"><Label>Email</Label><Input value={email} onChange={e => setEmail(e.target.value)} className={errors.email ? "border-red-500" : ""} type="email" placeholder="email@exemplo.com"/></div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-1"><Label>Senha</Label><Input value={password} onChange={e => setPassword(e.target.value)} className={errors.password ? "border-red-500" : ""} type="password" placeholder="Min 6 caracteres"/></div>
-                                    <div className="space-y-1"><Label>Confirmar</Label><Input value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className={errors.confirmPassword ? "border-red-500" : ""} type="password" placeholder="Repita a senha"/></div>
-                                </div>
-                            </div>
-                        )}
-                        {step === 2 && (
-                            <div className="space-y-4 animate-in fade-in">
-                                <div className="space-y-2"><Label>Selfie</Label><div className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer ${facePhoto ? 'border-green-500 bg-green-50' : 'border-gray-200'}`}><input type="file" onChange={e => setFacePhoto(e.target.files?.[0]||null)} className="hidden" id="face"/><label htmlFor="face" className="block w-full cursor-pointer">{facePhoto ? "Foto OK" : "Tirar Foto"}</label></div></div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-2"><Label>CNH Frente</Label><div className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer ${cnhFront ? 'border-green-500 bg-green-50' : 'border-gray-200'}`}><input type="file" onChange={e => setCnhFront(e.target.files?.[0]||null)} className="hidden" id="cnhf"/><label htmlFor="cnhf" className="block w-full cursor-pointer">{cnhFront ? "Frente OK" : "Enviar"}</label></div></div>
-                                    <div className="space-y-2"><Label>CNH Verso</Label><div className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer ${cnhBack ? 'border-green-500 bg-green-50' : 'border-gray-200'}`}><input type="file" onChange={e => setCnhBack(e.target.files?.[0]||null)} className="hidden" id="cnhb"/><label htmlFor="cnhb" className="block w-full cursor-pointer">{cnhBack ? "Verso OK" : "Enviar"}</label></div></div>
-                                </div>
-                            </div>
-                        )}
-                        {step === 3 && (
-                            <div className="space-y-4 animate-in fade-in">
-                                <div className="space-y-1"><Label>Modelo do Carro</Label><Input value={carModel} onChange={e => setCarModel(e.target.value)} className={errors.carModel ? "border-red-500" : ""} placeholder="Ex: Onix 2020"/></div>
-                                <div className="space-y-1"><Label>Placa</Label><Input value={carPlate} onChange={e => setCarPlate(e.target.value.toUpperCase())} className={errors.carPlate ? "border-red-500 uppercase" : "uppercase"} placeholder="ABC-1234"/></div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-1"><Label>Cor</Label><Input value={carColor} onChange={e => setCarColor(e.target.value)} className={errors.carColor ? "border-red-500" : ""} placeholder="Prata"/></div>
-                                    <div className="space-y-1"><Label>Ano</Label><Input type="number" value={carYear} onChange={e => setCarYear(e.target.value)} className={errors.carYear ? "border-red-500" : ""} placeholder="2020"/></div>
-                                </div>
-                            </div>
-                        )}
-                        <Button onClick={handleNextStep} disabled={loading} className="w-full h-14 text-lg font-bold bg-slate-900 text-white rounded-xl mt-6">
-                            {loading ? <Loader2 className="animate-spin" /> : (step === 3 ? "Finalizar Cadastro" : "Continuar")}
-                        </Button>
-                    </>
                 )}
+                {step === 2 && (
+                    <div className="space-y-6 animate-in slide-in-from-right fade-in">
+                        <div className="space-y-2"><Label>Selfie</Label><div className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer ${facePhoto ? 'border-green-500 bg-green-50' : 'border-gray-200'}`}><input type="file" accept="image/*" className="hidden" id="face" onChange={e => setFacePhoto(e.target.files?.[0]||null)} /><label htmlFor="face" className="block w-full cursor-pointer">{facePhoto ? "Foto Carregada" : "Tirar Foto"}</label></div></div>
+                        <div className="grid md:grid-cols-2 gap-4">
+                            <div className="space-y-2"><Label>CNH Frente</Label><div className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer ${cnhFront ? 'border-green-500 bg-green-50' : 'border-gray-200'}`}><input type="file" accept="image/*" className="hidden" id="cnhf" onChange={e => setCnhFront(e.target.files?.[0]||null)} /><label htmlFor="cnhf" className="block w-full cursor-pointer">{cnhFront ? "Frente OK" : "Enviar"}</label></div></div>
+                            <div className="space-y-2"><Label>CNH Verso</Label><div className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer ${cnhBack ? 'border-green-500 bg-green-50' : 'border-gray-200'}`}><input type="file" accept="image/*" className="hidden" id="cnhb" onChange={e => setCnhBack(e.target.files?.[0]||null)} /><label htmlFor="cnhb" className="block w-full cursor-pointer">{cnhBack ? "Verso OK" : "Enviar"}</label></div></div>
+                        </div>
+                    </div>
+                )}
+                {step === 3 && (
+                    <div className="space-y-5 animate-in slide-in-from-right fade-in">
+                        <div className="space-y-1"><Label>Modelo</Label><Input value={carModel} onChange={e => setCarModel(e.target.value)} className={errors.carModel ? "border-red-500" : ""} placeholder="Ex: Onix 2020"/></div>
+                        <div className="space-y-1"><Label>Placa</Label><Input value={carPlate} onChange={e => setCarPlate(e.target.value.toUpperCase())} className={errors.carPlate ? "border-red-500 uppercase" : "uppercase"} placeholder="ABC-1234"/></div>
+                        <div className="grid md:grid-cols-2 gap-4"><div className="space-y-1"><Label>Cor</Label><Input value={carColor} onChange={e => setCarColor(e.target.value)} className={errors.carColor ? "border-red-500" : ""} placeholder="Prata"/></div><div className="space-y-1"><Label>Ano</Label><Input type="number" value={carYear} onChange={e => setCarYear(e.target.value)} className={errors.carYear ? "border-red-500" : ""} placeholder="2020"/></div></div>
+                    </div>
+                )}
+                <Button onClick={handleNextStep} disabled={loading} className="w-full h-16 mt-8 text-lg font-bold rounded-2xl bg-slate-900 hover:bg-black text-white shadow-xl">
+                    {loading ? <Loader2 className="animate-spin" /> : (step === 3 ? "Finalizar Cadastro" : "Continuar")}
+                </Button>
             </CardContent>
         </Card>
     </div>
