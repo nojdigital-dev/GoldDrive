@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
-import { ArrowLeft, Loader2, ArrowRight, Car, CheckCircle2, User, FileText, Camera, ShieldCheck, Mail, Lock, Phone, CreditCard, Eye, EyeOff, AlertCircle, Clock } from "lucide-react";
+import { ArrowLeft, Loader2, ArrowRight, CheckCircle2, User, FileText, Camera, ShieldCheck, Mail, Lock, Phone, CreditCard, Eye, EyeOff, AlertCircle, Clock } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -71,12 +71,22 @@ const LoginDriver = () => {
       }
 
       setLoading(true);
+      
+      // Timeout de segurança para não travar o botão
+      const safetyTimeout = setTimeout(() => {
+          if (loading) {
+              setLoading(false);
+              showError("O servidor demorou a responder. Verifique sua conexão.");
+          }
+      }, 15000);
+
       try {
           const { data, error } = await supabase.auth.signInWithPassword({ email, password });
           if (error) throw error;
           
           const { data: profile } = await supabase.from('profiles').select('role, driver_status').eq('id', data.user.id).single();
           
+          clearTimeout(safetyTimeout);
           if (profile?.role !== 'driver') {
               await supabase.auth.signOut();
               throw new Error("Esta conta não é de motorista.");
@@ -84,6 +94,7 @@ const LoginDriver = () => {
           
           navigate('/driver');
       } catch (e: any) {
+          clearTimeout(safetyTimeout);
           showError(e.message);
       } finally {
           setLoading(false);
@@ -96,12 +107,10 @@ const LoginDriver = () => {
           const fileName = `${Math.random()}.${fileExt}`;
           const filePath = `${path}/${fileName}`;
           
-          // Tenta fazer upload
           const { error: uploadError } = await supabase.storage.from('documents').upload(filePath, file);
           
           if (uploadError) {
-              // Ignora erro se bucket não existir ou permissão falhar, para não travar o cadastro
-              console.warn("Upload falhou (não crítico):", uploadError.message);
+              console.warn("Upload falhou (tentando prosseguir):", uploadError.message);
               return null; 
           }
           
@@ -157,13 +166,22 @@ const LoginDriver = () => {
   };
 
   const submitRegistration = async () => {
+      if (loading) return;
       setLoading(true);
+
+      // Timeout de segurança
+      const safetyTimeout = setTimeout(() => {
+           setLoading(false);
+           showError("Tempo limite excedido. Tente novamente.");
+      }, 30000);
+
       try {
           let userId = "";
 
           // 1. Tentar Criar Usuário
           const { data: authData, error: authError } = await supabase.auth.signUp({
-              email, password,
+              email: email.trim(),
+              password: password.trim(),
               options: { 
                   data: { 
                       role: 'driver', 
@@ -174,35 +192,58 @@ const LoginDriver = () => {
           });
 
           if (authError) {
-              // Se o usuário já existe, tentamos fazer o login para continuar o cadastro (atualizar dados)
-              if (authError.message.includes("User already registered") || authError.status === 422) {
-                  console.log("Usuário já existe, tentando login...");
-                  const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({ email, password });
+              // LOGICA DE RECUPERAÇÃO: Se usuário já existe, tentamos logar
+              if (authError.message.includes("already registered") || authError.status === 422) {
+                  console.log("Usuário já existe. Tentando login automático...");
                   
-                  if (loginError) throw new Error("Email já cadastrado. Erro ao tentar login: " + loginError.message);
-                  if (!loginData.user) throw new Error("Falha na autenticação automática.");
+                  const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({ 
+                      email: email.trim(), 
+                      password: password.trim() 
+                  });
                   
-                  userId = loginData.user.id;
+                  if (loginError) {
+                      throw new Error("Este email já está cadastrado, mas a senha está incorreta. Faça login.");
+                  }
+                  
+                  if (loginData.user) {
+                      userId = loginData.user.id;
+                  } else {
+                      throw new Error("Erro ao recuperar usuário existente.");
+                  }
               } else {
                   throw authError;
               }
           } else {
-              if (!authData.user) throw new Error("Erro desconhecido ao criar usuário");
-              userId = authData.user.id;
+              // Caso de sucesso normal no cadastro
+              if (authData.user) {
+                  userId = authData.user.id;
+              } else if (authData?.session?.user) {
+                  userId = authData.session.user.id;
+              } else {
+                  // Se caiu aqui, pode ser que exija confirmação de email, mas vamos tentar prosseguir se tiver ID
+                  // Se não tiver ID, é um edge case
+                  showSuccess("Cadastro iniciado! Verifique seu email para confirmar antes de continuar.");
+                  clearTimeout(safetyTimeout);
+                  setLoading(false);
+                  return;
+              }
           }
 
-          // Pequeno delay para garantir que triggers do banco tenham rodado (criação do profile)
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          // Delay para garantir propagação do Trigger no DB
+          await new Promise(resolve => setTimeout(resolve, 1500));
 
-          // 2. Upload Docs (Paralelo para ser mais rápido)
-          const [faceUrl, cnhFrontUrl, cnhBackUrl] = await Promise.all([
+          // 2. Upload Docs (Em paralelo)
+          // Se falhar upload, continuamos o cadastro para não travar o usuário
+          const uploadPromises = [
              facePhoto ? uploadFile(facePhoto, `face/${userId}`) : Promise.resolve(null),
              cnhFront ? uploadFile(cnhFront, `cnh/${userId}`) : Promise.resolve(null),
              cnhBack ? uploadFile(cnhBack, `cnh/${userId}`) : Promise.resolve(null)
-          ]);
+          ];
 
-          // 3. Atualizar Profile com Dados do Motorista
-          const { error: updateError } = await supabase.from('profiles').update({
+          const [faceUrl, cnhFrontUrl, cnhBackUrl] = await Promise.all(uploadPromises);
+
+          // 3. Atualizar Profile
+          const updates = {
               cpf,
               phone,
               face_photo_url: faceUrl,
@@ -212,21 +253,26 @@ const LoginDriver = () => {
               car_plate: carPlate.toUpperCase(),
               car_color: carColor,
               car_year: carYear,
-              driver_status: 'PENDING'
-          }).eq('id', userId);
+              driver_status: 'PENDING',
+              updated_at: new Date().toISOString()
+          };
+
+          const { error: updateError } = await supabase.from('profiles').update(updates).eq('id', userId);
 
           if (updateError) {
-              console.error("Erro update profile:", updateError);
-              throw new Error("Erro ao salvar dados do perfil: " + updateError.message);
+              console.error("Erro update:", updateError);
+              throw new Error("Erro ao salvar dados do veículo. Tente novamente.");
           }
 
-          // SUCESSO!
+          // SUCESSO TOTAL
+          clearTimeout(safetyTimeout);
           setRegistrationSuccess(true);
           window.scrollTo(0, 0);
 
       } catch (e: any) {
+          clearTimeout(safetyTimeout);
           console.error(e);
-          showError(e.message || "Erro desconhecido no cadastro.");
+          showError(e.message || "Erro desconhecido. Tente novamente.");
       } finally {
           setLoading(false);
       }
@@ -309,7 +355,7 @@ const LoginDriver = () => {
                         <div className="space-y-1.5">
                             <Label className="text-slate-900 font-bold ml-1">Email</Label>
                             <div className="relative group">
-                                <Mail className={`absolute left-4 top-3.5 w-5 h-5 transition-colors ${errors.email ? 'text-red-500' : 'text-gray-400 group-focus-within:text-yellow-500'}`} />
+                                <Mail className={`absolute left-4 top-3.5 w-5 h-5 transition-colors ${errors.email ? 'text-red-500' : 'text-gray-400 group-focus-within:text-yellow-600'}`} />
                                 <Input 
                                     type="email" 
                                     className={`h-12 pl-12 bg-slate-50 border-slate-200 text-slate-900 rounded-xl transition-all ${errors.email ? 'border-red-500 ring-1 ring-red-500 bg-red-50' : 'focus:ring-2 focus:ring-yellow-500'}`} 
@@ -322,7 +368,7 @@ const LoginDriver = () => {
                         <div className="space-y-1.5">
                             <Label className="text-slate-900 font-bold ml-1">Senha</Label>
                             <div className="relative group">
-                                <Lock className={`absolute left-4 top-3.5 w-5 h-5 transition-colors ${errors.password ? 'text-red-500' : 'text-gray-400 group-focus-within:text-yellow-500'}`} />
+                                <Lock className={`absolute left-4 top-3.5 w-5 h-5 transition-colors ${errors.password ? 'text-red-500' : 'text-gray-400 group-focus-within:text-yellow-600'}`} />
                                 <Input 
                                     type={showPassword ? "text" : "password"}
                                     className={`h-12 pl-12 pr-12 bg-slate-50 border-slate-200 text-slate-900 rounded-xl transition-all ${errors.password ? 'border-red-500 ring-1 ring-red-500 bg-red-50' : 'focus:ring-2 focus:ring-yellow-500'}`} 
