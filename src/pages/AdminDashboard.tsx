@@ -3,9 +3,8 @@ import {
   LayoutDashboard, Users, Car, Settings, Wallet, 
   Map as MapIcon, LogOut, RefreshCw, Shield,
   Sun, Moon, PanelLeftClose, PanelLeftOpen, DollarSign, Clock, 
-  CheckCircle, TrendingUp, Trash2, Edit, Mail, Search,
-  CreditCard, BellRing, Save, AlertTriangle, Smartphone, Globe,
-  Menu
+  TrendingUp, Trash2, Edit, Mail, Search,
+  CreditCard, Loader2, Save, AlertTriangle, Menu
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -15,18 +14,14 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { showSuccess, showError } from "@/utils/toast";
 import { ResponsiveContainer, AreaChart, Area, CartesianGrid, XAxis, YAxis, Tooltip } from 'recharts';
 import { useTheme } from "@/components/theme-provider";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2 } from "lucide-react";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -69,24 +64,31 @@ const AdminDashboard = () => {
     setLoading(true);
     try {
         const { data: { user } } = await supabase.auth.getUser();
+        
         if (user) {
-            // Verifica se é admin sem travar se der erro
-            const { data } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
-            setAdminProfile(data);
-            if (data?.role !== 'admin') {
+            // VERIFICAÇÃO SEGURA: Usa RPC primeiro para garantir permissão
+            const { data: role } = await supabase.rpc('get_my_role');
+            
+            if (role !== 'admin') {
+                // Só redireciona se tiver certeza absoluta que NÃO é admin
+                console.warn("Acesso negado via RPC. Role:", role);
                 showError("Acesso restrito.");
                 navigate('/');
                 return;
             }
+
+            // Busca dados visuais do perfil (sem bloquear se falhar)
+            const { data: profileData } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+            setAdminProfile(profileData || { first_name: 'Admin', last_name: 'User' });
         }
 
-        // 1. Buscar Corridas (Query direta para evitar complexidade excessiva de FK)
+        // 1. Buscar Corridas
         const { data: ridesData, error: rideError } = await supabase
             .from('rides')
             .select(`*, driver:profiles!public_rides_driver_id_fkey(*), customer:profiles!public_rides_customer_id_fkey(*)`)
             .order('created_at', { ascending: false });
 
-        if (rideError) throw rideError;
+        if (rideError) console.error("Erro ao buscar corridas:", rideError);
 
         const currentRides = ridesData || [];
         setRides(currentRides);
@@ -145,7 +147,8 @@ const AdminDashboard = () => {
         setTransactions(recentTrans);
 
     } catch (e: any) {
-        showError("Erro ao carregar: " + e.message);
+        console.error(e);
+        // Não mostramos erro fatal para não travar a UI, apenas log
     } finally {
         setLoading(false);
     }
