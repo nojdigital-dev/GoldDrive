@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
-import { showError } from "@/utils/toast";
-import { Shield, Loader2, Lock, ArrowLeft, KeyRound, LogOut, Eye, EyeOff } from "lucide-react";
+import { showError, showSuccess } from "@/utils/toast";
+import { Shield, Loader2, ArrowLeft, KeyRound, LogOut, Eye, EyeOff } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 
 const LoginAdmin = () => {
@@ -14,20 +14,16 @@ const LoginAdmin = () => {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  // Verificação inicial de sessão (apenas ao carregar a página)
+  // Verificação de sessão existente
   useEffect(() => {
     let mounted = true;
     const checkSession = async () => {
-        try {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session && mounted) {
-                 const { data } = await supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle();
-                 if (data?.role === 'admin') {
-                     navigate('/admin', { replace: true });
-                 }
-            }
-        } catch (e) {
-            // Ignora erro silencioso na montagem
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session && mounted) {
+             const { data } = await supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle();
+             if (data?.role === 'admin') {
+                 navigate('/admin', { replace: true });
+             }
         }
     };
     checkSession();
@@ -40,63 +36,52 @@ const LoginAdmin = () => {
 
     setLoading(true);
 
-    // Timeout de segurança: Se o Supabase travar, isso destrava o botão em 10s
-    const safetyTimeout = setTimeout(() => {
-        if (loading) {
-            setLoading(false);
-            showError("O servidor demorou para responder. Verifique sua conexão.");
-        }
-    }, 10000);
-
     try {
-        // 1. Tentativa de Login Direta
-        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        // 1. Limpa sessão anterior para evitar conflitos
+        await supabase.auth.signOut();
+
+        // 2. Autenticação
+        const { data, error } = await supabase.auth.signInWithPassword({
             email: email.trim(),
             password: password.trim()
         });
         
-        // Se der erro de senha/email, o Supabase retorna authError aqui
-        if (authError) throw authError;
-        
-        if (!authData.user) throw new Error("Usuário não encontrado.");
+        if (error) throw error;
+        if (!data.user) throw new Error("Erro de autenticação.");
 
-        // 2. Verificação de Permissão (Admin)
-        // Usamos maybeSingle para não estourar erro se o perfil não existir (embora deva existir)
+        // 3. Verificação de Role (Permissão)
+        // Usamos maybeSingle para evitar erros caso o perfil não exista
         const { data: profile, error: profileError } = await supabase
             .from('profiles')
             .select('role')
-            .eq('id', authData.user.id)
+            .eq('id', data.user.id)
             .maybeSingle();
         
-        if (profileError) throw new Error("Erro ao carregar perfil: " + profileError.message);
+        if (profileError) {
+            console.error("Erro ao buscar perfil:", profileError);
+            throw new Error("Falha ao verificar permissões de administrador.");
+        }
 
-        if (!profile || profile.role !== 'admin') {
-            // Se logou mas não é admin, desloga imediatamente
-            await supabase.auth.signOut();
-            throw new Error("Acesso negado: Apenas administradores.");
+        if (profile?.role !== 'admin') {
+            await supabase.auth.signOut(); // Desloga se não for admin
+            throw new Error("Acesso negado: Este usuário não é administrador.");
         }
         
-        // 3. Sucesso - Limpa timeout e Redireciona
-        clearTimeout(safetyTimeout);
+        // 4. Sucesso
+        // Forçamos o fim do loading ANTES de navegar para evitar sensação de travamento
+        setLoading(false);
+        showSuccess("Bem-vindo, Administrador.");
         navigate('/admin', { replace: true });
 
     } catch (e: any) {
-        clearTimeout(safetyTimeout);
+        setLoading(false); // Garante que o botão destrave em caso de erro
         console.error("Erro login:", e);
         
-        // Tratamento de mensagens de erro
-        const msg = e.message || "";
+        let msg = e.message || "Erro ao tentar entrar.";
         if (msg.includes("Invalid login") || msg.includes("Invalid credentials")) {
-            showError("Email ou senha incorretos.");
-        } else if (msg.includes("network")) {
-            showError("Erro de conexão. Verifique sua internet.");
-        } else {
-            showError(msg || "Erro ao autenticar. Tente novamente.");
+            msg = "Email ou senha incorretos.";
         }
-    } finally {
-        // Isso GARANTE que o botão vai parar de rodar, independente do que aconteça
-        clearTimeout(safetyTimeout);
-        setLoading(false);
+        showError(msg);
     }
   };
 
