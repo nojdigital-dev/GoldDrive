@@ -4,7 +4,8 @@ import {
   Map as MapIcon, LogOut, RefreshCw, Shield,
   Sun, Moon, PanelLeftClose, PanelLeftOpen, DollarSign, Clock, 
   TrendingUp, Trash2, Edit, Mail, Search,
-  CreditCard, Loader2, Save, AlertTriangle, Menu
+  CreditCard, Loader2, Save, AlertTriangle, Menu,
+  Phone, Calendar, Star, CheckCircle2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -39,8 +40,11 @@ const AdminDashboard = () => {
   const [chartData, setChartData] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
 
-  // Estados de Gerenciamento (Edit/Delete)
+  // Estados de Gerenciamento (Edit/Delete/View)
   const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [viewUserData, setViewUserData] = useState<any>(null);
+  const [userStats, setUserStats] = useState({ totalRides: 0, totalMoney: 0, lastRide: '', canceledRides: 0 });
+  
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [editFormData, setEditFormData] = useState({ first_name: "", last_name: "", phone: "" });
@@ -77,17 +81,12 @@ const AdminDashboard = () => {
         }
 
         // --- BUSCA SEGURA DE DADOS (USANDO RPC) ---
-        
-        // 1. Buscar Corridas
         const { data: ridesData, error: ridesError } = await supabase.rpc('get_admin_rides');
         if (ridesError) throw ridesError;
         
-        const currentRides = ridesData || [];
-        // Converte JSON de volta para array se necessário (Supabase retorna JSON direto)
-        const ridesArray = Array.isArray(currentRides) ? currentRides : [];
-        setRides(ridesArray);
+        const currentRides = Array.isArray(ridesData) ? ridesData : [];
+        setRides(currentRides);
 
-        // 2. Buscar Perfis
         const { data: profilesData, error: profilesError } = await supabase.rpc('get_admin_profiles');
         if (profilesError) throw profilesError;
 
@@ -95,12 +94,12 @@ const AdminDashboard = () => {
         setPassengers(allProfiles.filter((p: any) => p.role === 'client'));
         setDrivers(allProfiles.filter((p: any) => p.role === 'driver'));
 
-        // 3. Calcular Estatísticas
+        // Estatísticas
         const today = new Date().toDateString();
-        const ridesTodayCount = ridesArray.filter((r: any) => new Date(r.created_at).toDateString() === today).length;
-        const totalRevenue = ridesArray.filter((r: any) => r.status === 'COMPLETED').reduce((acc: number, curr: any) => acc + (Number(curr.price) || 0), 0);
-        const adminRev = ridesArray.reduce((acc: number, curr: any) => acc + (Number(curr.platform_fee) || 0), 0);
-        const activeCount = ridesArray.filter((r: any) => ['SEARCHING', 'ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(r.status)).length;
+        const ridesTodayCount = currentRides.filter((r: any) => new Date(r.created_at).toDateString() === today).length;
+        const totalRevenue = currentRides.filter((r: any) => r.status === 'COMPLETED').reduce((acc: number, curr: any) => acc + (Number(curr.price) || 0), 0);
+        const adminRev = currentRides.reduce((acc: number, curr: any) => acc + (Number(curr.platform_fee) || 0), 0);
+        const activeCount = currentRides.filter((r: any) => ['SEARCHING', 'ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(r.status)).length;
 
         // Gráfico
         const chartMap = new Map();
@@ -109,7 +108,7 @@ const AdminDashboard = () => {
             const dateStr = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
             chartMap.set(dateStr, { date: dateStr, total: 0 });
         }
-        ridesArray.forEach((r: any) => {
+        currentRides.forEach((r: any) => {
             if (r.status === 'COMPLETED') {
                 const date = new Date(r.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
                 if(chartMap.has(date)) {
@@ -127,8 +126,8 @@ const AdminDashboard = () => {
             activeRides: activeCount
         });
 
-        // Transactions Mock
-        const recentTrans = ridesArray.slice(0, 15).map((r: any) => ({
+        // Transactions Mock (baseado em rides para simular)
+        const recentTrans = currentRides.slice(0, 15).map((r: any) => ({
             id: r.id, 
             date: r.created_at, 
             amount: Number(r.platform_fee || 0), 
@@ -148,6 +147,31 @@ const AdminDashboard = () => {
 
   // --- ACTIONS ---
 
+  const openViewUser = (user: any) => {
+      // Cálculo de estatísticas avançadas em tempo real
+      const userRides = rides.filter(r => 
+          user.role === 'driver' ? r.driver_id === user.id : r.customer_id === user.id
+      );
+
+      const completedRides = userRides.filter(r => r.status === 'COMPLETED');
+      const canceledRides = userRides.filter(r => r.status === 'CANCELLED');
+      
+      const totalMoney = completedRides.reduce((acc, curr) => {
+          return acc + (user.role === 'driver' ? Number(curr.driver_earnings || 0) : Number(curr.price || 0));
+      }, 0);
+
+      const lastRide = userRides.length > 0 ? userRides[0] : null; // Assumindo que rides vem ordenado por data DESC
+
+      setUserStats({
+          totalRides: completedRides.length,
+          canceledRides: canceledRides.length,
+          totalMoney: totalMoney,
+          lastRide: lastRide ? new Date(lastRide.created_at).toLocaleDateString() + ' às ' + new Date(lastRide.created_at).toLocaleTimeString() : 'Nunca'
+      });
+
+      setViewUserData(user);
+  };
+
   const openEditUser = (user: any) => {
       setSelectedUser(user);
       setEditFormData({ first_name: user.first_name || "", last_name: user.last_name || "", phone: user.phone || "" });
@@ -162,6 +186,7 @@ const AdminDashboard = () => {
           showSuccess("Usuário atualizado!");
           setIsEditDialogOpen(false);
           fetchData();
+          if (viewUserData) setViewUserData(null); // Fecha modal de view se estiver aberto
       } catch (e: any) { showError(e.message); }
   };
 
@@ -244,13 +269,13 @@ const AdminDashboard = () => {
                                   <TableHeader className="bg-slate-50/50 dark:bg-slate-800/50 sticky top-0 z-10 backdrop-blur-md"><TableRow><TableHead className="pl-8">Usuário</TableHead><TableHead>Contato</TableHead>{type === 'driver' && <TableHead>Veículo</TableHead>}<TableHead>Saldo</TableHead><TableHead className="text-right pr-8">Ações</TableHead></TableRow></TableHeader>
                                   <TableBody>
                                       {filtered.map(u => (
-                                          <TableRow key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 border-b border-border/50">
+                                          <TableRow key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 border-b border-border/50 cursor-pointer" onClick={() => openViewUser(u)}>
                                               <TableCell className="pl-8"><div className="flex items-center gap-3"><Avatar className="w-10 h-10 border-2 border-white shadow-sm"><AvatarImage src={u.avatar_url}/><AvatarFallback>{u.first_name?.[0]}</AvatarFallback></Avatar><div><p className="font-bold text-sm">{u.first_name} {u.last_name}</p><p className="text-xs text-muted-foreground">ID: {u.id.substring(0,6)}</p></div></div></TableCell>
                                               <TableCell><div className="text-sm"><p>{u.email}</p><p className="text-muted-foreground text-xs">{u.phone || 'Sem telefone'}</p></div></TableCell>
                                               {type === 'driver' && <TableCell><Badge variant="secondary" className="font-mono">{u.car_model || 'N/A'} • {u.car_plate}</Badge></TableCell>}
                                               <TableCell className="font-bold text-green-600">R$ {Number(u.balance || 0).toFixed(2)}</TableCell>
                                               <TableCell className="text-right pr-8">
-                                                  <div className="flex justify-end gap-2">
+                                                  <div className="flex justify-end gap-2" onClick={e => e.stopPropagation()}>
                                                       <Button variant="ghost" size="icon" onClick={() => openEditUser(u)}><Edit className="w-4 h-4 text-blue-500" /></Button>
                                                       <Button variant="ghost" size="icon" onClick={() => handleResetPassword(u.email)}><Mail className="w-4 h-4 text-yellow-500" /></Button>
                                                       <Button variant="ghost" size="icon" onClick={() => openDeleteUser(u)}><Trash2 className="w-4 h-4 text-red-500" /></Button>
@@ -476,21 +501,151 @@ const AdminDashboard = () => {
           </div>
       </main>
       
-      {/* DIALOGS DE GESTÃO */}
+      {/* MODAL: DETALHES COMPLETOS DO USUÁRIO */}
+      <Dialog open={!!viewUserData} onOpenChange={(o) => !o && setViewUserData(null)}>
+        <DialogContent className="max-w-2xl bg-white dark:bg-slate-900 rounded-[32px] border-0 shadow-2xl overflow-hidden p-0 max-h-[90vh] overflow-y-auto custom-scrollbar">
+            {/* Header Colorido */}
+            <div className={`h-32 w-full relative ${viewUserData?.role === 'driver' ? 'bg-yellow-500' : 'bg-slate-800'}`}>
+                <div className="absolute -bottom-10 left-8">
+                    <Avatar className="w-24 h-24 border-4 border-white dark:border-slate-900 shadow-lg bg-white">
+                        <AvatarImage src={viewUserData?.avatar_url} className="object-cover" />
+                        <AvatarFallback className="text-2xl font-bold bg-slate-100">{viewUserData?.first_name?.[0]}</AvatarFallback>
+                    </Avatar>
+                </div>
+                {/* Badges */}
+                <div className="absolute bottom-4 right-8 flex gap-2">
+                     <Badge className="bg-black/20 hover:bg-black/30 text-white backdrop-blur-md border-0 h-8 px-4">
+                        ID: {viewUserData?.id.substring(0,6)}
+                     </Badge>
+                     <Badge className="bg-white text-black hover:bg-gray-100 border-0 font-bold uppercase h-8 px-4">
+                        {viewUserData?.role === 'client' ? 'Passageiro' : 'Motorista'}
+                     </Badge>
+                </div>
+            </div>
+
+            <div className="pt-12 px-8 pb-8">
+                {/* Info Principal */}
+                <div className="flex flex-col sm:flex-row justify-between items-start mb-8 gap-4">
+                    <div>
+                        <h2 className="text-3xl font-black text-slate-900 dark:text-white leading-tight">
+                            {viewUserData?.first_name} {viewUserData?.last_name}
+                        </h2>
+                        <div className="flex flex-col gap-1 mt-2">
+                            <p className="text-muted-foreground flex items-center gap-2 font-medium">
+                                <Phone className="w-4 h-4 text-slate-400" /> {viewUserData?.phone || 'Sem telefone cadastrado'}
+                            </p>
+                            <p className="text-muted-foreground text-sm flex items-center gap-2">
+                                <Calendar className="w-4 h-4 text-slate-400" />
+                                Cadastrado em: {viewUserData?.created_at ? new Date(viewUserData.created_at).toLocaleDateString() : '--'}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="text-left sm:text-right w-full sm:w-auto bg-slate-50 dark:bg-slate-800 sm:bg-transparent sm:dark:bg-transparent p-4 sm:p-0 rounded-2xl">
+                        <p className="text-sm font-bold text-muted-foreground uppercase">Saldo em Carteira</p>
+                        <h3 className={`text-4xl font-black ${Number(viewUserData?.balance) < 0 ? 'text-red-500' : 'text-green-600'}`}>
+                            R$ {Number(viewUserData?.balance || 0).toFixed(2)}
+                        </h3>
+                    </div>
+                </div>
+
+                {/* Grid Estatísticas */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+                    <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700">
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">
+                            {viewUserData?.role === 'driver' ? 'Total Ganho' : 'Total Gasto'}
+                        </p>
+                        <p className="text-xl font-black text-slate-900 dark:text-white truncate">
+                            R$ {userStats.totalMoney.toFixed(2)}
+                        </p>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700">
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Viagens Feitas</p>
+                        <p className="text-xl font-black text-slate-900 dark:text-white">
+                            {userStats.totalRides}
+                        </p>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700">
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Cancelamentos</p>
+                        <p className="text-xl font-black text-red-600 dark:text-red-400">
+                            {userStats.canceledRides}
+                        </p>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700">
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Última Vez</p>
+                        <p className="text-sm font-bold text-slate-900 dark:text-white truncate" title={userStats.lastRide}>
+                            {userStats.lastRide.split(' ')[0] || 'Nunca'}
+                        </p>
+                    </div>
+                </div>
+
+                {/* Info Específica Motorista */}
+                {viewUserData?.role === 'driver' && (
+                    <div className="bg-yellow-50 dark:bg-yellow-900/10 p-5 rounded-2xl border border-yellow-100 dark:border-yellow-900/30 mb-8 flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left">
+                        <div className="w-16 h-16 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center text-yellow-600 dark:text-yellow-500 shrink-0">
+                            <Car className="w-8 h-8" />
+                        </div>
+                        <div className="flex-1">
+                            <p className="text-xs font-bold text-yellow-600 dark:text-yellow-500 uppercase mb-1">Veículo Cadastrado</p>
+                            <p className="font-black text-slate-900 dark:text-white text-xl">
+                                {viewUserData.car_model || 'Modelo não informado'}
+                            </p>
+                            <div className="flex flex-wrap justify-center sm:justify-start gap-2 mt-2">
+                                <span className="bg-white dark:bg-black/20 px-3 py-1 rounded-lg border border-black/5 font-mono font-bold text-sm shadow-sm">
+                                    {viewUserData.car_plate || 'SEM-PLACA'}
+                                </span>
+                                <span className="bg-white dark:bg-black/20 px-3 py-1 rounded-lg border border-black/5 text-sm">
+                                    {viewUserData.car_color}
+                                </span>
+                                <span className="bg-white dark:bg-black/20 px-3 py-1 rounded-lg border border-black/5 text-sm">
+                                    {viewUserData.car_year}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Bio/Obs */}
+                {viewUserData?.bio && (
+                     <div className="mb-8">
+                        <p className="text-xs font-bold text-muted-foreground uppercase mb-2">Biografia / Observações</p>
+                        <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700">
+                            <p className="text-sm italic text-slate-600 dark:text-slate-300">
+                                "{viewUserData.bio}"
+                            </p>
+                        </div>
+                     </div>
+                )}
+
+                <DialogFooter className="gap-3 sm:gap-0 flex-col sm:flex-row">
+                    <Button variant="outline" className="flex-1 h-14 rounded-xl text-base" onClick={() => setViewUserData(null)}>
+                        Fechar Detalhes
+                    </Button>
+                    <Button 
+                        className="flex-1 h-14 rounded-xl bg-slate-900 text-white font-bold text-base shadow-xl" 
+                        onClick={() => { setViewUserData(null); openEditUser(viewUserData); }}
+                    >
+                        <Edit className="w-4 h-4 mr-2" /> Editar Dados
+                    </Button>
+                </DialogFooter>
+            </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* DIALOGS DE GESTÃO (EDIT/DELETE) */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent className="rounded-2xl">
+          <DialogContent className="rounded-2xl bg-white dark:bg-slate-900 border-0 shadow-2xl">
               <DialogHeader><DialogTitle>Editar Usuário</DialogTitle></DialogHeader>
               <div className="space-y-4 py-4">
-                  <div><Label>Nome</Label><Input value={editFormData.first_name} onChange={e => setEditFormData({...editFormData, first_name: e.target.value})} /></div>
-                  <div><Label>Sobrenome</Label><Input value={editFormData.last_name} onChange={e => setEditFormData({...editFormData, last_name: e.target.value})} /></div>
-                  <div><Label>Telefone</Label><Input value={editFormData.phone} onChange={e => setEditFormData({...editFormData, phone: e.target.value})} /></div>
+                  <div className="space-y-2"><Label>Nome</Label><Input className="h-12 rounded-xl" value={editFormData.first_name} onChange={e => setEditFormData({...editFormData, first_name: e.target.value})} /></div>
+                  <div className="space-y-2"><Label>Sobrenome</Label><Input className="h-12 rounded-xl" value={editFormData.last_name} onChange={e => setEditFormData({...editFormData, last_name: e.target.value})} /></div>
+                  <div className="space-y-2"><Label>Telefone</Label><Input className="h-12 rounded-xl" value={editFormData.phone} onChange={e => setEditFormData({...editFormData, phone: e.target.value})} /></div>
               </div>
-              <DialogFooter><Button onClick={handleSaveUser}>Salvar Alterações</Button></DialogFooter>
+              <DialogFooter><Button className="w-full h-12 rounded-xl font-bold" onClick={handleSaveUser}>Salvar Alterações</Button></DialogFooter>
           </DialogContent>
       </Dialog>
 
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-          <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir Usuário?</AlertDialogTitle><AlertDialogDescription>Isso removerá o perfil do sistema.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={handleDeleteUser} className="bg-red-600">Excluir</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+          <AlertDialogContent className="rounded-2xl bg-white dark:bg-slate-900 border-0"><AlertDialogHeader><AlertDialogTitle>Excluir Usuário?</AlertDialogTitle><AlertDialogDescription>Isso removerá o perfil do sistema. Esta ação não pode ser desfeita.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel className="rounded-xl h-12">Cancelar</AlertDialogCancel><AlertDialogAction onClick={handleDeleteUser} className="bg-red-600 hover:bg-red-700 rounded-xl h-12 font-bold">Excluir Definitivamente</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
       </AlertDialog>
 
       {/* Detalhes da Corrida Modal */}
