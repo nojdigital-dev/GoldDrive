@@ -15,67 +15,77 @@ const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
   useEffect(() => {
     let mounted = true;
 
-    const checkAuth = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        
+    const verifyRole = async (session: any) => {
         if (!session) {
-          if (mounted) setIsAuthorized(false);
-          return;
+            if (mounted) setIsAuthorized(false);
+            return;
         }
 
-        // Tenta pegar a role do metadata (mais rápido e sem request ao banco)
+        // 1. Tenta Metadata (Rápido)
         let role = session.user.user_metadata?.role;
 
-        // Se não tiver no metadata, tenta via RPC (seguro contra RLS loop)
+        // 2. Fallback para RPC (Seguro)
         if (!role) {
             const { data } = await supabase.rpc('get_my_role');
             role = data;
         }
 
-        // Se ainda não tiver, tenta fallback para tabela profiles
+        // 3. Fallback para Tabela (Garantia Final)
         if (!role) {
             const { data } = await supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle();
             role = data?.role;
         }
 
         if (mounted) {
-            // Verifica se a role encontrada está na lista de permitidos
             if (role && allowedRoles.includes(role)) {
                 setIsAuthorized(true);
             } else {
-                console.warn(`Acesso negado. Role do usuário: ${role}, Permitido: ${allowedRoles}`);
+                console.warn(`Acesso negado. Role: ${role}, Esperado: ${allowedRoles}`);
                 setIsAuthorized(false);
             }
         }
-      } catch (error) {
-        console.error("Erro na verificação de auth:", error);
-        if (mounted) setIsAuthorized(false);
-      }
     };
 
-    checkAuth();
+    // Verificação Inicial + Listener de Mudanças
+    // onAuthStateChange dispara o evento INITIAL_SESSION quando o storage é carregado
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_OUT') {
+             if (mounted) setIsAuthorized(false);
+        } else if (session) {
+             verifyRole(session);
+        } else if (event === 'INITIAL_SESSION' && !session) {
+             // Se terminou de carregar e não tem sessão
+             if (mounted) setIsAuthorized(false);
+        }
+    });
 
-    return () => { mounted = false; };
+    // Fallback: Check manual caso o evento não dispare rápido
+    supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) verifyRole(session);
+        // Nota: Se não tiver sessão aqui, esperamos o onAuthStateChange confirmar
+        // para evitar o problema do "false positive" no F5
+    });
+
+    return () => { 
+        mounted = false;
+        subscription.unsubscribe();
+    };
   }, [allowedRoles]);
 
-  // Estado de Carregamento
+  // Loading State
   if (isAuthorized === null) {
     return (
         <div className="h-screen w-full flex items-center justify-center bg-zinc-50 dark:bg-zinc-950">
             <div className="flex flex-col items-center gap-2">
                 <Loader2 className="w-8 h-8 animate-spin text-yellow-500" />
-                <p className="text-xs text-gray-400 font-medium">Verificando acesso...</p>
+                <p className="text-xs text-gray-400 font-medium">Restaurando sessão...</p>
             </div>
         </div>
     );
   }
 
-  // Não autorizado -> Redireciona para Login
+  // Redirecionamento se falhar
   if (!isAuthorized) {
-      // Evita loop: Se já estiver no login, não faz nada (embora o Router deva cuidar disso)
-      
-      // Define para qual login mandar baseado na tentativa
       let target = "/login";
       if (location.pathname.includes('/admin')) target = "/login/admin";
       else if (location.pathname.includes('/driver')) target = "/login/driver";
@@ -83,7 +93,6 @@ const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
       return <Navigate to={target} replace />;
   }
 
-  // Autorizado -> Renderiza o componente
   return <>{children}</>;
 };
 
