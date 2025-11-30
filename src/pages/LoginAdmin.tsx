@@ -28,7 +28,7 @@ const LoginAdmin = () => {
         
         if (error) throw error;
         
-        // Verificação rápida de perfil (opcional para UX, o ProtectedRoute cuida da segurança real)
+        // Verificação rápida de perfil
         const { data: profile } = await supabase
             .from('profiles')
             .select('role')
@@ -40,14 +40,14 @@ const LoginAdmin = () => {
             throw new Error("Usuário não é administrador.");
         }
         
-        setLoading(false); // Para o loading
-        navigate('/admin', { replace: true }); // Redireciona forçado
+        navigate('/admin', { replace: true });
 
     } catch (e: any) {
         let msg = e.message || "Erro ao conectar.";
         if (msg.includes("Invalid login")) msg = "Credenciais inválidas.";
         showError(msg);
-        setLoading(false); // Para o loading no erro
+    } finally {
+        setLoading(false);
     }
   };
 
