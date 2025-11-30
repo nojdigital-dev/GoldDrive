@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2 } from "lucide-react";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -9,105 +8,90 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
-  const [isLoading, setIsLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [userRole, setUserRole] = useState<string | null>(null);
+  const [isChecking, setIsChecking] = useState(true);
+  const [canAccess, setCanAccess] = useState(false);
+  const [redirectPath, setRedirectPath] = useState<string | null>(null);
   const location = useLocation();
 
   useEffect(() => {
     let mounted = true;
 
-    // Timeout de segurança: Se travar por 3 segundos, força a falha e redireciona
-    const timeoutId = setTimeout(() => {
-        if (mounted && isLoading) {
-            console.warn("Verificação de sessão demorou muito. Redirecionando...");
-            setIsLoading(false);
-            setIsAuthenticated(false);
-        }
-    }, 3000);
+    const verify = async () => {
+      // Timeout de segurança: se o Supabase não responder em 2s, assume que não está logado para não travar
+      const timeout = new Promise((resolve) => setTimeout(resolve, 2000));
+      
+      const check = async () => {
+         const { data: { session } } = await supabase.auth.getSession();
+         if (!session) return false;
 
-    const checkSession = async () => {
+         // Se já tiver a role no metadata (cache), usa ela pra ser instantâneo
+         let role = session.user.user_metadata?.role;
+         
+         // Se não tiver, busca no banco rapidinho
+         if (!role) {
+             const { data } = await supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle();
+             role = data?.role;
+         }
+
+         return { role, match: role && allowedRoles.includes(role) };
+      };
+
       try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        
-        if (sessionError || !session) {
-            if (mounted) {
-                setIsAuthenticated(false);
-                setIsLoading(false);
-            }
-            return;
-        }
-
-        // Se tem sessão, busca a role
-        const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', session.user.id)
-            .maybeSingle();
+        // Corrida entre verificação e timeout
+        const result: any = await Promise.race([check(), timeout]);
 
         if (mounted) {
-            if (profile && !profileError) {
-                setUserRole(profile.role);
-                setIsAuthenticated(true);
+            if (!result || !result.role) {
+                // Não logado ou erro
+                setRedirectPath(determineLoginRoute(location.pathname));
+            } else if (result.match) {
+                // Sucesso total
+                setCanAccess(true);
             } else {
-                // Sessão existe mas não conseguimos ler o perfil (erro de rede ou banco)
-                console.error("Erro ao ler perfil:", profileError);
-                setIsAuthenticated(false);
+                // Logado mas role errada
+                setRedirectPath(determineRedirectByRole(result.role));
             }
-            setIsLoading(false);
         }
-      } catch (error) {
-        console.error("Auth Check Error:", error);
-        if (mounted) {
-            setIsAuthenticated(false);
-            setIsLoading(false);
-        }
+      } catch (e) {
+        console.error("Auth Error", e);
+        if (mounted) setRedirectPath("/login");
+      } finally {
+        if (mounted) setIsChecking(false);
       }
     };
 
-    checkSession();
+    verify();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-        if (event === 'SIGNED_OUT') {
-            if (mounted) {
-                setIsAuthenticated(false);
-                setUserRole(null);
-                // Não precisa setar loading, o redirect vai acontecer no render
-            }
-        }
-    });
+    return () => { mounted = false; };
+  }, [location.pathname, allowedRoles]);
 
-    return () => {
-        mounted = false;
-        clearTimeout(timeoutId); // Limpa o timer se o componente desmontar
-        subscription.unsubscribe();
-    };
-  }, []);
+  const determineLoginRoute = (path: string) => {
+      if (path.includes('/admin')) return "/login/admin";
+      if (path.includes('/driver')) return "/login/driver";
+      return "/login";
+  };
 
-  if (isLoading) {
-    return (
-      <div className="h-screen w-full flex flex-col items-center justify-center bg-zinc-950 gap-4">
-        <Loader2 className="w-12 h-12 text-yellow-500 animate-spin" />
-        <p className="text-gray-400 text-sm animate-pulse">Verificando credenciais...</p>
-      </div>
-    );
+  const determineRedirectByRole = (role: string) => {
+      if (role === 'admin') return "/admin";
+      if (role === 'driver') return "/driver";
+      return "/client";
+  };
+
+  // Enquanto verifica, não mostra NADA (melhor que loader travado) ou um loader invisível
+  // Se demorar muito, o timeout libera.
+  if (isChecking) {
+      return null; // Tela branca rápida é melhor que "Carregando..." eterno
   }
 
-  if (!isAuthenticated) {
-    // Redirecionamento inteligente baseado na URL que tentou acessar
-    if (location.pathname.includes('/admin')) return <Navigate to="/login/admin" replace />;
-    if (location.pathname.includes('/driver')) return <Navigate to="/login/driver" replace />;
-    return <Navigate to="/login" replace />;
+  if (redirectPath) {
+      return <Navigate to={redirectPath} replace />;
   }
 
-  // Verifica permissão de Role
-  if (userRole && !allowedRoles.includes(userRole)) {
-      if (userRole === 'admin') return <Navigate to="/admin" replace />;
-      if (userRole === 'driver') return <Navigate to="/driver" replace />;
-      return <Navigate to="/client" replace />;
+  if (canAccess) {
+      return <>{children}</>;
   }
 
-  return <>{children}</>;
+  return <Navigate to="/login" replace />;
 };
 
 export default ProtectedRoute;

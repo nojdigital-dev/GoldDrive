@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,20 +14,6 @@ const LoginAdmin = () => {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  // Redireciona se já estiver logado como admin
-  useEffect(() => {
-    const checkSession = async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-             const { data } = await supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle();
-             if (data?.role === 'admin') {
-                 navigate('/admin', { replace: true });
-             }
-        }
-    };
-    checkSession();
-  }, [navigate]);
-
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading) return;
@@ -35,9 +21,6 @@ const LoginAdmin = () => {
     setLoading(true);
 
     try {
-        console.log("Iniciando login...");
-        
-        // 1. Login Simples e Direto
         const { data, error } = await supabase.auth.signInWithPassword({
             email: email.trim(),
             password: password.trim()
@@ -45,46 +28,27 @@ const LoginAdmin = () => {
         
         if (error) throw error;
         
-        console.log("Login Auth sucesso:", data);
-
-        // 2. Verificação Rápida de Perfil
-        // Se falhar aqui, não vamos travar o login, deixamos o ProtectedRoute lidar ou mostramos erro depois
-        const { data: profile, error: profileError } = await supabase
+        // Verificação rápida de perfil (opcional para UX, o ProtectedRoute cuida da segurança real)
+        const { data: profile } = await supabase
             .from('profiles')
             .select('role')
             .eq('id', data.user.id)
             .maybeSingle();
-        
-        console.log("Perfil carregado:", profile, "Erro:", profileError);
-
-        if (profileError) {
-             console.error("Erro RLS/Banco:", profileError);
-             // Não bloqueia, tenta ir pro admin e se falhar o router devolve
-        }
 
         if (profile && profile.role !== 'admin') {
             await supabase.auth.signOut();
-            throw new Error("Este usuário não tem permissão de Administrador.");
+            throw new Error("Usuário não é administrador.");
         }
         
-        showSuccess("Login realizado com sucesso!");
-        
-        // Pequeno delay para garantir que o cookie de sessão foi gravado
-        setTimeout(() => {
-            navigate('/admin', { replace: true });
-        }, 500);
+        navigate('/admin', { replace: true });
 
     } catch (e: any) {
-        console.error("Erro no fluxo de login:", e);
-        
         let msg = e.message || "Erro ao conectar.";
         if (msg.includes("Invalid login")) msg = "Credenciais inválidas.";
-        
         showError(msg);
-        setLoading(false); // Destrava o botão
+    } finally {
+        setLoading(false);
     }
-    // Nota: Não coloco setLoading(false) no sucesso para evitar que o botão
-    // "pisque" antes da página mudar.
   };
 
   const handleForceClear = async () => {

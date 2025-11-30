@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,18 +13,6 @@ const LoginClient = () => {
   const [password, setPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
   const [name, setName] = useState("");
-
-  // Verificação em segundo plano (Não bloqueia a tela)
-  useEffect(() => {
-    const checkUser = async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-            // Se já tiver sessão, redireciona suavemente
-            navigate('/client');
-        }
-    };
-    checkUser();
-  }, [navigate]);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,11 +31,13 @@ const LoginClient = () => {
         } else {
             const { error } = await supabase.auth.signInWithPassword({ email, password });
             if(error) throw error;
+            // Força navegação imediata
             navigate('/client');
         }
     } catch (e: any) {
         showError(e.message);
     } finally {
+        // GARANTE que o loading pare
         setLoading(false);
     }
   };
