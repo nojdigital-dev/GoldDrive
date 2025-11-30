@@ -23,51 +23,51 @@ const AdminLoginSecure = () => {
     setLoading(true);
 
     try {
-      // 1. Tenta Autenticar
+      console.log("Iniciando login...");
+      
+      // 1. Autenticação Básica
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password: password.trim(),
       });
 
       if (authError) throw new Error(authError.message);
-      if (!authData.user) throw new Error("Usuário não encontrado.");
+      if (!authData.user) throw new Error("Usuário não identificado.");
 
-      setSuccessMsg("Credenciais aceitas. Verificando permissões...");
+      setSuccessMsg("Autenticado. Verificando permissões via RPC...");
 
-      // 2. Verifica a Role no banco de dados (Força bruta, sem confiar em cache)
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', authData.user.id)
-        .single();
+      // 2. Verificação via RPC (Remote Procedure Call)
+      // Isso evita ler a tabela 'profiles' diretamente, fugindo de qualquer loop de RLS
+      const { data: role, error: rpcError } = await supabase.rpc('get_my_role');
 
-      if (profileError) {
-          // Se der erro ao buscar perfil, desloga por segurança
-          await supabase.auth.signOut();
-          throw new Error("Erro ao verificar perfil de usuário.");
+      if (rpcError) {
+          console.error("Erro RPC:", rpcError);
+          // Fallback: Tenta ler do metadata se o RPC falhar
+          const metaRole = authData.user.user_metadata?.role;
+          if (metaRole !== 'admin') throw new Error("Erro ao verificar permissão do servidor.");
+      } else {
+          console.log("Role recebida:", role);
+          if (role !== 'admin') {
+             await supabase.auth.signOut();
+             throw new Error("ACESSO NEGADO: Usuário não é administrador.");
+          }
       }
 
-      // 3. Validação Final
-      if (profile?.role !== 'admin') {
-         await supabase.auth.signOut();
-         throw new Error("ACESSO NEGADO: Este usuário não é um administrador.");
-      }
-
-      // 4. Sucesso Total
-      setSuccessMsg("Acesso autorizado. Redirecionando...");
+      // 3. Sucesso
+      setSuccessMsg("Acesso autorizado! Redirecionando...");
       
-      // Pequeno delay apenas para o usuário ver a mensagem de sucesso
       setTimeout(() => {
-          navigate('/admin', { replace: true });
-      }, 500);
+          // Força um reload para limpar qualquer estado de cache do React
+          window.location.href = '/admin';
+      }, 1000);
 
     } catch (err: any) {
       console.error("Login Error:", err);
-      setErrorMsg(err.message === "Invalid login credentials" ? "Email ou senha incorretos." : err.message);
-      setLoading(false); // Garante que o botão destrave
+      let msg = err.message;
+      if (msg === "Invalid login credentials") msg = "Email ou senha incorretos.";
+      setErrorMsg(msg);
+      setLoading(false);
     }
-    // Nota: Não coloco setLoading(false) no finally aqui porque se der sucesso, 
-    // quero que o botão continue travado enquanto redireciona.
   };
 
   return (
@@ -77,9 +77,9 @@ const AdminLoginSecure = () => {
           <div className="mx-auto w-12 h-12 bg-red-900/20 rounded-full flex items-center justify-center mb-2 border border-red-900/50">
             <ShieldAlert className="w-6 h-6 text-red-500" />
           </div>
-          <CardTitle className="text-2xl font-bold text-white">Acesso Administrativo</CardTitle>
+          <CardTitle className="text-2xl font-bold text-white">Admin Secure Login</CardTitle>
           <CardDescription className="text-zinc-400">
-            Login de Segurança (Modo de Reserva)
+            Modo de Segurança (RPC Bypass)
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-6">
@@ -88,7 +88,7 @@ const AdminLoginSecure = () => {
             {errorMsg && (
               <Alert variant="destructive" className="bg-red-900/20 border-red-900/50 text-red-200">
                 <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Erro de Acesso</AlertTitle>
+                <AlertTitle>Erro</AlertTitle>
                 <AlertDescription>{errorMsg}</AlertDescription>
               </Alert>
             )}
@@ -102,27 +102,25 @@ const AdminLoginSecure = () => {
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="email">Email Corporativo</Label>
+              <Label htmlFor="email">Email</Label>
               <Input 
                 id="email" 
                 type="email" 
-                placeholder="admin@golddrive.com" 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="bg-zinc-950 border-zinc-700 focus:border-red-500 focus:ring-red-500/20"
+                className="bg-zinc-950 border-zinc-700"
                 disabled={loading}
               />
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="password">Senha de Acesso</Label>
+              <Label htmlFor="password">Senha</Label>
               <Input 
                 id="password" 
                 type="password" 
-                placeholder="••••••••" 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="bg-zinc-950 border-zinc-700 focus:border-red-500 focus:ring-red-500/20"
+                className="bg-zinc-950 border-zinc-700"
                 disabled={loading}
               />
             </div>
@@ -132,18 +130,8 @@ const AdminLoginSecure = () => {
                 className="w-full h-12 font-bold bg-white text-black hover:bg-zinc-200 mt-2"
                 disabled={loading}
             >
-              {loading ? "Verificando..." : "ACESSAR SISTEMA"}
+              {loading ? "Processando..." : "ENTRAR"}
             </Button>
-
-            <div className="pt-4 text-center">
-                <button 
-                    type="button" 
-                    onClick={() => navigate('/')}
-                    className="text-xs text-zinc-500 hover:text-zinc-300 underline"
-                >
-                    Voltar para Home
-                </button>
-            </div>
           </form>
         </CardContent>
       </Card>
