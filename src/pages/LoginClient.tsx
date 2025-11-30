@@ -19,22 +19,27 @@ const LoginClient = () => {
   useEffect(() => {
     const clearSession = async () => {
         await supabase.auth.signOut();
-        try {
-            // @ts-ignore
-            localStorage.removeItem(`sb-${new URL((supabase as any).supabaseUrl).hostname.split('.')[0]}-auth-token`);
-        } catch (e) {
-            console.error("Erro ao limpar storage:", e);
-        }
+        // @ts-ignore
+        localStorage.removeItem(`sb-${new URL((supabase as any).supabaseUrl).hostname.split('.')[0]}-auth-token`);
     };
     clearSession();
   }, []);
+
+  const redirectUserByRole = (role: string) => {
+      console.log("Redirecionando para role:", role);
+      switch(role) {
+          case 'driver': navigate('/driver', { replace: true }); break;
+          case 'admin': navigate('/admin', { replace: true }); break;
+          default: navigate('/client', { replace: true }); // client e outros
+      }
+  };
 
   const ensureProfileExists = async (userId: string, fullName: string) => {
       try {
           const { data } = await supabase.from('profiles').select('id, role').eq('id', userId).maybeSingle();
           if (data) return data.role;
 
-          console.warn("Perfil não encontrado, criando manualmente...");
+          console.warn("Perfil não encontrado no login, criando fallback de passageiro...");
           const firstName = fullName.split(' ')[0] || "Usuário";
           const lastName = fullName.split(' ').slice(1).join(' ') || "";
           
@@ -42,7 +47,7 @@ const LoginClient = () => {
               id: userId,
               first_name: firstName,
               last_name: lastName,
-              role: 'client',
+              role: 'client', // Default para quem loga aqui sem perfil
               driver_status: 'APPROVED',
               updated_at: new Date().toISOString()
           });
@@ -64,13 +69,11 @@ const LoginClient = () => {
     if(isSignUp && !name) return showError("Digite seu nome");
 
     setLoading(true);
-    console.log("Iniciando autenticação...");
 
     try {
         let authData;
 
         if(isSignUp) {
-            console.log("Tentando cadastro...");
             const { data, error } = await supabase.auth.signUp({
                 email: email.trim(), 
                 password: password.trim(),
@@ -87,18 +90,17 @@ const LoginClient = () => {
             authData = data;
             
             if (authData.user) {
-                await ensureProfileExists(authData.user.id, name);
-            }
-
-            if (data.session) {
-                navigate('/client', { replace: true });
-            } else {
-                showSuccess("Conta criada! Faça login.");
-                setIsSignUp(false);
+                const role = await ensureProfileExists(authData.user.id, name);
+                
+                if (data.session) {
+                    redirectUserByRole(role);
+                } else {
+                    showSuccess("Conta criada! Verifique seu email para confirmar.");
+                    setIsSignUp(false);
+                }
             }
 
         } else {
-            console.log("Tentando login...");
             const { data, error } = await supabase.auth.signInWithPassword({ 
                 email: email.trim(), 
                 password: password.trim() 
@@ -110,18 +112,13 @@ const LoginClient = () => {
             if (!authData.user) throw new Error("Erro na autenticação.");
             const role = await ensureProfileExists(authData.user.id, name || "Usuário");
 
-            console.log("Login sucesso, role:", role);
-
-            if (role === 'driver') navigate('/driver', { replace: true });
-            else if (role === 'admin') navigate('/admin', { replace: true });
-            else navigate('/client', { replace: true });
+            redirectUserByRole(role);
         }
 
     } catch (e: any) {
-        console.error("Erro auth:", e);
+        console.error(e);
         let msg = e.message || "Erro ao conectar.";
         if (msg.includes("Invalid login")) msg = "Email ou senha incorretos.";
-        if (msg.includes("already registered")) msg = "Este email já está cadastrado.";
         showError(msg);
     } finally {
         setLoading(false);

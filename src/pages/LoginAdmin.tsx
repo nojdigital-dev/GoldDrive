@@ -43,6 +43,7 @@ const LoginAdmin = () => {
         const { data: profile } = await supabase.from('profiles').select('role').eq('id', data.user.id).maybeSingle();
         const role = profile?.role || 'admin';
         
+        // Redirecionamento unificado
         if (role === 'admin') navigate('/admin', { replace: true });
         else if (role === 'driver') navigate('/driver', { replace: true });
         else navigate('/client', { replace: true });

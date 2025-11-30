@@ -57,13 +57,23 @@ const LoginDriver = () => {
     setPhone(value);
   };
 
+  const redirectUserByRole = (role: string, driverStatus?: string) => {
+      switch(role) {
+          case 'driver': 
+              if (driverStatus === 'PENDING') navigate('/success', { replace: true });
+              else navigate('/driver', { replace: true });
+              break;
+          case 'admin': navigate('/admin', { replace: true }); break;
+          default: navigate('/client', { replace: true });
+      }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
       e.preventDefault();
       if (loading) return;
       if (!email || !password) return showError("Preencha email e senha");
       
       setLoading(true);
-      console.log("Iniciando login de motorista...");
       
       try {
           const { data, error } = await supabase.auth.signInWithPassword({ 
@@ -79,13 +89,9 @@ const LoginDriver = () => {
             .select('role, driver_status')
             .eq('id', data.user.id)
             .maybeSingle();
-
-          if (profile?.role === 'driver') {
-              if (profile.driver_status === 'PENDING') navigate('/success', { replace: true });
-              else navigate('/driver', { replace: true });
-          }
-          else if (profile?.role === 'admin') navigate('/admin', { replace: true });
-          else navigate('/client', { replace: true });
+            
+          const role = profile?.role || 'client'; // Fallback
+          redirectUserByRole(role, profile?.driver_status);
 
       } catch (e: any) {
           console.error("Erro login motorista:", e);
