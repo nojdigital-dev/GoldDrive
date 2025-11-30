@@ -10,6 +10,7 @@ import Index from "./pages/Index";
 import LoginClient from "./pages/LoginClient";
 import LoginDriver from "./pages/LoginDriver";
 import LoginAdmin from "./pages/LoginAdmin";
+import AdminLoginSecure from "./pages/AdminLoginSecure"; // Nova Importação
 import ClientDashboard from "./pages/ClientDashboard";
 import DriverDashboard from "./pages/DriverDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -23,17 +24,19 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
-      {/* Configuração atualizada do Toast (Sonner) */}
       <Sonner position="top-right" closeButton richColors theme="light" />
       <RideProvider>
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
             
-            {/* Rotas de Login Separadas */}
-            <Route path="/login" element={<LoginClient />} /> {/* Default / Passageiro */}
+            {/* Rotas de Login */}
+            <Route path="/login" element={<LoginClient />} />
             <Route path="/login/driver" element={<LoginDriver />} />
             <Route path="/login/admin" element={<LoginAdmin />} />
+            
+            {/* ROTA DE LOGIN DE EMERGÊNCIA/SEGURANÇA */}
+            <Route path="/admin-secure" element={<AdminLoginSecure />} />
             
             {/* Rotas Protegidas de Cliente */}
             <Route path="/client" element={
@@ -56,7 +59,7 @@ const App = () => (
               </ProtectedRoute>
             } />
 
-            {/* Rotas Comuns (Acessíveis a todos os logados) */}
+            {/* Rotas Comuns */}
             <Route path="/profile" element={
               <ProtectedRoute allowedRoles={['client', 'driver', 'admin']}>
                 <Profile />
