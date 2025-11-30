@@ -18,7 +18,8 @@ const LoginAdmin = () => {
     // Limpeza forçada ao entrar
     const clearSession = async () => {
         await supabase.auth.signOut();
-        localStorage.removeItem(`sb-${new URL(supabase.supabaseUrl).hostname.split('.')[0]}-auth-token`);
+        // @ts-ignore
+        localStorage.removeItem(`sb-${new URL((supabase as any).supabaseUrl).hostname.split('.')[0]}-auth-token`);
     };
     clearSession();
   }, []);
