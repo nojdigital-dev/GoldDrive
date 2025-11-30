@@ -14,16 +14,20 @@ const LoginAdmin = () => {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  // Verificação silenciosa de sessão (apenas redireciona se já estiver logado)
+  // Verificação inicial de sessão (apenas ao carregar a página)
   useEffect(() => {
     let mounted = true;
     const checkSession = async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session && mounted) {
-             const { data } = await supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle();
-             if (data?.role === 'admin') {
-                 navigate('/admin', { replace: true });
-             }
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session && mounted) {
+                 const { data } = await supabase.from('profiles').select('role').eq('id', session.user.id).maybeSingle();
+                 if (data?.role === 'admin') {
+                     navigate('/admin', { replace: true });
+                 }
+            }
+        } catch (e) {
+            // Ignora erro silencioso na montagem
         }
     };
     checkSession();
@@ -34,53 +38,64 @@ const LoginAdmin = () => {
     e.preventDefault();
     if (loading) return;
 
-    setLoading(true); // Bloqueia botão
+    setLoading(true);
+
+    // Timeout de segurança: Se o Supabase travar, isso destrava o botão em 10s
+    const safetyTimeout = setTimeout(() => {
+        if (loading) {
+            setLoading(false);
+            showError("O servidor demorou para responder. Verifique sua conexão.");
+        }
+    }, 10000);
 
     try {
-        // 1. Limpeza preventiva (ignora erros aqui para não travar)
-        await supabase.auth.signOut().catch(() => {});
-
-        // 2. Tentativa de Login
-        const { data, error } = await supabase.auth.signInWithPassword({
+        // 1. Tentativa de Login Direta
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
             email: email.trim(),
             password: password.trim()
         });
         
-        if (error) throw error;
+        // Se der erro de senha/email, o Supabase retorna authError aqui
+        if (authError) throw authError;
         
-        if (!data.user) throw new Error("Erro desconhecido ao obter usuário.");
+        if (!authData.user) throw new Error("Usuário não encontrado.");
 
-        // 3. Verificação de Permissão (Admin)
+        // 2. Verificação de Permissão (Admin)
+        // Usamos maybeSingle para não estourar erro se o perfil não existir (embora deva existir)
         const { data: profile, error: profileError } = await supabase
             .from('profiles')
             .select('role')
-            .eq('id', data.user.id)
-            .single();
+            .eq('id', authData.user.id)
+            .maybeSingle();
         
-        if (profileError) {
-            // Se falhar ao ler o perfil, desloga por segurança
-            await supabase.auth.signOut();
-            throw new Error("Erro ao verificar permissões do usuário.");
-        }
+        if (profileError) throw new Error("Erro ao carregar perfil: " + profileError.message);
 
-        if (profile?.role !== 'admin') {
+        if (!profile || profile.role !== 'admin') {
+            // Se logou mas não é admin, desloga imediatamente
             await supabase.auth.signOut();
             throw new Error("Acesso negado: Apenas administradores.");
         }
         
-        // 4. Sucesso! Redireciona
+        // 3. Sucesso - Limpa timeout e Redireciona
+        clearTimeout(safetyTimeout);
         navigate('/admin', { replace: true });
 
     } catch (e: any) {
+        clearTimeout(safetyTimeout);
         console.error("Erro login:", e);
-        // Mensagem amigável
-        let msg = e.message;
+        
+        // Tratamento de mensagens de erro
+        const msg = e.message || "";
         if (msg.includes("Invalid login") || msg.includes("Invalid credentials")) {
-            msg = "Email ou senha incorretos.";
+            showError("Email ou senha incorretos.");
+        } else if (msg.includes("network")) {
+            showError("Erro de conexão. Verifique sua internet.");
+        } else {
+            showError(msg || "Erro ao autenticar. Tente novamente.");
         }
-        showError(msg);
     } finally {
-        // CRÍTICO: Isso roda SEMPRE, garantindo que o botão desbloqueie
+        // Isso GARANTE que o botão vai parar de rodar, independente do que aconteça
+        clearTimeout(safetyTimeout);
         setLoading(false);
     }
   };
