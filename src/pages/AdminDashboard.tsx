@@ -108,6 +108,15 @@ const AdminDashboard = () => {
             }
         }
 
+        // Limpeza de Motoristas Inativos (> 10 min)
+        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+        await supabase
+            .from('profiles')
+            .update({ is_online: false })
+            .eq('role', 'driver')
+            .eq('is_online', true)
+            .lt('last_active', tenMinutesAgo);
+
         // 1. Buscar Corridas
         const { data: ridesData, error: rideError } = await supabase
             .from('rides')
@@ -166,12 +175,8 @@ const AdminDashboard = () => {
         // Active Rides
         const activeCount = currentRides.filter(r => ['SEARCHING', 'ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(r.status)).length;
         
-        // Online Drivers (Estimativa: Motoristas em corridas ativas ou recentes)
-        const activeDriversSet = new Set(currentRides
-            .filter(r => ['ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(r.status) && r.driver_id)
-            .map(r => r.driver_id)
-        );
-        const driversOnlineCount = activeDriversSet.size;
+        // Online Drivers REAL (Usando a coluna is_online)
+        const driversOnlineCount = allDrivers.filter((d: any) => d.is_online).length;
 
         // Gráfico
         const chartMap = new Map();
@@ -216,6 +221,9 @@ const AdminDashboard = () => {
   const handleLogout = async () => {
     setLoading(true);
     try {
+      if (adminProfile?.role === 'driver') {
+          await supabase.from('profiles').update({ is_online: false }).eq('id', adminProfile.id);
+      }
       Object.keys(localStorage).forEach(key => {
         if (key.includes('supabase') || key.includes('golddrive') || key.includes('sb-')) {
           localStorage.removeItem(key);
@@ -229,8 +237,7 @@ const AdminDashboard = () => {
     }
   };
 
-  // --- ACTIONS DE GESTÃO DETALHADA ---
-  
+  // ... (Keep existing detailed management logic unchanged) ...
   const openUserDetail = async (user: any) => {
       setDetailUser(user);
       setIsDetailLoading(true);
@@ -550,36 +557,27 @@ const AdminDashboard = () => {
                               />
                           </div>
 
-                          {/* LINHA 2: VOLUME DE CORRIDAS */}
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                              <StatCard title="Corridas Hoje" value={stats.ridesToday} icon={Activity} colorClass="bg-indigo-500" />
-                              <StatCard title="Esta Semana" value={stats.ridesWeek} icon={BarChart3} colorClass="bg-purple-500" />
-                              <StatCard title="Este Mês" value={stats.ridesMonth} icon={PieChart} colorClass="bg-pink-500" />
-                          </div>
-
-                          {/* LINHA 3: USUÁRIOS E ATIVIDADE */}
+                          {/* LINHA 2: VOLUME DE CORRIDAS (AGRUPADO) & ONLINE */}
                           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                              {/* Container Base de Usuários */}
+                              
+                              {/* Card Agrupado de Volume de Corridas */}
                               <Card className="lg:col-span-2 border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] overflow-hidden">
-                                  <CardHeader><CardTitle>Base de Usuários</CardTitle><CardDescription>Total de cadastros ativos no sistema</CardDescription></CardHeader>
-                                  <CardContent className="grid grid-cols-2 gap-6">
-                                      <div className="bg-indigo-50 dark:bg-indigo-900/20 p-6 rounded-2xl flex items-center gap-4 border border-indigo-100 dark:border-indigo-800">
-                                          <div className="w-12 h-12 bg-indigo-500 text-white rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/30">
-                                              <Users className="w-6 h-6" />
-                                          </div>
-                                          <div>
-                                              <p className="text-sm font-bold text-indigo-600 dark:text-indigo-400 uppercase">Passageiros</p>
-                                              <h3 className="text-3xl font-black text-slate-900 dark:text-white">{passengers.length}</h3>
-                                          </div>
+                                  <CardHeader><CardTitle>Volume de Corridas</CardTitle><CardDescription>Total de viagens realizadas por período</CardDescription></CardHeader>
+                                  <CardContent className="grid grid-cols-3 gap-4">
+                                      <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-800 text-center">
+                                          <div className="w-10 h-10 bg-indigo-500 text-white rounded-xl flex items-center justify-center shadow-lg mx-auto mb-2"><Activity className="w-5 h-5"/></div>
+                                          <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase">Hoje</p>
+                                          <h3 className="text-2xl font-black text-slate-900 dark:text-white">{stats.ridesToday}</h3>
                                       </div>
-                                      <div className="bg-orange-50 dark:bg-orange-900/20 p-6 rounded-2xl flex items-center gap-4 border border-orange-100 dark:border-orange-800">
-                                          <div className="w-12 h-12 bg-orange-500 text-white rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/30">
-                                              <Car className="w-6 h-6" />
-                                          </div>
-                                          <div>
-                                              <p className="text-sm font-bold text-orange-600 dark:text-orange-400 uppercase">Motoristas</p>
-                                              <h3 className="text-3xl font-black text-slate-900 dark:text-white">{drivers.length}</h3>
-                                          </div>
+                                      <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-2xl border border-purple-100 dark:border-purple-800 text-center">
+                                          <div className="w-10 h-10 bg-purple-500 text-white rounded-xl flex items-center justify-center shadow-lg mx-auto mb-2"><BarChart3 className="w-5 h-5"/></div>
+                                          <p className="text-xs font-bold text-purple-600 dark:text-purple-400 uppercase">Semana</p>
+                                          <h3 className="text-2xl font-black text-slate-900 dark:text-white">{stats.ridesWeek}</h3>
+                                      </div>
+                                      <div className="bg-pink-50 dark:bg-pink-900/20 p-4 rounded-2xl border border-pink-100 dark:border-pink-800 text-center">
+                                          <div className="w-10 h-10 bg-pink-500 text-white rounded-xl flex items-center justify-center shadow-lg mx-auto mb-2"><PieChart className="w-5 h-5"/></div>
+                                          <p className="text-xs font-bold text-pink-600 dark:text-pink-400 uppercase">Mês</p>
+                                          <h3 className="text-2xl font-black text-slate-900 dark:text-white">{stats.ridesMonth}</h3>
                                       </div>
                                   </CardContent>
                               </Card>
@@ -597,7 +595,7 @@ const AdminDashboard = () => {
                                               <p className="font-bold text-sm uppercase opacity-80 tracking-widest">Tempo Real</p>
                                           </div>
                                           <h3 className="text-5xl font-black mt-2">{stats.driversOnline}</h3>
-                                          <p className="font-medium text-slate-300 mt-1">Motoristas em Atividade</p>
+                                          <p className="font-medium text-slate-300 mt-1">Motoristas Online</p>
                                       </div>
                                       <div className="pt-8">
                                           <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
@@ -609,11 +607,39 @@ const AdminDashboard = () => {
                               </Card>
                           </div>
 
-                          {/* Gráfico Receita */}
-                          <Card className="border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] overflow-hidden">
-                              <CardHeader><CardTitle>Fluxo de Receita</CardTitle><CardDescription>Últimos 7 dias</CardDescription></CardHeader>
-                              <CardContent className="h-[350px]"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData}><defs><linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#eab308" stopColorOpacity={0.3}/><stop offset="95%" stopColor="#eab308" stopColorOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} /><XAxis dataKey="date" axisLine={false} tickLine={false} fontSize={12} stroke="#888" dy={10} /><YAxis axisLine={false} tickLine={false} fontSize={12} stroke="#888" tickFormatter={(v) => `R$${v}`} /><Tooltip contentStyle={{ borderRadius: '16px', border: 'none', backgroundColor: '#1e293b', color: '#fff' }} itemStyle={{ color: '#fbbf24' }} formatter={(val: number) => [`R$ ${val.toFixed(2)}`, 'Receita']} /><Area type="monotone" dataKey="total" stroke="#eab308" strokeWidth={4} fillOpacity={1} fill="url(#colorTotal)" /></AreaChart></ResponsiveContainer></CardContent>
-                          </Card>
+                          {/* LINHA 3: USUÁRIOS E GRÁFICO */}
+                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                              {/* Container Base de Usuários */}
+                              <Card className="lg:col-span-1 border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] overflow-hidden">
+                                  <CardHeader><CardTitle>Base de Usuários</CardTitle><CardDescription>Cadastros ativos</CardDescription></CardHeader>
+                                  <CardContent className="space-y-4">
+                                      <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-2xl flex items-center gap-4 border border-indigo-100 dark:border-indigo-800">
+                                          <div className="w-12 h-12 bg-indigo-500 text-white rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                                              <Users className="w-6 h-6" />
+                                          </div>
+                                          <div>
+                                              <p className="text-sm font-bold text-indigo-600 dark:text-indigo-400 uppercase">Passageiros</p>
+                                              <h3 className="text-2xl font-black text-slate-900 dark:text-white">{passengers.length}</h3>
+                                          </div>
+                                      </div>
+                                      <div className="bg-orange-50 dark:bg-orange-900/20 p-4 rounded-2xl flex items-center gap-4 border border-orange-100 dark:border-orange-800">
+                                          <div className="w-12 h-12 bg-orange-500 text-white rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/30">
+                                              <Car className="w-6 h-6" />
+                                          </div>
+                                          <div>
+                                              <p className="text-sm font-bold text-orange-600 dark:text-orange-400 uppercase">Motoristas</p>
+                                              <h3 className="text-2xl font-black text-slate-900 dark:text-white">{drivers.length}</h3>
+                                          </div>
+                                      </div>
+                                  </CardContent>
+                              </Card>
+
+                              {/* Gráfico Receita */}
+                              <Card className="lg:col-span-2 border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] overflow-hidden">
+                                  <CardHeader><CardTitle>Fluxo de Receita</CardTitle><CardDescription>Últimos 7 dias</CardDescription></CardHeader>
+                                  <CardContent className="h-[300px]"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData}><defs><linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#eab308" stopColorOpacity={0.3}/><stop offset="95%" stopColor="#eab308" stopColorOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} /><XAxis dataKey="date" axisLine={false} tickLine={false} fontSize={12} stroke="#888" dy={10} /><YAxis axisLine={false} tickLine={false} fontSize={12} stroke="#888" tickFormatter={(v) => `R$${v}`} /><Tooltip contentStyle={{ borderRadius: '16px', border: 'none', backgroundColor: '#1e293b', color: '#fff' }} itemStyle={{ color: '#fbbf24' }} formatter={(val: number) => [`R$ ${val.toFixed(2)}`, 'Receita']} /><Area type="monotone" dataKey="total" stroke="#eab308" strokeWidth={4} fillOpacity={1} fill="url(#colorTotal)" /></AreaChart></ResponsiveContainer></CardContent>
+                              </Card>
+                          </div>
                       </div>
                   )}
 

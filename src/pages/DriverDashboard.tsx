@@ -48,6 +48,19 @@ const DriverDashboard = () => {
 
   const isOnTrip = !!ride && ['ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(ride?.status || '');
 
+  // Heartbeat Effect: Atualiza last_active a cada 2 minutos se estiver online
+  useEffect(() => {
+      let interval: NodeJS.Timeout;
+      if (isOnline && driverProfile?.id) {
+          const sendHeartbeat = async () => {
+              await supabase.from('profiles').update({ last_active: new Date().toISOString() }).eq('id', driverProfile.id);
+          };
+          sendHeartbeat(); // Imediato
+          interval = setInterval(sendHeartbeat, 120000); // A cada 2 min
+      }
+      return () => clearInterval(interval);
+  }, [isOnline, driverProfile?.id]);
+
   useEffect(() => { checkProfile(); }, [activeTab]);
 
   const checkProfile = async () => {
@@ -55,13 +68,17 @@ const DriverDashboard = () => {
       if(user) {
           const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
           
-          // Bloqueio de segurança para drivers pendentes
           if (data?.driver_status === 'PENDING') {
               navigate('/driver-pending');
               return;
           }
 
           setDriverProfile(data);
+          
+          // Sincroniza estado local com banco
+          if (data.is_online !== undefined) {
+              setIsOnline(data.is_online);
+          }
           
           // Checagem de carro
           if (!data.car_model || !data.car_plate) { setShowCarForm(true); setIsOnline(false); }
@@ -132,7 +149,19 @@ const DriverDashboard = () => {
       }
   };
 
-  const toggleOnline = (val: boolean) => { if (val && (!driverProfile?.car_model)) { setShowCarForm(true); return; } setIsOnline(val); };
+  const toggleOnline = async (val: boolean) => { 
+      if (val && (!driverProfile?.car_model)) { setShowCarForm(true); return; } 
+      
+      setIsOnline(val);
+      
+      // Atualiza no banco
+      if (driverProfile?.id) {
+          await supabase.from('profiles').update({ 
+              is_online: val,
+              last_active: new Date().toISOString()
+          }).eq('id', driverProfile.id);
+      }
+  };
 
   const handleTabChange = (tab: string) => {
       if (tab === 'profile') navigate('/profile');
