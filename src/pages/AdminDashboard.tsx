@@ -7,7 +7,7 @@ import {
   CreditCard, BellRing, Save, AlertTriangle, Smartphone, Globe,
   Menu, Banknote, FileText, Check, X, ExternalLink, Camera, User,
   Moon as MoonIcon, List, Plus, Power, Pencil, Star, Calendar, ArrowUpRight, ArrowDownLeft,
-  Activity, BarChart3, PieChart, Coins, Lock, Unlock, Calculator
+  Activity, BarChart3, PieChart, Coins, Lock, Unlock, Calculator, Info
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -72,6 +72,7 @@ const AdminDashboard = () => {
   // Confirmações de Salvamento
   const [showNightSaveAlert, setShowNightSaveAlert] = useState(false);
   const [showTableSaveAlert, setShowTableSaveAlert] = useState(false);
+  const [showStrategySaveAlert, setShowStrategySaveAlert] = useState(false);
   
   // Form de Edição
   const [editFormData, setEditFormData] = useState({ first_name: "", last_name: "", phone: "", email: "" });
@@ -278,70 +279,36 @@ const AdminDashboard = () => {
     }
   };
 
+  // ... (User Detail functions maintained) ...
   const openUserDetail = async (user: any) => {
       setDetailUser(user);
       setIsDetailLoading(true);
       setIsEditingInDetail(false);
-      setEditFormData({ 
-          first_name: user.first_name || "", 
-          last_name: user.last_name || "", 
-          phone: user.phone || "",
-          email: user.email || ""
-      });
-
+      setEditFormData({ first_name: user.first_name || "", last_name: user.last_name || "", phone: user.phone || "", email: user.email || "" });
       try {
           const queryField = user.role === 'client' ? 'customer_id' : 'driver_id';
-          const { data: history } = await supabase
-            .from('rides')
-            .select('*')
-            .eq(queryField, user.id)
-            .order('created_at', { ascending: false });
-          
+          const { data: history } = await supabase.from('rides').select('*').eq(queryField, user.id).order('created_at', { ascending: false });
           setDetailUserHistory(history || []);
-
           const { data: totalData } = await supabase.rpc('get_user_lifetime_total', { target_user_id: user.id });
-          
           let avgRating = 5.0;
           if (history && history.length > 0) {
-              const ratings = history
-                .map((r: any) => user.role === 'client' ? r.customer_rating : r.driver_rating)
-                .filter((r: any) => r !== null);
-              
-              if (ratings.length > 0) {
-                  avgRating = ratings.reduce((a: any, b: any) => a + b, 0) / ratings.length;
-              }
+              const ratings = history.map((r: any) => user.role === 'client' ? r.customer_rating : r.driver_rating).filter((r: any) => r !== null);
+              if (ratings.length > 0) avgRating = ratings.reduce((a: any, b: any) => a + b, 0) / ratings.length;
           }
-
-          setDetailUserStats({
-              totalSpent: Number(totalData) || 0,
-              totalRides: history?.length || 0,
-              avgRating
-          });
-
-      } catch (e) {
-          console.error(e);
-      } finally {
-          setIsDetailLoading(false);
-      }
+          setDetailUserStats({ totalSpent: Number(totalData) || 0, totalRides: history?.length || 0, avgRating });
+      } catch (e) { console.error(e); } finally { setIsDetailLoading(false); }
   };
 
   const handleSaveUserDetail = async () => {
       if (!detailUser) return;
       try {
-          const { error } = await supabase.from('profiles').update({
-              first_name: editFormData.first_name,
-              last_name: editFormData.last_name,
-              phone: editFormData.phone
-          }).eq('id', detailUser.id);
-
+          const { error } = await supabase.from('profiles').update({ first_name: editFormData.first_name, last_name: editFormData.last_name, phone: editFormData.phone }).eq('id', detailUser.id);
           if (error) throw error;
           showSuccess("Perfil atualizado com sucesso!");
           setIsEditingInDetail(false);
           setDetailUser(prev => ({ ...prev, ...editFormData }));
           fetchData(); 
-      } catch (e: any) {
-          showError(e.message);
-      }
+      } catch (e: any) { showError(e.message); }
   };
 
   const handleDeleteUser = async () => {
@@ -353,55 +320,36 @@ const AdminDashboard = () => {
           setDetailUser(null);
           setIsDeleteDialogOpen(false);
           fetchData();
-      } catch (e: any) {
-          showError(e.message);
-      }
+      } catch (e: any) { showError(e.message); }
   };
 
   const handleToggleBlock = async () => {
       if (!detailUser) return;
-      
-      const currentStatus = !!detailUser.is_blocked; // Force boolean
-      const newStatus = !currentStatus;
-      
+      const newStatus = !detailUser.is_blocked;
       try {
-          const { error } = await supabase
-            .from('profiles')
-            .update({ is_blocked: newStatus })
-            .eq('id', detailUser.id);
-            
+          const { error } = await supabase.from('profiles').update({ is_blocked: newStatus }).eq('id', detailUser.id);
           if (error) throw error;
-          
           setDetailUser((prev: any) => ({ ...prev, is_blocked: newStatus }));
           setDrivers(prev => prev.map(d => d.id === detailUser.id ? { ...d, is_blocked: newStatus } : d));
           setPassengers(prev => prev.map(p => p.id === detailUser.id ? { ...p, is_blocked: newStatus } : p));
-          
-          showSuccess(newStatus ? "Usuário bloqueado com sucesso." : "Usuário desbloqueado.");
-      } catch (e: any) {
-          showError("Erro ao atualizar: " + e.message);
-      }
+          showSuccess(newStatus ? "Usuário bloqueado." : "Usuário desbloqueado.");
+      } catch (e: any) { showError(e.message); }
   };
 
   const handleResetPassword = async (email: string) => {
-      if (!email) {
-          showError("Usuário sem email cadastrado.");
-          return;
-      }
+      if (!email) { showError("Usuário sem email."); return; }
       try {
-          const { error } = await supabase.auth.resetPasswordForEmail(email, {
-              redirectTo: window.location.origin + '/update-password',
-          });
+          const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + '/update-password' });
           if (error) throw error;
-          showSuccess(`Email de redefinição enviado para ${email}`);
-      } catch (e: any) {
-          showError(e.message);
-      }
+          showSuccess(`Email enviado para ${email}`);
+      } catch (e: any) { showError(e.message); }
   };
   
   const handleSaveConfig = async () => {
       setLoading(true);
       setShowNightSaveAlert(false);
       setShowTableSaveAlert(false);
+      setShowStrategySaveAlert(false);
 
       try { 
           const { error: settingsError } = await supabase.from('app_settings').upsert([ 
@@ -435,7 +383,7 @@ const AdminDashboard = () => {
               if (catError) throw catError;
           }
 
-          showSuccess("Configurações atualizadas com segurança!"); 
+          showSuccess("Configurações salvas!"); 
           await fetchData(true); 
       } catch (e: any) { 
           showError(e.message); 
@@ -545,6 +493,9 @@ const AdminDashboard = () => {
       );
   };
 
+  // Filtrando categorias ativas para as abas
+  const activeCategories = categories.filter(c => c.active);
+
   return (
     <div className="flex h-screen bg-slate-50 dark:bg-slate-950 font-sans text-foreground overflow-hidden">
       
@@ -554,6 +505,7 @@ const AdminDashboard = () => {
 
       {/* --- SIDEBAR --- */}
       <aside className={`hidden lg:flex flex-col z-20 transition-all duration-300 border-r border-border/50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md ${sidebarCollapsed ? 'w-20' : 'w-72'}`}>
+         {/* ... (Sidebar igual) ... */}
          <div className="p-6 flex items-center justify-between">
              {!sidebarCollapsed && (
                  <div className="flex items-center gap-2 text-2xl font-black tracking-tighter">
@@ -601,7 +553,6 @@ const AdminDashboard = () => {
 
       {/* --- MAIN CONTENT --- */}
       <main className="flex-1 flex flex-col overflow-hidden relative z-10">
-          {/* Header Mobile e Conteúdo Principal ... */}
           <header className="lg:hidden h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b px-4 flex items-center justify-between sticky top-0 z-50">
                <div className="flex items-center gap-2 font-black text-xl">Gold<span className="text-yellow-500">Admin</span></div>
                <Sheet><SheetTrigger asChild><Button variant="ghost" size="icon"><Menu /></Button></SheetTrigger><SheetContent side="left" className="p-0 border-r-0 bg-slate-900 text-white w-72"><div className="p-6 font-black text-2xl">Menu</div><div className="px-4 space-y-2">{['overview', 'requests', 'rides', 'users', 'drivers', 'finance', 'config'].map(id => (<Button key={id} variant="ghost" className="w-full justify-start text-lg capitalize h-14 rounded-xl" onClick={() => setActiveTab(id)}>{id}</Button>))}</div></SheetContent></Sheet>
@@ -616,10 +567,10 @@ const AdminDashboard = () => {
                       <div className="flex gap-3"><Button variant="outline" className="rounded-xl h-12" onClick={() => fetchData(true)}><RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} /> Atualizar</Button><Button variant="destructive" className="rounded-xl h-12 font-bold px-6 shadow-red-500/20 shadow-lg" onClick={handleLogout}><LogOut className="w-4 h-4 mr-2" /> Sair</Button></div>
                   </div>
 
-                  {/* ... TABS OVERVIEW, REQUESTS, RIDES, USERS, DRIVERS, FINANCE MANTIDAS IGUAIS ... */}
+                  {/* ... TABS OVERVIEW, REQUESTS, RIDES, USERS, DRIVERS, FINANCE ... */}
                   {activeTab === 'overview' && (
                       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
-                          {/* LINHA 1 */}
+                          {/* LINHA 1: FINANCEIRO E PENDÊNCIAS */}
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                               <StatCard title="Valor Total Corridas" value={`R$ ${stats.revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} icon={DollarSign} colorClass="bg-green-500" description="Volume transacionado em viagens" />
                               {!config.isSubscriptionMode && (
@@ -630,7 +581,7 @@ const AdminDashboard = () => {
                               )}
                               <StatCard title="Cadastros Pendentes" value={pendingDrivers.length} icon={FileText} colorClass="bg-yellow-500" description="Aguardando aprovação" />
                           </div>
-                          {/* LINHA 2 */}
+                          {/* LINHA 2: VOLUME DE CORRIDAS & ONLINE */}
                           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                               <Card className="lg:col-span-2 border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] overflow-hidden">
                                   <CardHeader><CardTitle>Volume de Corridas</CardTitle><CardDescription>Total de viagens realizadas por período</CardDescription></CardHeader>
@@ -724,9 +675,15 @@ const AdminDashboard = () => {
                                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                                       {/* ESTRATÉGIA DE PREÇO */}
                                       <Card className="lg:col-span-3 border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] overflow-hidden">
-                                          <CardHeader>
-                                              <CardTitle className="flex items-center gap-2"><Calculator className="w-5 h-5"/> Estratégia de Precificação</CardTitle>
-                                              <CardDescription>Defina como o valor das corridas será calculado para o passageiro.</CardDescription>
+                                          <CardHeader className="flex flex-row items-center justify-between">
+                                              <div>
+                                                  <CardTitle className="flex items-center gap-2"><Calculator className="w-5 h-5"/> Estratégia de Precificação</CardTitle>
+                                                  <CardDescription>Defina como o valor das corridas será calculado para o passageiro.</CardDescription>
+                                              </div>
+                                              {/* Botão de salvar específico para estratégia com alerta */}
+                                              <Button onClick={() => setShowStrategySaveAlert(true)} className="bg-slate-900 text-white font-bold rounded-xl shadow-lg">
+                                                  Salvar Estratégia
+                                              </Button>
                                           </CardHeader>
                                           <CardContent>
                                               <RadioGroup 
@@ -737,7 +694,7 @@ const AdminDashboard = () => {
                                                   <div className={`flex items-center space-x-2 border p-4 rounded-xl cursor-pointer transition-all ${adminConfigs.pricing_strategy === 'FIXED' ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20' : 'border-border'}`}>
                                                       <RadioGroupItem value="FIXED" id="fixed" />
                                                       <Label htmlFor="fixed" className="flex-1 cursor-pointer">
-                                                          <div className="font-bold text-lg">Tabela Fixa (GoldPromo)</div>
+                                                          <div className="font-bold text-lg">Tabela Fixa (Gold Driver)</div>
                                                           <div className="text-muted-foreground text-sm">Valor definido por faixas de distância pré-configuradas.</div>
                                                       </Label>
                                                   </div>
@@ -801,7 +758,7 @@ const AdminDashboard = () => {
                                           <Card className="border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] overflow-hidden">
                                               <CardHeader className="flex flex-row items-center justify-between">
                                                   <div>
-                                                      <CardTitle className="flex items-center gap-2"><List className="w-5 h-5" /> Tabela de Preços Fixa (GoldPromo)</CardTitle>
+                                                      <CardTitle className="flex items-center gap-2"><List className="w-5 h-5" /> Tabela de Preços Fixa (Gold Driver)</CardTitle>
                                                       <CardDescription>Configuração válida apenas se a estratégia "Tabela Fixa" estiver ativa.</CardDescription>
                                                   </div>
                                                   <Button onClick={() => setShowTableSaveAlert(true)} disabled={loading} className="bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-lg"><Save className="w-4 h-4 mr-2" /> Salvar Tabela</Button>
@@ -853,25 +810,56 @@ const AdminDashboard = () => {
 
                               <TabsContent value="categories">
                                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                      {categories.length > 0 && (
-                                          <Tabs defaultValue={categories[0].id} className="w-full col-span-2">
+                                      
+                                      {/* AVISO IMPORTANTE */}
+                                      <div className="col-span-1 lg:col-span-2 bg-yellow-100 dark:bg-yellow-900/30 border-l-4 border-yellow-500 p-4 rounded-r-xl flex items-start gap-3">
+                                          <Info className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
+                                          <div>
+                                              <h4 className="font-bold text-yellow-800 dark:text-yellow-500">Atenção: Modo Dinâmico</h4>
+                                              <p className="text-sm text-yellow-700 dark:text-yellow-400">
+                                                  Os valores configurados abaixo (Base, KM, Mínimo) só serão aplicados se a Estratégia de Precificação estiver definida como <strong>"Cálculo Dinâmico"</strong>.
+                                                  No modo Tabela Fixa, apenas o valor da tabela é considerado.
+                                              </p>
+                                          </div>
+                                      </div>
+
+                                      {/* LISTA DE CATEGORIAS (TOGGLES) */}
+                                      <Card className="col-span-1 lg:col-span-2 border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px]">
+                                          <CardHeader>
+                                              <CardTitle>Gerenciar Categorias Ativas</CardTitle>
+                                              <CardDescription>Ative ou desative categorias disponíveis para os passageiros.</CardDescription>
+                                          </CardHeader>
+                                          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                              {categories.map(cat => (
+                                                  <div key={cat.id} className={`flex items-center justify-between p-4 rounded-xl border transition-all ${cat.active ? 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-sm' : 'bg-slate-100 dark:bg-slate-900 border-transparent opacity-70'}`}>
+                                                      <div className="flex items-center gap-3">
+                                                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${cat.active ? 'bg-slate-900 text-white' : 'bg-slate-300 text-slate-500'}`}>
+                                                              <Car className="w-5 h-5" />
+                                                          </div>
+                                                          <span className="font-bold">{cat.name}</span>
+                                                      </div>
+                                                      <Switch checked={cat.active} onCheckedChange={(val) => updateCategory(cat.id, 'active', val)} />
+                                                  </div>
+                                              ))}
+                                          </CardContent>
+                                      </Card>
+
+                                      {/* ABAS DE CONFIGURAÇÃO (SÓ ATIVAS) */}
+                                      {activeCategories.length > 0 && (
+                                          <Tabs defaultValue={activeCategories[0].id} className="w-full col-span-1 lg:col-span-2">
                                               <TabsList className="bg-slate-100 dark:bg-slate-900 p-1 mb-4 flex-wrap h-auto">
-                                                  {categories.map(cat => (
+                                                  {activeCategories.map(cat => (
                                                       <TabsTrigger key={cat.id} value={cat.id} className="rounded-lg">{cat.name}</TabsTrigger>
                                                   ))}
                                               </TabsList>
                                               
-                                              {categories.map(cat => (
+                                              {activeCategories.map(cat => (
                                                   <TabsContent key={cat.id} value={cat.id}>
-                                                      <Card className="border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] overflow-hidden">
+                                                      <Card className="border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] overflow-hidden animate-in fade-in zoom-in-95 duration-300">
                                                           <CardHeader className="flex flex-row items-center justify-between">
                                                               <div>
                                                                   <CardTitle className="flex items-center gap-2">Configurar {cat.name}</CardTitle>
                                                                   <CardDescription>Ajuste os valores base para esta categoria.</CardDescription>
-                                                              </div>
-                                                              <div className="flex items-center gap-2">
-                                                                  <Label className="text-sm font-bold">Ativa</Label>
-                                                                  <Switch checked={cat.active} onCheckedChange={(val) => updateCategory(cat.id, 'active', val)} />
                                                               </div>
                                                           </CardHeader>
                                                           <CardContent className="space-y-6">
@@ -941,6 +929,22 @@ const AdminDashboard = () => {
               <AlertDialogFooter>
                   <AlertDialogCancel className="rounded-xl">Revisar</AlertDialogCancel>
                   <AlertDialogAction onClick={handleSaveConfig} className="bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold">Salvar Definitivamente</AlertDialogAction>
+              </AlertDialogFooter>
+          </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showStrategySaveAlert} onOpenChange={setShowStrategySaveAlert}>
+          <AlertDialogContent className="rounded-[24px]">
+              <AlertDialogHeader>
+                  <AlertDialogTitle className="flex items-center gap-2 text-blue-600"><Settings className="w-5 h-5"/> Alterar Estratégia de Preço</AlertDialogTitle>
+                  <AlertDialogDescription>
+                      Você está alterando a forma como o preço das corridas é calculado. 
+                      Isso afetará todas as novas solicitações imediatamente. Tem certeza?
+                  </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                  <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleSaveConfig} className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold">Confirmar Mudança</AlertDialogAction>
               </AlertDialogFooter>
           </AlertDialogContent>
       </AlertDialog>
