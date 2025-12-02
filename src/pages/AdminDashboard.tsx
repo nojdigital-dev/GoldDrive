@@ -8,7 +8,7 @@ import {
   Menu, Banknote, FileText, Check, X, ExternalLink, Camera, User,
   Moon as MoonIcon, List, Plus, Power, Pencil, Star, Calendar, ArrowUpRight, ArrowDownLeft,
   Activity, BarChart3, PieChart, Coins, Lock, Unlock, Calculator, Info, MapPin, Zap, XCircle,
-  Ban
+  Ban, Percent
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -37,7 +37,7 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
   const [activeTab, setActiveTab] = useState("overview");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // Começa true para evitar flash
   const [adminProfile, setAdminProfile] = useState<any>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   
@@ -85,7 +85,7 @@ const AdminDashboard = () => {
       enableCash: true,
       enableWallet: true,
       isSubscriptionMode: false,
-      enableCancellationFee: true // Nova configuração
+      enableCancellationFee: true
   });
   
   // Tabela de Preços e Configs
@@ -98,7 +98,9 @@ const AdminDashboard = () => {
       night_increase: "3",
       midnight_min_price: "25",
       platform_fee: "10",
-      pricing_strategy: "FIXED" // FIXED ou DYNAMIC
+      pricing_strategy: "FIXED",
+      cancellation_fee_type: "FIXED", // FIXED ou PERCENTAGE
+      cancellation_fee_value: "5.00"
   });
 
   // Filtros
@@ -106,7 +108,57 @@ const AdminDashboard = () => {
   const [filterStatus, setFilterStatus] = useState("ALL");
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Polling de Status Online Real-Time
+  // --- AUTH E INITIAL LOAD ---
+  useEffect(() => {
+    let mounted = true;
+
+    const init = async () => {
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            
+            if (!session) {
+                if (mounted) navigate('/');
+                return;
+            }
+
+            // Verifica role APENAS se ainda não tivermos o perfil carregado
+            if (!adminProfile) {
+                const { data, error } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+                
+                if (error || data?.role !== 'admin') {
+                    console.error("Acesso negado ou erro perfil", error);
+                    await supabase.auth.signOut();
+                    if (mounted) navigate('/');
+                    return;
+                }
+                
+                if (mounted) setAdminProfile(data);
+            }
+
+            // Carrega dados iniciais
+            if (mounted) await fetchData();
+
+        } catch (error) {
+            console.error("Erro fatal init admin:", error);
+        }
+    };
+
+    init();
+
+    // Listener de Auth para evitar F5 quebrado
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_OUT') {
+            navigate('/');
+        }
+    });
+
+    return () => {
+        mounted = false;
+        authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  // Polling de Status Online Real-Time (Otimizado)
   useEffect(() => {
       const fetchOnlineCount = async () => {
           const { count } = await supabase
@@ -118,29 +170,20 @@ const AdminDashboard = () => {
           setStats(prev => ({ ...prev, driversOnline: count || 0 }));
       };
 
-      const interval = setInterval(fetchOnlineCount, 5000); 
+      const interval = setInterval(fetchOnlineCount, 10000); // Aumentado para 10s para leveza
+      fetchOnlineCount();
       return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => { fetchData(); }, []);
-
   const fetchData = async (isManual = false) => {
-    setLoading(true);
+    if (isManual) setLoading(true);
+    
     try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-            const { data } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
-            setAdminProfile(data);
-            if (data?.role !== 'admin') {
-                showError("Acesso restrito.");
-                navigate('/');
-                return;
-            }
-        }
-
+        // Limpeza de online ghosts
         const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
         await supabase.from('profiles').update({ is_online: false }).eq('role', 'driver').eq('is_online', true).lt('last_active', tenMinutesAgo);
 
+        // Fetchs paralelos com tratamento de falha individual (Promise.allSettled seria ideal, mas manteremos simples)
         const [ridesRes, profilesRes, settingsRes, pricingRes, catRes, adminConfigRes] = await Promise.all([
             supabase.from('rides').select(`*, driver:profiles!public_rides_driver_id_fkey(*), customer:profiles!public_rides_customer_id_fkey(*)`).order('created_at', { ascending: false }),
             supabase.from('profiles').select('*').order('created_at', { ascending: false }),
@@ -150,14 +193,15 @@ const AdminDashboard = () => {
             supabase.from('admin_config').select('*')
         ]);
 
-        const currentRides = ridesRes.data || [];
-        setRides(currentRides);
-
-        const allProfiles = profilesRes.data || [];
-        setPassengers(allProfiles.filter((p: any) => p.role === 'client'));
-        const allDrivers = allProfiles.filter((p: any) => p.role === 'driver');
-        setDrivers(allDrivers);
-        setPendingDrivers(allDrivers.filter((p: any) => p.driver_status === 'PENDING'));
+        if (ridesRes.data) setRides(ridesRes.data);
+        
+        if (profilesRes.data) {
+            const allProfiles = profilesRes.data;
+            setPassengers(allProfiles.filter((p: any) => p.role === 'client'));
+            const allDrivers = allProfiles.filter((p: any) => p.role === 'driver');
+            setDrivers(allDrivers);
+            setPendingDrivers(allDrivers.filter((p: any) => p.driver_status === 'PENDING'));
+        }
 
         if (settingsRes.data) {
             const cash = settingsRes.data.find(s => s.key === 'enable_cash');
@@ -183,6 +227,10 @@ const AdminDashboard = () => {
             if (newConf.platform_fee) setConfig(prev => ({ ...prev, platformFee: newConf.platform_fee }));
         }
 
+        // Stats Calc (Seguro contra nulos)
+        const currentRides = ridesRes.data || [];
+        const allDrivers = profilesRes.data?.filter((p: any) => p.role === 'driver') || [];
+
         const now = new Date();
         const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
@@ -199,6 +247,7 @@ const AdminDashboard = () => {
         const activeCount = currentRides.filter(r => ['SEARCHING', 'ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(r.status)).length;
         const driversOnlineCount = allDrivers.filter((d: any) => d.is_online).length;
 
+        // Chart Data
         const chartMap = new Map();
         for(let i=6; i>=0; i--) {
             const d = new Date(); d.setDate(d.getDate() - i);
@@ -224,42 +273,55 @@ const AdminDashboard = () => {
 
         if (isManual) showSuccess("Painel atualizado com sucesso.");
 
-    } catch (e: any) { showError("Erro ao carregar: " + e.message); } finally { setLoading(false); }
+    } catch (e: any) { 
+        console.error("Erro fetch admin:", e);
+        if (isManual) showError("Erro ao carregar dados: " + e.message); 
+    } finally { 
+        setLoading(false); 
+    }
   };
 
   const handleLogout = async () => {
-    setLoading(true);
     try {
       if (adminProfile?.role === 'driver') {
           await supabase.from('profiles').update({ is_online: false }).eq('id', adminProfile.id);
       }
-      Object.keys(localStorage).forEach(key => {
-        if (key.includes('supabase') || key.includes('golddrive') || key.includes('sb-')) localStorage.removeItem(key);
-      });
-      await supabase.auth.signOut({ scope: 'global' });
-      window.location.href = '/';
+      await supabase.auth.signOut();
+      navigate('/');
     } catch (error: any) {
       console.error('Erro logout:', error);
-      window.location.href = '/';
+      navigate('/');
     }
   };
 
-  // ... Detalhes User e Outros mantidos igual ...
   const openUserDetail = async (user: any) => {
-      setDetailUser(user); setIsDetailLoading(true); setIsEditingInDetail(false);
+      setDetailUser(user); 
+      setIsDetailLoading(true); 
+      setIsEditingInDetail(false);
       setEditFormData({ first_name: user.first_name || "", last_name: user.last_name || "", phone: user.phone || "", email: user.email || "" });
+      
       try {
           const queryField = user.role === 'client' ? 'customer_id' : 'driver_id';
-          const { data: history } = await supabase.from('rides').select('*').eq(queryField, user.id).order('created_at', { ascending: false });
+          const { data: history, error: historyError } = await supabase.from('rides').select('*').eq(queryField, user.id).order('created_at', { ascending: false });
+          
+          if (historyError) throw historyError;
           setDetailUserHistory(history || []);
+          
           const { data: totalData } = await supabase.rpc('get_user_lifetime_total', { target_user_id: user.id });
+          
           let avgRating = 5.0;
           if (history && history.length > 0) {
               const ratings = history.map((r: any) => user.role === 'client' ? r.customer_rating : r.driver_rating).filter((r: any) => r !== null);
               if (ratings.length > 0) avgRating = ratings.reduce((a: any, b: any) => a + b, 0) / ratings.length;
           }
           setDetailUserStats({ totalSpent: Number(totalData) || 0, totalRides: history?.length || 0, avgRating });
-      } catch (e) { console.error(e); } finally { setIsDetailLoading(false); }
+      } catch (e: any) { 
+          console.error(e);
+          showError("Erro ao carregar detalhes: " + e.message);
+      } finally { 
+          // GARANTIA que o loading sai
+          setIsDetailLoading(false); 
+      }
   };
 
   const handleSaveUserDetail = async () => {
@@ -321,6 +383,7 @@ const AdminDashboard = () => {
           
           const adminConfigUpdates = Object.entries(adminConfigs).filter(([key]) => key !== 'platform_fee').map(([key, value]) => ({ key, value }));
           adminConfigUpdates.push({ key: 'platform_fee', value: config.platformFee });
+          
           const { error: adminConfigError } = await supabase.from('admin_config').upsert(adminConfigUpdates);
           if (adminConfigError) throw adminConfigError;
           
@@ -328,7 +391,7 @@ const AdminDashboard = () => {
           // Salva apenas categorias dinâmicas aqui
           for (const cat of categories.filter(c => c.name !== 'Gold Driver')) { const { error: catError } = await supabase.from('car_categories').update({ base_fare: cat.base_fare, cost_per_km: cat.cost_per_km, min_fare: cat.min_fare, active: cat.active }).eq('id', cat.id); if (catError) throw catError; }
           
-          showSuccess("Configurações salvas!"); await fetchData(true); 
+          showSuccess("Configurações salvas!"); await fetchData(false); // False para evitar duplo toast
       } catch (e: any) { showError(e.message); } finally { setLoading(false); }
   };
 
@@ -477,20 +540,57 @@ const AdminDashboard = () => {
                                           </CardFooter>
                                       </Card>
 
-                                      {/* TAXA DE CANCELAMENTO (NOVO) */}
+                                      {/* TAXA DE CANCELAMENTO (ATUALIZADO) */}
                                       <Card className="border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] h-fit">
                                           <CardHeader>
                                               <CardTitle className="flex items-center gap-2"><Ban className="w-5 h-5 text-red-500" /> Cancelamento</CardTitle>
-                                              <CardDescription>Políticas de cancelamento.</CardDescription>
+                                              <CardDescription>Políticas de multa para cancelamentos tardios.</CardDescription>
                                           </CardHeader>
                                           <CardContent className="space-y-4">
                                               <div className="flex items-center justify-between p-4 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-100 dark:border-red-800">
                                                   <div className="space-y-0.5">
                                                       <Label className="text-base font-bold flex items-center gap-2 text-red-700 dark:text-red-400">Cobrar Taxa</Label>
-                                                      <p className="text-sm text-red-600/80 dark:text-red-400/80">Aplica multa ao cancelar após aceitar.</p>
+                                                      <p className="text-sm text-red-600/80 dark:text-red-400/80">Ativar cobrança automática.</p>
                                                   </div>
                                                   <Switch checked={config.enableCancellationFee} onCheckedChange={(val) => setConfig({...config, enableCancellationFee: val})} />
                                               </div>
+
+                                              {config.enableCancellationFee && (
+                                                  <div className="p-4 bg-gray-50 dark:bg-slate-800 rounded-xl space-y-4 animate-in fade-in slide-in-from-top-2">
+                                                      <div className="space-y-3">
+                                                          <Label>Tipo de Cobrança</Label>
+                                                          <RadioGroup 
+                                                              value={adminConfigs.cancellation_fee_type} 
+                                                              onValueChange={(val) => setAdminConfigs({...adminConfigs, cancellation_fee_type: val})}
+                                                              className="flex gap-4"
+                                                          >
+                                                              <div className="flex items-center space-x-2">
+                                                                  <RadioGroupItem value="FIXED" id="fixed" />
+                                                                  <Label htmlFor="fixed">Valor Fixo (R$)</Label>
+                                                              </div>
+                                                              <div className="flex items-center space-x-2">
+                                                                  <RadioGroupItem value="PERCENTAGE" id="percentage" />
+                                                                  <Label htmlFor="percentage">Porcentagem (%)</Label>
+                                                              </div>
+                                                          </RadioGroup>
+                                                      </div>
+                                                      
+                                                      <div className="space-y-2">
+                                                          <Label>Valor da Taxa</Label>
+                                                          <div className="relative">
+                                                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-bold">
+                                                                  {adminConfigs.cancellation_fee_type === 'FIXED' ? 'R$' : '%'}
+                                                              </span>
+                                                              <Input 
+                                                                  type="number" 
+                                                                  value={adminConfigs.cancellation_fee_value} 
+                                                                  onChange={(e) => setAdminConfigs({...adminConfigs, cancellation_fee_value: e.target.value})}
+                                                                  className="pl-10 h-12 rounded-xl bg-white dark:bg-slate-900"
+                                                              />
+                                                          </div>
+                                                      </div>
+                                                  </div>
+                                              )}
                                           </CardContent>
                                           <CardFooter>
                                               <Button onClick={handleSaveConfig} disabled={loading} className="w-full h-12 rounded-xl font-bold bg-slate-900 text-white"><Save className="w-4 h-4 mr-2" /> Salvar Regras</Button>
