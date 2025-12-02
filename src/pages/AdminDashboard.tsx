@@ -6,7 +6,8 @@ import {
   CheckCircle, TrendingUp, Trash2, Edit, Mail, Search,
   CreditCard, BellRing, Save, AlertTriangle, Smartphone, Globe,
   Menu, Banknote, FileText, Check, X, ExternalLink, Camera, User,
-  Moon as MoonIcon, List, Plus, Power, Pencil, Star, Calendar, ArrowUpRight, ArrowDownLeft
+  Moon as MoonIcon, List, Plus, Power, Pencil, Star, Calendar, ArrowUpRight, ArrowDownLeft,
+  Activity, BarChart3, PieChart
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -39,7 +40,15 @@ const AdminDashboard = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   
   // Dados Principais
-  const [stats, setStats] = useState({ revenue: 0, adminRevenue: 0, ridesToday: 0, activeRides: 0 });
+  const [stats, setStats] = useState({ 
+      revenue: 0, 
+      adminRevenue: 0, 
+      ridesToday: 0, 
+      ridesWeek: 0, 
+      ridesMonth: 0,
+      activeRides: 0,
+      driversOnline: 0
+  });
   const [rides, setRides] = useState<any[]>([]);
   const [passengers, setPassengers] = useState<any[]>([]);
   const [drivers, setDrivers] = useState<any[]>([]);
@@ -142,11 +151,27 @@ const AdminDashboard = () => {
         }
 
         // 5. Calcular Estatísticas
-        const today = new Date().toDateString();
-        const ridesTodayCount = currentRides.filter(r => new Date(r.created_at).toDateString() === today).length;
+        const now = new Date();
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay())); // Domingo
+        const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+
+        const ridesTodayCount = currentRides.filter(r => new Date(r.created_at) >= startOfDay).length;
+        const ridesWeekCount = currentRides.filter(r => new Date(r.created_at) >= startOfWeek).length;
+        const ridesMonthCount = currentRides.filter(r => new Date(r.created_at) >= startOfMonth).length;
+
         const totalRevenue = currentRides.filter(r => r.status === 'COMPLETED').reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
         const adminRev = currentRides.reduce((acc, curr) => acc + (Number(curr.platform_fee) || 0), 0);
+        
+        // Active Rides
         const activeCount = currentRides.filter(r => ['SEARCHING', 'ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(r.status)).length;
+        
+        // Online Drivers (Estimativa: Motoristas em corridas ativas ou recentes)
+        const activeDriversSet = new Set(currentRides
+            .filter(r => ['ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(r.status) && r.driver_id)
+            .map(r => r.driver_id)
+        );
+        const driversOnlineCount = activeDriversSet.size;
 
         // Gráfico
         const chartMap = new Map();
@@ -165,7 +190,16 @@ const AdminDashboard = () => {
             }
         });
         setChartData(Array.from(chartMap.values()));
-        setStats({ revenue: totalRevenue, adminRevenue: adminRev, ridesToday: ridesTodayCount, activeRides: activeCount });
+        
+        setStats({ 
+            revenue: totalRevenue, 
+            adminRevenue: adminRev, 
+            ridesToday: ridesTodayCount, 
+            ridesWeek: ridesWeekCount,
+            ridesMonth: ridesMonthCount,
+            activeRides: activeCount,
+            driversOnline: driversOnlineCount 
+        });
         
         const recentTrans = currentRides.slice(0, 15).map(r => ({
             id: r.id, date: r.created_at, amount: Number(r.platform_fee || 0), description: `Taxa Corrida #${r.id.substring(0,4)}`, status: 'completed', user: r.driver?.first_name || 'Motorista'
@@ -182,19 +216,13 @@ const AdminDashboard = () => {
   const handleLogout = async () => {
     setLoading(true);
     try {
-      // Limpar localStorage manualmente
       Object.keys(localStorage).forEach(key => {
         if (key.includes('supabase') || key.includes('golddrive') || key.includes('sb-')) {
           localStorage.removeItem(key);
         }
       });
-      
-      // Fazer signOut
       await supabase.auth.signOut({ scope: 'global' });
-      
-      // Redirecionar forçando reload
       window.location.href = '/';
-      
     } catch (error: any) {
       console.error('Erro logout:', error);
       window.location.href = '/';
@@ -211,11 +239,10 @@ const AdminDashboard = () => {
           first_name: user.first_name || "", 
           last_name: user.last_name || "", 
           phone: user.phone || "",
-          email: user.email || "" // Email vem do profile, se tiver
+          email: user.email || ""
       });
 
       try {
-          // 1. Busca Histórico de Corridas
           const queryField = user.role === 'client' ? 'customer_id' : 'driver_id';
           const { data: history } = await supabase
             .from('rides')
@@ -225,10 +252,8 @@ const AdminDashboard = () => {
           
           setDetailUserHistory(history || []);
 
-          // 2. Calcula Totais
           const { data: totalData } = await supabase.rpc('get_user_lifetime_total', { target_user_id: user.id });
           
-          // Calcula média de estrelas
           let avgRating = 5.0;
           if (history && history.length > 0) {
               const ratings = history
@@ -266,9 +291,8 @@ const AdminDashboard = () => {
           
           showSuccess("Perfil atualizado com sucesso!");
           setIsEditingInDetail(false);
-          // Atualiza dados locais
           setDetailUser(prev => ({ ...prev, ...editFormData }));
-          fetchData(); // Atualiza lista de fundo
+          fetchData(); 
       } catch (e: any) {
           showError(e.message);
       }
@@ -303,29 +327,25 @@ const AdminDashboard = () => {
   const handleSaveConfig = async () => {
       setLoading(true);
       try { 
-          // Salva Configs Básicas
           const { error: settingsError } = await supabase.from('app_settings').upsert([ { key: 'enable_cash', value: config.enableCash }, { key: 'enable_wallet', value: config.enableWallet } ]);
           if (settingsError) throw settingsError;
           
-          // Salva Configs Admin
           const adminConfigUpdates = Object.entries(adminConfigs).map(([key, value]) => ({ key, value }));
           const { error: adminConfigError } = await supabase.from('admin_config').upsert(adminConfigUpdates);
           if (adminConfigError) throw adminConfigError;
 
-          // Salva Tabela de Preços
           for (const tier of pricingTiers) {
               const { error: tierError } = await supabase.from('pricing_tiers').update({ price: tier.price, label: tier.label }).eq('id', tier.id);
               if (tierError) throw tierError;
           }
 
-          // Salva Categorias
           for (const cat of categories) {
               const { error: catError } = await supabase.from('car_categories').update({ name: cat.name, active: cat.active }).eq('id', cat.id);
               if (catError) throw catError;
           }
 
           showSuccess("Todas as configurações foram salvas!"); 
-          await fetchData(); // Atualiza o estado local com os novos dados do banco
+          await fetchData(); 
       } catch (e: any) { 
           showError(e.message); 
       } finally { 
@@ -359,7 +379,7 @@ const AdminDashboard = () => {
           if (error) throw error; 
           showSuccess(`${driver.first_name} foi aprovado!`); 
           setJustApproved(true); 
-          await fetchData(); // Força atualização da lista de pendentes
+          await fetchData(); 
       } catch (e: any) { 
           showError("Erro ao aprovar: " + e.message); 
       }
@@ -378,7 +398,7 @@ const AdminDashboard = () => {
   };
 
   // --- UI COMPONENTS ---
-  const StatCard = ({ title, value, icon: Icon, colorClass, subtext }: any) => (
+  const StatCard = ({ title, value, icon: Icon, colorClass, subtext, description }: any) => (
       <Card className="border-0 shadow-lg bg-white/50 dark:bg-slate-900/50 backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-xl group overflow-hidden relative">
           <div className={`absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity ${colorClass}`}>
               <Icon className="w-24 h-24" />
@@ -392,6 +412,7 @@ const AdminDashboard = () => {
               </div>
               <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">{title}</p>
               <h3 className="text-3xl font-black mt-1 tracking-tight">{value}</h3>
+              {description && <p className="text-xs text-muted-foreground mt-1">{description}</p>}
           </CardContent>
       </Card>
   );
@@ -452,7 +473,7 @@ const AdminDashboard = () => {
 
          <nav className="flex-1 px-4 space-y-2 mt-4">
              {[
-                 { id: 'overview', label: 'Dashboard', icon: LayoutDashboard },
+                 { id: 'overview', label: 'Painel Geral', icon: LayoutDashboard },
                  { id: 'requests', label: 'Solicitações', icon: FileText, badge: pendingDrivers.length },
                  { id: 'rides', label: 'Corridas', icon: MapIcon },
                  { id: 'users', label: 'Passageiros', icon: Users },
@@ -496,39 +517,103 @@ const AdminDashboard = () => {
                   
                   {/* Header da Página */}
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4 duration-700">
-                      <div><h1 className="text-4xl font-black tracking-tight text-slate-900 dark:text-white capitalize mb-1">{activeTab === 'requests' ? 'Solicitações' : activeTab}</h1><p className="text-muted-foreground">Bem-vindo ao painel de controle.</p></div>
+                      <div><h1 className="text-4xl font-black tracking-tight text-slate-900 dark:text-white capitalize mb-1">{activeTab === 'requests' ? 'Solicitações' : activeTab === 'overview' ? 'Painel Geral' : activeTab === 'rides' ? 'Corridas' : activeTab === 'users' ? 'Passageiros' : activeTab === 'drivers' ? 'Motoristas' : activeTab === 'finance' ? 'Financeiro' : 'Configurações'}</h1><p className="text-muted-foreground">Bem-vindo ao painel de controle.</p></div>
                       <div className="flex gap-3"><Button variant="outline" className="rounded-xl h-12" onClick={fetchData}><RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} /> Atualizar</Button><Button variant="destructive" className="rounded-xl h-12 font-bold px-6 shadow-red-500/20 shadow-lg" onClick={handleLogout}><LogOut className="w-4 h-4 mr-2" /> Sair</Button></div>
                   </div>
 
                   {/* --- TAB: OVERVIEW --- */}
                   {activeTab === 'overview' && (
                       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
-                          {/* Stats Grid */}
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                              <StatCard title="Receita Total" value={`R$ ${stats.revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} icon={DollarSign} colorClass="bg-green-500" subtext="+12% esse mês" />
-                              <StatCard title="Lucro Plataforma" value={`R$ ${stats.adminRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} icon={Wallet} colorClass="bg-blue-500" subtext="20% taxa" />
-                              <StatCard title="Corridas Hoje" value={stats.ridesToday} icon={TrendingUp} colorClass="bg-red-500" subtext="Últimas 24h" />
-                              <StatCard title="Pendências" value={pendingDrivers.length} icon={FileText} colorClass="bg-orange-500" subtext="Aguardando Análise" />
+                          
+                          {/* LINHA 1: FINANCEIRO E PENDÊNCIAS */}
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                              <StatCard 
+                                title="Valor Total Corridas" 
+                                value={`R$ ${stats.revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} 
+                                icon={DollarSign} 
+                                colorClass="bg-green-500" 
+                                description="Volume transacionado em viagens" 
+                              />
+                              <StatCard 
+                                title="Lucro Plataforma" 
+                                value={`R$ ${stats.adminRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} 
+                                icon={Wallet} 
+                                colorClass="bg-blue-500" 
+                                subtext={`${config.platformFee}% taxa`} 
+                              />
+                              <StatCard 
+                                title="Cadastros Pendentes" 
+                                value={pendingDrivers.length} 
+                                icon={FileText} 
+                                colorClass="bg-orange-500" 
+                                description="Aguardando aprovação" 
+                              />
                           </div>
-                          {/* Charts Row */}
+
+                          {/* LINHA 2: VOLUME DE CORRIDAS */}
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                              <StatCard title="Corridas Hoje" value={stats.ridesToday} icon={Activity} colorClass="bg-indigo-500" />
+                              <StatCard title="Esta Semana" value={stats.ridesWeek} icon={BarChart3} colorClass="bg-purple-500" />
+                              <StatCard title="Este Mês" value={stats.ridesMonth} icon={PieChart} colorClass="bg-pink-500" />
+                          </div>
+
+                          {/* LINHA 3: USUÁRIOS E ATIVIDADE */}
                           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                              {/* Container Base de Usuários */}
                               <Card className="lg:col-span-2 border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] overflow-hidden">
-                                  <CardHeader><CardTitle>Fluxo de Receita</CardTitle><CardDescription>Últimos 7 dias</CardDescription></CardHeader>
-                                  <CardContent className="h-[350px]"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData}><defs><linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#eab308" stopOpacity={0.3}/><stop offset="95%" stopColor="#eab308" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} /><XAxis dataKey="date" axisLine={false} tickLine={false} fontSize={12} stroke="#888" dy={10} /><YAxis axisLine={false} tickLine={false} fontSize={12} stroke="#888" tickFormatter={(v) => `R$${v}`} /><Tooltip contentStyle={{ borderRadius: '16px', border: 'none', backgroundColor: '#1e293b', color: '#fff' }} itemStyle={{ color: '#fbbf24' }} formatter={(val: number) => [`R$ ${val.toFixed(2)}`, 'Receita']} /><Area type="monotone" dataKey="total" stroke="#eab308" strokeWidth={4} fillOpacity={1} fill="url(#colorTotal)" /></AreaChart></ResponsiveContainer></CardContent>
+                                  <CardHeader><CardTitle>Base de Usuários</CardTitle><CardDescription>Total de cadastros ativos no sistema</CardDescription></CardHeader>
+                                  <CardContent className="grid grid-cols-2 gap-6">
+                                      <div className="bg-indigo-50 dark:bg-indigo-900/20 p-6 rounded-2xl flex items-center gap-4 border border-indigo-100 dark:border-indigo-800">
+                                          <div className="w-12 h-12 bg-indigo-500 text-white rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                                              <Users className="w-6 h-6" />
+                                          </div>
+                                          <div>
+                                              <p className="text-sm font-bold text-indigo-600 dark:text-indigo-400 uppercase">Passageiros</p>
+                                              <h3 className="text-3xl font-black text-slate-900 dark:text-white">{passengers.length}</h3>
+                                          </div>
+                                      </div>
+                                      <div className="bg-orange-50 dark:bg-orange-900/20 p-6 rounded-2xl flex items-center gap-4 border border-orange-100 dark:border-orange-800">
+                                          <div className="w-12 h-12 bg-orange-500 text-white rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/30">
+                                              <Car className="w-6 h-6" />
+                                          </div>
+                                          <div>
+                                              <p className="text-sm font-bold text-orange-600 dark:text-orange-400 uppercase">Motoristas</p>
+                                              <h3 className="text-3xl font-black text-slate-900 dark:text-white">{drivers.length}</h3>
+                                          </div>
+                                      </div>
+                                  </CardContent>
                               </Card>
-                              <div className="space-y-6">
-                                  <div className="grid grid-cols-2 gap-4">
-                                      <Card className="border-0 shadow-lg bg-indigo-500 text-white rounded-[24px] overflow-hidden relative h-40">
-                                          <div className="absolute -right-4 -bottom-4 opacity-20"><Users className="w-24 h-24" /></div>
-                                          <CardContent className="p-5 flex flex-col justify-between h-full relative z-10"><p className="font-bold text-sm uppercase opacity-80">Passageiros</p><h3 className="text-3xl font-black">{passengers.length}</h3></CardContent>
-                                      </Card>
-                                      <Card className="border-0 shadow-lg bg-orange-500 text-white rounded-[24px] overflow-hidden relative h-40">
-                                          <div className="absolute -right-4 -bottom-4 opacity-20"><Car className="w-24 h-24" /></div>
-                                          <CardContent className="p-5 flex flex-col justify-between h-full relative z-10"><p className="font-bold text-sm uppercase opacity-80">Motoristas</p><h3 className="text-3xl font-black">{drivers.length}</h3></CardContent>
-                                      </Card>
-                                  </div>
-                              </div>
+
+                              {/* Card Motoristas Online */}
+                              <Card className="border-0 shadow-xl bg-slate-900 text-white rounded-[32px] overflow-hidden relative">
+                                  <div className="absolute top-0 right-0 p-8 opacity-10"><MapIcon className="w-32 h-32" /></div>
+                                  <CardContent className="p-8 flex flex-col justify-between h-full relative z-10">
+                                      <div>
+                                          <div className="flex items-center gap-2 mb-2">
+                                              <span className="relative flex h-3 w-3">
+                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                                <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                                              </span>
+                                              <p className="font-bold text-sm uppercase opacity-80 tracking-widest">Tempo Real</p>
+                                          </div>
+                                          <h3 className="text-5xl font-black mt-2">{stats.driversOnline}</h3>
+                                          <p className="font-medium text-slate-300 mt-1">Motoristas em Atividade</p>
+                                      </div>
+                                      <div className="pt-8">
+                                          <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
+                                              <div className="h-full bg-green-500 rounded-full animate-pulse" style={{ width: `${Math.min((stats.driversOnline / (drivers.length || 1)) * 100, 100)}%` }} />
+                                          </div>
+                                          <p className="text-xs text-slate-400 mt-2 text-right">{((stats.driversOnline / (drivers.length || 1)) * 100).toFixed(0)}% da frota ativa</p>
+                                      </div>
+                                  </CardContent>
+                              </Card>
                           </div>
+
+                          {/* Gráfico Receita */}
+                          <Card className="border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] overflow-hidden">
+                              <CardHeader><CardTitle>Fluxo de Receita</CardTitle><CardDescription>Últimos 7 dias</CardDescription></CardHeader>
+                              <CardContent className="h-[350px]"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData}><defs><linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#eab308" stopColorOpacity={0.3}/><stop offset="95%" stopColor="#eab308" stopColorOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} /><XAxis dataKey="date" axisLine={false} tickLine={false} fontSize={12} stroke="#888" dy={10} /><YAxis axisLine={false} tickLine={false} fontSize={12} stroke="#888" tickFormatter={(v) => `R$${v}`} /><Tooltip contentStyle={{ borderRadius: '16px', border: 'none', backgroundColor: '#1e293b', color: '#fff' }} itemStyle={{ color: '#fbbf24' }} formatter={(val: number) => [`R$ ${val.toFixed(2)}`, 'Receita']} /><Area type="monotone" dataKey="total" stroke="#eab308" strokeWidth={4} fillOpacity={1} fill="url(#colorTotal)" /></AreaChart></ResponsiveContainer></CardContent>
+                          </Card>
                       </div>
                   )}
 
