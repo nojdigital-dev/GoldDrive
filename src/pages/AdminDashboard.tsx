@@ -7,7 +7,7 @@ import {
   CreditCard, BellRing, Save, AlertTriangle, Smartphone, Globe,
   Menu, Banknote, FileText, Check, X, ExternalLink, Camera, User,
   Moon as MoonIcon, List, Plus, Power, Pencil, Star, Calendar, ArrowUpRight, ArrowDownLeft,
-  Activity, BarChart3, PieChart, Coins
+  Activity, BarChart3, PieChart, Coins, Lock, Unlock
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -62,7 +62,7 @@ const AdminDashboard = () => {
   const [detailUserHistory, setDetailUserHistory] = useState<any[]>([]);
   const [detailUserStats, setDetailUserStats] = useState({ totalSpent: 0, totalRides: 0, avgRating: 5.0 });
   const [isDetailLoading, setIsDetailLoading] = useState(false);
-  const [isEditingInDetail, setIsEditingInDetail] = useState(false); // Modo edição dentro do modal
+  const [isEditingInDetail, setIsEditingInDetail] = useState(false);
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [reviewDriver, setReviewDriver] = useState<any>(null);
@@ -73,9 +73,10 @@ const AdminDashboard = () => {
 
   // Configurações
   const [config, setConfig] = useState({
-      platformFee: "10", // Default 10%
+      platformFee: "10", 
       enableCash: true,
       enableWallet: true,
+      isSubscriptionMode: false // Novo: Modo Mensalidade
   });
   
   // Tabela de Preços e Configs
@@ -85,13 +86,40 @@ const AdminDashboard = () => {
       night_start: "21:00",
       night_end: "00:00",
       night_increase: "3",
-      midnight_min_price: "25"
+      midnight_min_price: "25",
+      platform_fee: "10"
   });
 
   // Filtros
   const [selectedRide, setSelectedRide] = useState<any>(null);
   const [filterStatus, setFilterStatus] = useState("ALL");
   const [searchTerm, setSearchTerm] = useState("");
+
+  // Polling de Status Online Real-Time
+  useEffect(() => {
+      const fetchOnlineCount = async () => {
+          // Limpeza de inativos antes de contar
+          const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+          await supabase
+            .from('profiles')
+            .update({ is_online: false })
+            .eq('role', 'driver')
+            .eq('is_online', true)
+            .lt('last_active', tenMinutesAgo);
+
+          const { count } = await supabase
+            .from('profiles')
+            .select('*', { count: 'exact', head: true })
+            .eq('role', 'driver')
+            .eq('is_online', true);
+          
+          setStats(prev => ({ ...prev, driversOnline: count || 0 }));
+      };
+
+      const interval = setInterval(fetchOnlineCount, 5000); // Atualiza a cada 5s
+      fetchOnlineCount(); // Primeira execução
+      return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -109,22 +137,11 @@ const AdminDashboard = () => {
             }
         }
 
-        // Limpeza de Motoristas Inativos (> 10 min)
-        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-        await supabase
-            .from('profiles')
-            .update({ is_online: false })
-            .eq('role', 'driver')
-            .eq('is_online', true)
-            .lt('last_active', tenMinutesAgo);
-
         // 1. Buscar Corridas
-        const { data: ridesData, error: rideError } = await supabase
+        const { data: ridesData } = await supabase
             .from('rides')
             .select(`*, driver:profiles!public_rides_driver_id_fkey(*), customer:profiles!public_rides_customer_id_fkey(*)`)
             .order('created_at', { ascending: false });
-
-        if (rideError) throw rideError;
         const currentRides = ridesData || [];
         setRides(currentRides);
 
@@ -133,7 +150,6 @@ const AdminDashboard = () => {
         const allProfiles = profilesData || [];
         setPassengers(allProfiles.filter((p: any) => p.role === 'client'));
         
-        // Filtra motoristas aprovados e pendentes
         const allDrivers = allProfiles.filter((p: any) => p.role === 'driver');
         setDrivers(allDrivers);
         setPendingDrivers(allDrivers.filter((p: any) => p.driver_status === 'PENDING'));
@@ -143,7 +159,14 @@ const AdminDashboard = () => {
         if (settingsData) {
             const cash = settingsData.find(s => s.key === 'enable_cash');
             const wallet = settingsData.find(s => s.key === 'enable_wallet');
-            setConfig(prev => ({ ...prev, enableCash: cash ? cash.value : true, enableWallet: wallet ? wallet.value : true }));
+            const subMode = settingsData.find(s => s.key === 'is_subscription_mode');
+            
+            setConfig(prev => ({ 
+                ...prev, 
+                enableCash: cash ? cash.value : true, 
+                enableWallet: wallet ? wallet.value : true,
+                isSubscriptionMode: subMode ? subMode.value : false 
+            }));
         }
 
         // 4. Buscar Tabela de Preços e Categorias
@@ -158,6 +181,11 @@ const AdminDashboard = () => {
             const newConf: any = {};
             adminConfigData.forEach((item: any) => newConf[item.key] = item.value);
             setAdminConfigs(prev => ({ ...prev, ...newConf }));
+            
+            // Sincronizar o estado local config.platformFee com o que veio do banco
+            if (newConf.platform_fee) {
+                setConfig(prev => ({ ...prev, platformFee: newConf.platform_fee }));
+            }
         }
 
         // 5. Calcular Estatísticas
@@ -177,7 +205,7 @@ const AdminDashboard = () => {
         // Active Rides
         const activeCount = currentRides.filter(r => ['SEARCHING', 'ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(r.status)).length;
         
-        // Online Drivers REAL (Usando a coluna is_online)
+        // Drivers Online (Contagem inicial, depois o effect atualiza)
         const driversOnlineCount = allDrivers.filter((d: any) => d.is_online).length;
 
         // Gráfico
@@ -198,7 +226,8 @@ const AdminDashboard = () => {
         });
         setChartData(Array.from(chartMap.values()));
         
-        setStats({ 
+        setStats(prev => ({ 
+            ...prev,
             revenue: totalRevenue, 
             adminRevenue: adminRev,
             driverEarnings: driverEarn, 
@@ -207,7 +236,7 @@ const AdminDashboard = () => {
             ridesMonth: ridesMonthCount,
             activeRides: activeCount,
             driversOnline: driversOnlineCount 
-        });
+        }));
         
         const recentTrans = currentRides.slice(0, 15).map(r => ({
             id: r.id, date: r.created_at, amount: Number(r.platform_fee || 0), description: `Taxa Corrida #${r.id.substring(0,4)}`, status: 'completed', user: r.driver?.first_name || 'Motorista'
@@ -224,6 +253,9 @@ const AdminDashboard = () => {
   const handleLogout = async () => {
     setLoading(true);
     try {
+      if (adminProfile?.role === 'driver') {
+          await supabase.from('profiles').update({ is_online: false }).eq('id', adminProfile.id);
+      }
       Object.keys(localStorage).forEach(key => {
         if (key.includes('supabase') || key.includes('golddrive') || key.includes('sb-')) {
           localStorage.removeItem(key);
@@ -237,7 +269,7 @@ const AdminDashboard = () => {
     }
   };
 
-  // ... (Keep existing detailed management logic unchanged) ...
+  // ... (User Detail Logic) ...
   const openUserDetail = async (user: any) => {
       setDetailUser(user);
       setIsDetailLoading(true);
@@ -295,7 +327,6 @@ const AdminDashboard = () => {
           }).eq('id', detailUser.id);
 
           if (error) throw error;
-          
           showSuccess("Perfil atualizado com sucesso!");
           setIsEditingInDetail(false);
           setDetailUser(prev => ({ ...prev, ...editFormData }));
@@ -319,6 +350,21 @@ const AdminDashboard = () => {
       }
   };
 
+  const handleToggleBlock = async () => {
+      if (!detailUser) return;
+      try {
+          const newStatus = !detailUser.is_blocked;
+          const { error } = await supabase.from('profiles').update({ is_blocked: newStatus }).eq('id', detailUser.id);
+          if (error) throw error;
+          
+          setDetailUser(prev => ({ ...prev, is_blocked: newStatus }));
+          showSuccess(newStatus ? "Usuário bloqueado com sucesso." : "Usuário desbloqueado.");
+          fetchData(); // Atualiza lista
+      } catch (e: any) {
+          showError(e.message);
+      }
+  };
+
   const handleResetPassword = async (email: string) => {
       try {
           const { error } = await supabase.auth.resetPasswordForEmail(email, {
@@ -334,10 +380,19 @@ const AdminDashboard = () => {
   const handleSaveConfig = async () => {
       setLoading(true);
       try { 
-          const { error: settingsError } = await supabase.from('app_settings').upsert([ { key: 'enable_cash', value: config.enableCash }, { key: 'enable_wallet', value: config.enableWallet } ]);
+          const { error: settingsError } = await supabase.from('app_settings').upsert([ 
+              { key: 'enable_cash', value: config.enableCash }, 
+              { key: 'enable_wallet', value: config.enableWallet },
+              { key: 'is_subscription_mode', value: config.isSubscriptionMode }
+          ]);
           if (settingsError) throw settingsError;
           
-          const adminConfigUpdates = Object.entries(adminConfigs).map(([key, value]) => ({ key, value }));
+          // Salva taxa rígida no admin_config
+          const adminConfigUpdates = [
+              ...Object.entries(adminConfigs).map(([key, value]) => ({ key, value })),
+              { key: 'platform_fee', value: config.platformFee } // Garante que a taxa seja salva
+          ];
+          
           const { error: adminConfigError } = await supabase.from('admin_config').upsert(adminConfigUpdates);
           if (adminConfigError) throw adminConfigError;
 
@@ -447,7 +502,12 @@ const AdminDashboard = () => {
                                           <TableRow key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 border-b border-border/50 cursor-pointer" onClick={() => openUserDetail(u)}>
                                               <TableCell className="pl-8"><div className="flex items-center gap-3"><Avatar className="w-10 h-10 border-2 border-white shadow-sm"><AvatarImage src={u.avatar_url}/><AvatarFallback>{u.first_name?.[0]}</AvatarFallback></Avatar><div><p className="font-bold text-sm">{u.first_name} {u.last_name}</p><p className="text-xs text-muted-foreground">ID: {u.id.substring(0,6)}</p></div></div></TableCell>
                                               <TableCell><div className="text-sm"><p>{u.email}</p><p className="text-muted-foreground text-xs">{u.phone || 'Sem telefone'}</p></div></TableCell>
-                                              {type === 'driver' && <TableCell><Badge variant="secondary" className={u.driver_status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}>{u.driver_status}</Badge></TableCell>}
+                                              {type === 'driver' && <TableCell>
+                                                  <div className="flex gap-2">
+                                                      <Badge variant="secondary" className={u.driver_status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}>{u.driver_status}</Badge>
+                                                      {u.is_blocked && <Badge variant="destructive" className="bg-red-500">BLOQUEADO</Badge>}
+                                                  </div>
+                                              </TableCell>}
                                               <TableCell className="font-bold text-green-600">R$ {u.balance?.toFixed(2)}</TableCell>
                                               <TableCell className="text-right pr-8"><Button variant="ghost" size="sm" className="text-blue-500 font-bold hover:bg-blue-50">Detalhes <ArrowUpRight className="ml-1 w-4 h-4" /></Button></TableCell>
                                           </TableRow>
@@ -537,28 +597,42 @@ const AdminDashboard = () => {
                   {activeTab === 'overview' && (
                       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
                           
-                          {/* LINHA 1: FINANCEIRO */}
+                          {/* LINHA 1: FINANCEIRO E PENDÊNCIAS */}
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                               <StatCard 
-                                title="Faturamento Total" 
+                                title="Valor Total Corridas" 
                                 value={`R$ ${stats.revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} 
                                 icon={DollarSign} 
                                 colorClass="bg-green-500" 
-                                description="Valor total gerado por corridas" 
+                                description="Volume transacionado em viagens" 
                               />
+                              
+                              {/* Cards Financeiros Condicionais */}
+                              {!config.isSubscriptionMode && (
+                                <>
+                                  <StatCard 
+                                    title="Lucro Plataforma" 
+                                    value={`R$ ${stats.adminRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} 
+                                    icon={Wallet} 
+                                    colorClass="bg-blue-500" 
+                                    subtext={`${config.platformFee}% taxa`} 
+                                  />
+                                  <StatCard 
+                                    title="Repasse Motoristas" 
+                                    value={`R$ ${stats.driverEarnings.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} 
+                                    icon={Coins} 
+                                    colorClass="bg-orange-500" 
+                                    description="Valor distribuído" 
+                                  />
+                                </>
+                              )}
+
                               <StatCard 
-                                title="Lucro Plataforma (10%)" 
-                                value={`R$ ${stats.adminRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} 
-                                icon={Wallet} 
-                                colorClass="bg-blue-500" 
-                                subtext={`${config.platformFee}% taxa`} 
-                              />
-                              <StatCard 
-                                title="Repasse Motoristas" 
-                                value={`R$ ${stats.driverEarnings.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} 
-                                icon={Coins} 
-                                colorClass="bg-orange-500" 
-                                description="Valor distribuído" 
+                                title="Cadastros Pendentes" 
+                                value={pendingDrivers.length} 
+                                icon={FileText} 
+                                colorClass="bg-yellow-500" 
+                                description="Aguardando aprovação" 
                               />
                           </div>
 
@@ -606,7 +680,7 @@ const AdminDashboard = () => {
                                           <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
                                               <div className="h-full bg-green-500 rounded-full animate-pulse" style={{ width: `${Math.min((stats.driversOnline / (drivers.length || 1)) * 100, 100)}%` }} />
                                           </div>
-                                          <p className="text-xs text-slate-400 mt-2 text-right">{((stats.driversOnline / (drivers.length || 1)) * 100).toFixed(0)}% da frota ativa</p>
+                                          <p className="text-xs text-slate-400 mt-2 text-right">{drivers.length > 0 ? ((stats.driversOnline / drivers.length) * 100).toFixed(0) : 0}% da frota ativa</p>
                                       </div>
                                   </CardContent>
                               </Card>
@@ -681,24 +755,36 @@ const AdminDashboard = () => {
                               <TabsList className="bg-slate-200 dark:bg-slate-800 rounded-xl p-1 mb-6">
                                   <TabsTrigger value="general" className="rounded-lg">Geral</TabsTrigger>
                                   <TabsTrigger value="values" className="rounded-lg">Valores & Tabela</TabsTrigger>
-                                  <TabsTrigger value="categories" className="rounded-lg">Categorias (Abas)</TabsTrigger>
+                                  <TabsTrigger value="categories" className="rounded-lg">Categorias</TabsTrigger>
                               </TabsList>
 
                               <TabsContent value="general">
                                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                                       <Card className="border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] h-fit">
                                           <CardHeader>
-                                              <CardTitle className="flex items-center gap-2"><Settings className="w-5 h-5" /> Configurações Gerais</CardTitle>
-                                              <CardDescription>Parâmetros globais da plataforma.</CardDescription>
+                                              <CardTitle className="flex items-center gap-2"><Settings className="w-5 h-5" /> Modo de Operação</CardTitle>
+                                              <CardDescription>Escolha entre cobrar taxas ou mensalidade.</CardDescription>
                                           </CardHeader>
                                           <CardContent className="space-y-6">
-                                              <div className="space-y-2">
-                                                  <Label>Taxa da Plataforma (%)</Label>
-                                                  <div className="flex gap-2 items-center">
-                                                      <Input type="number" value={config.platformFee} onChange={e => setConfig({...config, platformFee: e.target.value})} className="rounded-xl h-12" />
-                                                      <span className="text-muted-foreground font-bold">%</span>
+                                              <div className="flex items-center justify-between bg-slate-100 dark:bg-slate-800 p-4 rounded-xl">
+                                                  <div className="space-y-0.5">
+                                                      <Label className="text-base font-bold">Modo Mensalidade</Label>
+                                                      <p className="text-sm text-muted-foreground">Motoristas ficam com 100% das corridas. Taxas de plataforma são zeradas.</p>
                                                   </div>
+                                                  <Switch checked={config.isSubscriptionMode} onCheckedChange={(val) => setConfig({...config, isSubscriptionMode: val})} />
                                               </div>
+
+                                              {!config.isSubscriptionMode && (
+                                                  <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                                                      <Label>Taxa da Plataforma (%)</Label>
+                                                      <div className="flex gap-2 items-center">
+                                                          <Input type="number" value={config.platformFee} onChange={e => setConfig({...config, platformFee: e.target.value})} className="rounded-xl h-12" />
+                                                          <span className="text-muted-foreground font-bold">%</span>
+                                                      </div>
+                                                      <p className="text-xs text-muted-foreground">Taxa retida de cada corrida para o app.</p>
+                                                  </div>
+                                              )}
+                                              
                                               <Separator />
                                               <div className="space-y-4">
                                                   <div className="flex items-center justify-between">
@@ -725,8 +811,8 @@ const AdminDashboard = () => {
                               </TabsContent>
 
                               <TabsContent value="values">
+                                  {/* ... (Mantém igual ao anterior) ... */}
                                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                                      {/* Coluna Esquerda: Horários e Infos */}
                                       <div className="space-y-6">
                                           <Card className="border-0 shadow-xl bg-slate-900 text-white rounded-[32px] overflow-hidden">
                                               <CardHeader>
@@ -758,7 +844,6 @@ const AdminDashboard = () => {
                                           </Card>
                                       </div>
 
-                                      {/* Coluna Direita: Tabela de Preços */}
                                       <div className="lg:col-span-2">
                                           <Card className="border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] overflow-hidden">
                                               <CardHeader className="flex flex-row items-center justify-between">
@@ -814,60 +899,62 @@ const AdminDashboard = () => {
                               </TabsContent>
 
                               <TabsContent value="categories">
-                                  {categories.length > 0 && (
-                                      <Tabs defaultValue={categories[0].id} className="w-full">
-                                          <TabsList className="bg-slate-100 dark:bg-slate-900 p-1 mb-4 flex-wrap h-auto">
+                                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                      {categories.length > 0 && (
+                                          <Tabs defaultValue={categories[0].id} className="w-full col-span-2">
+                                              <TabsList className="bg-slate-100 dark:bg-slate-900 p-1 mb-4 flex-wrap h-auto">
+                                                  {categories.map(cat => (
+                                                      <TabsTrigger key={cat.id} value={cat.id} className="rounded-lg">{cat.name}</TabsTrigger>
+                                                  ))}
+                                              </TabsList>
+                                              
                                               {categories.map(cat => (
-                                                  <TabsTrigger key={cat.id} value={cat.id} className="rounded-lg">{cat.name}</TabsTrigger>
+                                                  <TabsContent key={cat.id} value={cat.id}>
+                                                      <Card className="border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] overflow-hidden">
+                                                          <CardHeader className="flex flex-row items-center justify-between">
+                                                              <div>
+                                                                  <CardTitle className="flex items-center gap-2">Configurar {cat.name}</CardTitle>
+                                                                  <CardDescription>Ajuste os valores base para esta categoria.</CardDescription>
+                                                              </div>
+                                                              <div className="flex items-center gap-2">
+                                                                  <Label className="text-sm font-bold">Ativa</Label>
+                                                                  <Switch checked={cat.active} onCheckedChange={(val) => updateCategory(cat.id, 'active', val)} />
+                                                              </div>
+                                                          </CardHeader>
+                                                          <CardContent className="space-y-6">
+                                                              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                                                  <div className="space-y-2">
+                                                                      <Label>Valor Base (Bandeirada)</Label>
+                                                                      <div className="relative">
+                                                                          <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-muted-foreground">R$</span>
+                                                                          <Input type="number" value={cat.base_fare} onChange={e => updateCategory(cat.id, 'base_fare', e.target.value)} className="pl-10 h-12 rounded-xl" />
+                                                                      </div>
+                                                                  </div>
+                                                                  <div className="space-y-2">
+                                                                      <Label>Custo por KM</Label>
+                                                                      <div className="relative">
+                                                                          <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-muted-foreground">R$</span>
+                                                                          <Input type="number" value={cat.cost_per_km} onChange={e => updateCategory(cat.id, 'cost_per_km', e.target.value)} className="pl-10 h-12 rounded-xl" />
+                                                                      </div>
+                                                                  </div>
+                                                                  <div className="space-y-2">
+                                                                      <Label>Valor Mínimo da Corrida</Label>
+                                                                      <div className="relative">
+                                                                          <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-muted-foreground">R$</span>
+                                                                          <Input type="number" value={cat.min_fare} onChange={e => updateCategory(cat.id, 'min_fare', e.target.value)} className="pl-10 h-12 rounded-xl" />
+                                                                      </div>
+                                                                  </div>
+                                                              </div>
+                                                          </CardContent>
+                                                          <CardFooter>
+                                                              <Button onClick={handleSaveConfig} className="w-full bg-slate-900 text-white font-bold h-12 rounded-xl"><Save className="w-4 h-4 mr-2" /> Salvar Configuração de {cat.name}</Button>
+                                                          </CardFooter>
+                                                      </Card>
+                                                  </TabsContent>
                                               ))}
-                                          </TabsList>
-                                          
-                                          {categories.map(cat => (
-                                              <TabsContent key={cat.id} value={cat.id}>
-                                                  <Card className="border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] overflow-hidden">
-                                                      <CardHeader className="flex flex-row items-center justify-between">
-                                                          <div>
-                                                              <CardTitle className="flex items-center gap-2">Configurar {cat.name}</CardTitle>
-                                                              <CardDescription>Ajuste os valores base para esta categoria.</CardDescription>
-                                                          </div>
-                                                          <div className="flex items-center gap-2">
-                                                              <Label className="text-sm font-bold">Ativa</Label>
-                                                              <Switch checked={cat.active} onCheckedChange={(val) => updateCategory(cat.id, 'active', val)} />
-                                                          </div>
-                                                      </CardHeader>
-                                                      <CardContent className="space-y-6">
-                                                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                                              <div className="space-y-2">
-                                                                  <Label>Valor Base (Bandeirada)</Label>
-                                                                  <div className="relative">
-                                                                      <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-muted-foreground">R$</span>
-                                                                      <Input type="number" value={cat.base_fare} onChange={e => updateCategory(cat.id, 'base_fare', e.target.value)} className="pl-10 h-12 rounded-xl" />
-                                                                  </div>
-                                                              </div>
-                                                              <div className="space-y-2">
-                                                                  <Label>Custo por KM</Label>
-                                                                  <div className="relative">
-                                                                      <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-muted-foreground">R$</span>
-                                                                      <Input type="number" value={cat.cost_per_km} onChange={e => updateCategory(cat.id, 'cost_per_km', e.target.value)} className="pl-10 h-12 rounded-xl" />
-                                                                  </div>
-                                                              </div>
-                                                              <div className="space-y-2">
-                                                                  <Label>Valor Mínimo da Corrida</Label>
-                                                                  <div className="relative">
-                                                                      <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-muted-foreground">R$</span>
-                                                                      <Input type="number" value={cat.min_fare} onChange={e => updateCategory(cat.id, 'min_fare', e.target.value)} className="pl-10 h-12 rounded-xl" />
-                                                                  </div>
-                                                              </div>
-                                                          </div>
-                                                      </CardContent>
-                                                      <CardFooter>
-                                                          <Button onClick={handleSaveConfig} className="w-full bg-slate-900 text-white font-bold h-12 rounded-xl"><Save className="w-4 h-4 mr-2" /> Salvar Configuração de {cat.name}</Button>
-                                                      </CardFooter>
-                                                  </Card>
-                                              </TabsContent>
-                                          ))}
-                                      </Tabs>
-                                  )}
+                                          </Tabs>
+                                      )}
+                                  </div>
                               </TabsContent>
                           </Tabs>
                       </div>
@@ -879,6 +966,7 @@ const AdminDashboard = () => {
       {/* DIALOG DE ANÁLISE KYC */}
       <Dialog open={!!reviewDriver} onOpenChange={(o) => !o && setReviewDriver(null)}>
         <DialogContent className="max-w-3xl bg-white dark:bg-slate-950 rounded-[32px] border-0 shadow-2xl p-0 overflow-hidden">
+            {/* ... Mantido igual ... */}
             {reviewDriver && (
                 <div className="flex flex-col h-[85vh]">
                     {/* Header KYC */}
@@ -1047,6 +1135,7 @@ const AdminDashboard = () => {
                                           <h2 className="text-3xl font-black tracking-tight">{detailUser.first_name} {detailUser.last_name}</h2>
                                           {detailUser.role === 'driver' && <Badge className="bg-yellow-500 text-black font-bold">Motorista</Badge>}
                                           {detailUser.role === 'client' && <Badge variant="secondary" className="bg-white/20 text-white hover:bg-white/30">Passageiro</Badge>}
+                                          {detailUser.is_blocked && <Badge variant="destructive" className="ml-2 font-bold bg-red-600 text-white">BLOQUEADO</Badge>}
                                       </div>
                                       <p className="text-slate-400 flex items-center gap-2 text-sm">
                                           <Mail className="w-3 h-3" /> {detailUser.email}
@@ -1113,8 +1202,16 @@ const AdminDashboard = () => {
                                               </Card>
 
                                               <div className="space-y-4">
-                                                  <Button className="w-full h-12 bg-slate-900 text-white font-bold rounded-xl" onClick={() => handleResetPassword(detailUser.email)}><Mail className="mr-2 w-4 h-4" /> Enviar Redefinição de Senha</Button>
-                                                  <Button variant="outline" className="w-full h-12 font-bold rounded-xl border-red-200 text-red-600 hover:bg-red-50" onClick={() => setIsDeleteDialogOpen(true)}><Trash2 className="mr-2 w-4 h-4" /> Excluir Conta</Button>
+                                                  {detailUser.role === 'driver' && (
+                                                      <Button 
+                                                          className={`w-full h-12 font-bold rounded-xl ${detailUser.is_blocked ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}
+                                                          onClick={handleToggleBlock}
+                                                      >
+                                                          {detailUser.is_blocked ? <><Unlock className="mr-2 w-4 h-4"/> Desbloquear Motorista</> : <><Lock className="mr-2 w-4 h-4"/> Bloquear Motorista</>}
+                                                      </Button>
+                                                  )}
+                                                  <Button variant="outline" className="w-full h-12 font-bold rounded-xl" onClick={() => handleResetPassword(detailUser.email)}><Mail className="mr-2 w-4 h-4" /> Redefinir Senha</Button>
+                                                  <Button variant="ghost" className="w-full h-12 font-bold rounded-xl text-red-600 hover:bg-red-50" onClick={() => setIsDeleteDialogOpen(true)}><Trash2 className="mr-2 w-4 h-4" /> Excluir Conta</Button>
                                               </div>
                                           </div>
 
@@ -1145,6 +1242,7 @@ const AdminDashboard = () => {
                                       </TabsContent>
 
                                       <TabsContent value="history" className="h-full overflow-y-auto p-0 m-0">
+                                          {/* ... Mantido igual ... */}
                                           {detailUserHistory.length === 0 ? (
                                               <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
                                                   <MapIcon className="w-12 h-12 mb-2 opacity-20" />
@@ -1173,6 +1271,7 @@ const AdminDashboard = () => {
                                       </TabsContent>
 
                                       <TabsContent value="edit" className="h-full p-8 m-0 overflow-y-auto">
+                                          {/* ... Mantido igual ... */}
                                           <Card className="max-w-lg mx-auto border-0 shadow-none bg-transparent">
                                               <CardContent className="space-y-6">
                                                   <div className="grid grid-cols-2 gap-4">

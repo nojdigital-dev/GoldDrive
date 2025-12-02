@@ -51,7 +51,14 @@ const LoginDriver = () => {
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
             // Verificar status se já estiver logado
-            const { data: profile } = await supabase.from('profiles').select('driver_status, role').eq('id', session.user.id).single();
+            const { data: profile } = await supabase.from('profiles').select('driver_status, role, is_blocked').eq('id', session.user.id).single();
+            
+            if (profile?.is_blocked) {
+                await supabase.auth.signOut();
+                showError("Acesso bloqueado devido falta de pagamento. Entre em contato com a administração do GoldMobile.");
+                return;
+            }
+
             if (profile?.role === 'driver') {
                 if (profile.driver_status === 'PENDING') navigate('/driver-pending');
                 else navigate('/driver');
@@ -153,9 +160,14 @@ const LoginDriver = () => {
       if (error) throw error;
       
       if (data.user) {
-          // Verificar status PENDING
-          const { data: profile } = await supabase.from('profiles').select('driver_status, role').eq('id', data.user.id).single();
+          // Verificar status PENDING e BLOCKED
+          const { data: profile } = await supabase.from('profiles').select('driver_status, role, is_blocked').eq('id', data.user.id).single();
           
+          if (profile?.is_blocked) {
+              await supabase.auth.signOut();
+              throw new Error("Acesso bloqueado devido falta de pagamento. Entre em contato com a administração do GoldMobile.");
+          }
+
           if (profile?.role === 'driver') {
              if (profile.driver_status === 'PENDING') {
                  navigate('/driver-pending');
@@ -222,8 +234,6 @@ const LoginDriver = () => {
       if (profileError) throw profileError;
 
       // Cadastro bem sucedido -> Manda pra tela de pendência
-      // O SignUp do Supabase loga o usuário automaticamente se a confirmação de email estiver desligada.
-      // Se estiver ligada, ele vai pedir pra confirmar email. Assumindo fluxo padrão de 'Logado'
       navigate('/driver-pending'); 
       
     } catch (e: any) {

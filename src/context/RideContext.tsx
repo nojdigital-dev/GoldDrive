@@ -317,11 +317,24 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
 
   const finishRide = async (rideId: string) => {
       if (!ride) return;
+      
+      // Buscar Configurações: Modo Assinatura vs Taxa
+      const { data: settings } = await supabase.from('app_settings').select('*');
+      const isSubscriptionMode = settings?.find(s => s.key === 'is_subscription_mode')?.value;
+      const { data: config } = await supabase.from('admin_config').select('*');
+      const platformFeePercent = Number(config?.find((c: any) => c.key === 'platform_fee')?.value || 10) / 100;
+
       const price = Number(ride.price);
       
-      // TAXA: 10%
-      const platformFee = price * 0.1;
-      const driverEarn = price - platformFee; // 90%
+      let platformFee = 0;
+      let driverEarn = price;
+
+      if (!isSubscriptionMode) {
+          // Se NÃO for modo assinatura (é comissão), aplica a taxa rígida configurada
+          platformFee = price * platformFeePercent;
+          driverEarn = price - platformFee;
+      }
+      // Se for modo assinatura, platformFee continua 0 e driver ganha tudo.
 
       await supabase.from('rides').update({ status: 'COMPLETED', driver_earnings: driverEarn, platform_fee: platformFee }).eq('id', rideId);
       
@@ -340,8 +353,8 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
                });
           }
       } else {
-          // Em dinheiro, o motorista recebeu tudo. Desconta os 10% do saldo dele.
-          if (ride.driver_id) {
+          // Em dinheiro, o motorista recebeu tudo. Desconta a taxa do saldo dele APENAS SE TIVER TAXA.
+          if (ride.driver_id && platformFee > 0) {
                const { data: dProfile } = await supabase.from('profiles').select('balance').eq('id', ride.driver_id).single();
                await supabase.from('profiles').update({ balance: (dProfile?.balance || 0) - platformFee }).eq('id', ride.driver_id);
                
