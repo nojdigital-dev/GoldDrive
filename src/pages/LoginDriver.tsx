@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
-import { ArrowLeft, Loader2, ArrowRight, Car, Camera, ShieldCheck, Mail, Lock, Phone, CreditCard, ChevronLeft, Eye, EyeOff, KeyRound } from "lucide-react";
+import { ArrowLeft, Loader2, ArrowRight, Car, Camera, ShieldCheck, Mail, Lock, Phone, CreditCard, ChevronLeft, Eye, EyeOff, KeyRound, Ban, XCircle } from "lucide-react";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 // Tipos para o formulário
 interface FormData {
@@ -30,9 +31,11 @@ interface FormData {
 
 const LoginDriver = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [step, setStep] = useState(1);
+  const [isBlockedModalOpen, setIsBlockedModalOpen] = useState(false);
   
   // Controle de visibilidade de senha
   const [showPassword, setShowPassword] = useState(false);
@@ -47,6 +50,11 @@ const LoginDriver = () => {
   const [previews, setPreviews] = useState({ face: "", cnhFront: "", cnhBack: "" });
 
   useEffect(() => {
+    // Checa se veio redirecionado por bloqueio
+    if (searchParams.get('blocked') === 'true') {
+      setIsBlockedModalOpen(true);
+    }
+
     const checkUser = async () => {
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
@@ -55,7 +63,7 @@ const LoginDriver = () => {
             
             if (profile?.is_blocked) {
                 await supabase.auth.signOut();
-                showError("Acesso bloqueado devido falta de pagamento. Entre em contato com a administração do GoldMobile.");
+                setIsBlockedModalOpen(true);
                 return;
             }
 
@@ -66,7 +74,7 @@ const LoginDriver = () => {
         }
     };
     checkUser();
-  }, [navigate]);
+  }, [navigate, searchParams]);
 
   // --- MÁSCARAS DE INPUT ---
   const formatCPF = (value: string) => {
@@ -165,7 +173,8 @@ const LoginDriver = () => {
           
           if (profile?.is_blocked) {
               await supabase.auth.signOut();
-              throw new Error("Acesso bloqueado devido falta de pagamento. Entre em contato com a administração do GoldMobile.");
+              setIsBlockedModalOpen(true);
+              return;
           }
 
           if (profile?.role === 'driver') {
@@ -271,6 +280,32 @@ const LoginDriver = () => {
 
   return (
     <div className="min-h-screen bg-white flex font-sans">
+       {/* MODAL DE BLOQUEIO */}
+       <Dialog open={isBlockedModalOpen} onOpenChange={setIsBlockedModalOpen}>
+          <DialogContent className="sm:max-w-md bg-white border-0 shadow-2xl rounded-[32px] p-0 overflow-hidden text-center">
+              <div className="bg-red-500 h-32 flex items-center justify-center relative">
+                  <div className="absolute inset-0 bg-black/10 pattern-dots" />
+                  <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-xl animate-bounce">
+                      <Ban className="w-10 h-10 text-red-600" />
+                  </div>
+              </div>
+              <div className="p-8">
+                  <h2 className="text-2xl font-black text-slate-900 mb-2">Acesso Bloqueado</h2>
+                  <div className="bg-red-50 border border-red-100 p-4 rounded-xl mb-6">
+                      <p className="text-red-800 font-medium text-sm leading-relaxed">
+                          Detectamos pendências financeiras ou violações de termos em sua conta.
+                      </p>
+                  </div>
+                  <p className="text-gray-500 text-sm mb-8">
+                      Entre em contato imediatamente com a administração do Gold Mobile para regularizar sua situação.
+                  </p>
+                  <Button onClick={() => setIsBlockedModalOpen(false)} className="w-full h-12 bg-slate-900 text-white font-bold rounded-xl">
+                      Entendi
+                  </Button>
+              </div>
+          </DialogContent>
+       </Dialog>
+
        {/* Lado Esquerdo - Visual (Desktop) */}
        <div className="hidden lg:flex lg:w-1/2 bg-slate-900 relative items-center justify-center overflow-hidden">
            <div 

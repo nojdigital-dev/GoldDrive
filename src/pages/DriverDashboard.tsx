@@ -48,6 +48,33 @@ const DriverDashboard = () => {
 
   const isOnTrip = !!ride && ['ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(ride?.status || '');
 
+  // Monitoramento de Bloqueio em Tempo Real
+  useEffect(() => {
+      if (!currentUserId) return;
+
+      const channel = supabase.channel('profile_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=eq.${currentUserId}`,
+        },
+        async (payload) => {
+          if (payload.new.is_blocked) {
+            await supabase.auth.signOut();
+            window.location.href = '/login/driver?blocked=true';
+          }
+        }
+      )
+      .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+  }, [currentUserId]);
+
   // Heartbeat Effect: Atualiza last_active a cada 2 minutos se estiver online
   useEffect(() => {
       let interval: NodeJS.Timeout;
@@ -68,6 +95,12 @@ const DriverDashboard = () => {
       if(user) {
           const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
           
+          if (data?.is_blocked) {
+              await supabase.auth.signOut();
+              window.location.href = '/login/driver?blocked=true';
+              return;
+          }
+
           if (data?.driver_status === 'PENDING') {
               navigate('/driver-pending');
               return;
