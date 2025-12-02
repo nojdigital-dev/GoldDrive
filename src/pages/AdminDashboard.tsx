@@ -7,7 +7,7 @@ import {
   CreditCard, BellRing, Save, AlertTriangle, Smartphone, Globe,
   Menu, Banknote, FileText, Check, X, ExternalLink, Camera, User,
   Moon as MoonIcon, List, Plus, Power, Pencil, Star, Calendar, ArrowUpRight, ArrowDownLeft,
-  Activity, BarChart3, PieChart, Coins, Lock, Unlock, Calculator, Info
+  Activity, BarChart3, PieChart, Coins, Lock, Unlock, Calculator, Info, MapPin
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -435,6 +435,11 @@ const AdminDashboard = () => {
       }
   };
 
+  // Separação das Categorias para UI
+  const goldDriverCategory = categories.find(c => c.name === 'Gold Driver');
+  const dynamicCategories = categories.filter(c => c.name !== 'Gold Driver');
+  const activeCategories = dynamicCategories.filter(c => c.active); // Apenas as dinâmicas ativas para a aba de config
+
   // --- UI COMPONENTS ---
   const StatCard = ({ title, value, icon: Icon, colorClass, subtext, description }: any) => (
       <Card className="border-0 shadow-lg bg-white/50 dark:bg-slate-900/50 backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-xl group overflow-hidden relative">
@@ -492,9 +497,6 @@ const AdminDashboard = () => {
           </div>
       );
   };
-
-  // Filtrando categorias ativas para as abas
-  const activeCategories = categories.filter(c => c.active);
 
   return (
     <div className="flex h-screen bg-slate-50 dark:bg-slate-950 font-sans text-foreground overflow-hidden">
@@ -621,6 +623,7 @@ const AdminDashboard = () => {
 
                               <TabsContent value="general">
                                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                      {/* MODO DE OPERAÇÃO */}
                                       <Card className="border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] h-fit">
                                           <CardHeader>
                                               <CardTitle className="flex items-center gap-2"><Settings className="w-5 h-5" /> Modo de Operação</CardTitle>
@@ -645,27 +648,36 @@ const AdminDashboard = () => {
                                                       <p className="text-xs text-muted-foreground">Taxa retida de cada corrida para o app.</p>
                                                   </div>
                                               )}
-                                              
-                                              <Separator />
-                                              <div className="space-y-4">
-                                                  <div className="flex items-center justify-between">
-                                                      <div className="space-y-0.5">
-                                                          <Label className="text-base font-bold flex items-center gap-2"><Banknote className="w-4 h-4 text-green-600" /> Dinheiro / PIX</Label>
-                                                          <p className="text-sm text-muted-foreground">Permitir pagamentos diretos.</p>
-                                                      </div>
-                                                      <Switch checked={config.enableCash} onCheckedChange={(val) => setConfig({...config, enableCash: val})} />
+                                          </CardContent>
+                                          <CardFooter>
+                                              <Button onClick={handleSaveConfig} disabled={loading} className="w-full h-12 rounded-xl font-bold bg-slate-900 text-white"><Save className="w-4 h-4 mr-2" /> Salvar Configurações</Button>
+                                          </CardFooter>
+                                      </Card>
+
+                                      {/* MEIOS DE PAGAMENTO (NOVO CARD) */}
+                                      <Card className="border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] h-fit">
+                                          <CardHeader>
+                                              <CardTitle className="flex items-center gap-2"><CreditCard className="w-5 h-5" /> Meios de Pagamento</CardTitle>
+                                              <CardDescription>Ative ou desative as formas de pagamento aceitas.</CardDescription>
+                                          </CardHeader>
+                                          <CardContent className="space-y-4">
+                                              <div className="flex items-center justify-between p-4 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-100 dark:border-green-800">
+                                                  <div className="space-y-0.5">
+                                                      <Label className="text-base font-bold flex items-center gap-2 text-green-700 dark:text-green-400"><Banknote className="w-4 h-4" /> Dinheiro / PIX</Label>
+                                                      <p className="text-sm text-green-600/80 dark:text-green-400/80">Pagamento direto ao motorista.</p>
                                                   </div>
-                                                  <div className="flex items-center justify-between">
-                                                      <div className="space-y-0.5">
-                                                          <Label className="text-base font-bold flex items-center gap-2"><Wallet className="w-4 h-4 text-blue-600" /> Carteira Digital</Label>
-                                                          <p className="text-sm text-muted-foreground">Permitir uso do saldo do app.</p>
-                                                      </div>
-                                                      <Switch checked={config.enableWallet} onCheckedChange={(val) => setConfig({...config, enableWallet: val})} />
+                                                  <Switch checked={config.enableCash} onCheckedChange={(val) => setConfig({...config, enableCash: val})} />
+                                              </div>
+                                              <div className="flex items-center justify-between p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800">
+                                                  <div className="space-y-0.5">
+                                                      <Label className="text-base font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400"><Wallet className="w-4 h-4" /> Carteira Digital</Label>
+                                                      <p className="text-sm text-blue-600/80 dark:text-blue-400/80">Saldo pré-pago no aplicativo.</p>
                                                   </div>
+                                                  <Switch checked={config.enableWallet} onCheckedChange={(val) => setConfig({...config, enableWallet: val})} />
                                               </div>
                                           </CardContent>
                                           <CardFooter>
-                                              <Button onClick={handleSaveConfig} disabled={loading} className="w-full h-12 rounded-xl font-bold bg-slate-900 text-white"><Save className="w-4 h-4 mr-2" /> Salvar Tudo</Button>
+                                              <Button onClick={handleSaveConfig} disabled={loading} className="w-full h-12 rounded-xl font-bold bg-slate-900 text-white"><Save className="w-4 h-4 mr-2" /> Salvar Pagamentos</Button>
                                           </CardFooter>
                                       </Card>
                                   </div>
@@ -824,23 +836,51 @@ const AdminDashboard = () => {
                                       </div>
 
                                       {/* LISTA DE CATEGORIAS (TOGGLES) */}
-                                      <Card className="col-span-1 lg:col-span-2 border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px]">
+                                      <Card className="col-span-1 lg:col-span-2 border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] overflow-hidden">
                                           <CardHeader>
                                               <CardTitle>Gerenciar Categorias Ativas</CardTitle>
                                               <CardDescription>Ative ou desative categorias disponíveis para os passageiros.</CardDescription>
                                           </CardHeader>
-                                          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                              {categories.map(cat => (
-                                                  <div key={cat.id} className={`flex items-center justify-between p-4 rounded-xl border transition-all ${cat.active ? 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-sm' : 'bg-slate-100 dark:bg-slate-900 border-transparent opacity-70'}`}>
-                                                      <div className="flex items-center gap-3">
-                                                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${cat.active ? 'bg-slate-900 text-white' : 'bg-slate-300 text-slate-500'}`}>
-                                                              <Car className="w-5 h-5" />
+                                          <CardContent className="space-y-4">
+                                              {/* CARD DEDICADO AO GOLD DRIVER */}
+                                              {goldDriverCategory && (
+                                                  <div className="bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-700/30 rounded-2xl p-6 flex items-center justify-between">
+                                                      <div className="flex items-center gap-4">
+                                                          <div className="w-14 h-14 rounded-full bg-yellow-500 text-black flex items-center justify-center shadow-lg shadow-yellow-500/20">
+                                                              <Car className="w-7 h-7" />
                                                           </div>
-                                                          <span className="font-bold">{cat.name}</span>
+                                                          <div>
+                                                              <div className="flex items-center gap-2">
+                                                                  <h3 className="font-black text-xl text-slate-900 dark:text-white">Gold Driver</h3>
+                                                                  <Badge className="bg-yellow-500 text-black border-0 font-bold hover:bg-yellow-400">TABELA FIXA</Badge>
+                                                              </div>
+                                                              <p className="text-sm text-slate-500 dark:text-slate-400 font-medium mt-1">Categoria principal com preço definido por tabela.</p>
+                                                          </div>
                                                       </div>
-                                                      <Switch checked={cat.active} onCheckedChange={(val) => updateCategory(cat.id, 'active', val)} />
+                                                      <div className="flex items-center gap-3 bg-white dark:bg-slate-800 py-2 px-4 rounded-xl shadow-sm border border-border/50">
+                                                          <span className="font-bold text-sm uppercase text-muted-foreground">{goldDriverCategory.active ? 'Ativo' : 'Inativo'}</span>
+                                                          <Switch checked={goldDriverCategory.active} onCheckedChange={(val) => updateCategory(goldDriverCategory.id, 'active', val)} />
+                                                      </div>
                                                   </div>
-                                              ))}
+                                              )}
+
+                                              {/* GRID PARA OUTRAS CATEGORIAS */}
+                                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
+                                                  {dynamicCategories.map(cat => (
+                                                      <div key={cat.id} className={`flex items-center justify-between p-4 rounded-xl border transition-all ${cat.active ? 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-sm' : 'bg-slate-100 dark:bg-slate-900 border-transparent opacity-70'}`}>
+                                                          <div className="flex items-center gap-3">
+                                                              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${cat.active ? 'bg-slate-900 text-white' : 'bg-slate-300 text-slate-500'}`}>
+                                                                  <Car className="w-5 h-5" />
+                                                              </div>
+                                                              <div>
+                                                                  <span className="font-bold block">{cat.name}</span>
+                                                                  <span className="text-[10px] uppercase font-bold text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">Cálculo Dinâmico</span>
+                                                              </div>
+                                                          </div>
+                                                          <Switch checked={cat.active} onCheckedChange={(val) => updateCategory(cat.id, 'active', val)} />
+                                                      </div>
+                                                  ))}
+                                              </div>
                                           </CardContent>
                                       </Card>
 
@@ -951,7 +991,154 @@ const AdminDashboard = () => {
 
       {/* ... (Resto dos Dialogs) ... */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir Usuário?</AlertDialogTitle><AlertDialogDescription>Isso removerá o perfil do sistema permanentemente. O histórico de corridas será preservado anonimamente.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={handleDeleteUser} className="bg-red-600">Excluir Definitivamente</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
-      <Dialog open={!!selectedRide} onOpenChange={(o) => !o && setSelectedRide(null)}><DialogContent className="max-w-md bg-white dark:bg-slate-900 rounded-[32px] border-0 shadow-2xl"><DialogHeader><DialogTitle>Detalhes da Corrida</DialogTitle></DialogHeader><div className="space-y-6 py-4"><div className="grid grid-cols-1 gap-4"><div><p className="text-xs font-bold text-muted-foreground uppercase">Origem</p><p className="font-medium text-lg">{selectedRide?.pickup_address}</p></div><div><p className="text-xs font-bold text-muted-foreground uppercase">Destino</p><p className="font-medium text-lg">{selectedRide?.destination_address}</p></div></div><div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl flex items-center justify-between"><div className="flex items-center gap-3"><Avatar><AvatarImage src={selectedRide?.driver?.avatar_url} /><AvatarFallback>DR</AvatarFallback></Avatar><div><p className="font-bold">{selectedRide?.driver?.first_name || 'Sem motorista'}</p></div></div><div className="text-right"><p className="text-xs text-muted-foreground uppercase font-bold">Data/Hora</p><p className="font-bold text-sm">{selectedRide ? new Date(selectedRide.created_at).toLocaleString('pt-BR') : '--'}</p></div></div><div className="bg-slate-50 dark:bg-slate-800 rounded-2xl p-4 space-y-3 border border-border/50"><div className="flex justify-between items-center pb-2 border-b border-border/50"><span className="text-sm text-muted-foreground font-medium">Preço Cobrado</span><span className="font-black text-lg">R$ {Number(selectedRide?.price).toFixed(2)}</span></div><div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">Repasse Motorista (80%)</span><span className="font-bold">R$ {Number(selectedRide?.driver_earnings).toFixed(2)}</span></div><div className="flex justify-between items-center text-sm"><span className="text-muted-foreground">Taxa Plataforma (20%)</span><span className="font-bold text-green-600">R$ {Number(selectedRide?.platform_fee).toFixed(2)}</span></div>{selectedRide?.payment_method && (<div className="pt-2 flex justify-end"><Badge variant="outline" className="text-xs">{selectedRide.payment_method === 'WALLET' ? 'Pago via Carteira' : 'Pago em Dinheiro'}</Badge></div>)}</div></div></DialogContent></Dialog>
+      
+      {/* NOVO MODAL DE DETALHES DA CORRIDA REDESENHADO */}
+      <Dialog open={!!selectedRide} onOpenChange={(o) => !o && setSelectedRide(null)}>
+          <DialogContent className="max-w-4xl bg-white dark:bg-slate-950 rounded-[32px] border-0 shadow-2xl p-0 overflow-hidden">
+              <div className="bg-slate-900 p-6 flex justify-between items-center text-white">
+                  <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center">
+                          <MapIcon className="w-6 h-6 text-yellow-500" />
+                      </div>
+                      <div>
+                          <h2 className="text-xl font-black">Corrida #{selectedRide?.id.substring(0,8).toUpperCase()}</h2>
+                          <p className="text-sm text-slate-400">{selectedRide ? new Date(selectedRide.created_at).toLocaleString('pt-BR') : '--'}</p>
+                      </div>
+                  </div>
+                  <Badge className={`px-4 py-1.5 text-sm font-bold ${selectedRide?.status === 'COMPLETED' ? 'bg-green-500 text-black' : selectedRide?.status === 'CANCELLED' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'}`}>
+                      {selectedRide?.status}
+                  </Badge>
+              </div>
+              
+              <div className="p-8 bg-slate-50 dark:bg-slate-900 grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  {/* ESQUERDA: MAPA/ROTA + FINANCEIRO */}
+                  <div className="space-y-6">
+                      <Card className="border-0 shadow-sm bg-white dark:bg-slate-800">
+                          <CardHeader><CardTitle className="text-base font-bold flex items-center gap-2"><MapPin className="w-4 h-4"/> Detalhes da Rota</CardTitle></CardHeader>
+                          <CardContent className="space-y-6">
+                              <div className="flex gap-4">
+                                  <div className="flex flex-col items-center pt-1">
+                                      <div className="w-3 h-3 bg-black dark:bg-white rounded-full" />
+                                      <div className="w-0.5 flex-1 bg-gray-200 dark:bg-gray-700 my-1" />
+                                      <div className="w-3 h-3 bg-yellow-500 rounded-full" />
+                                  </div>
+                                  <div className="space-y-6 flex-1">
+                                      <div>
+                                          <p className="text-xs font-bold text-muted-foreground uppercase">Origem</p>
+                                          <p className="font-medium text-lg leading-tight">{selectedRide?.pickup_address}</p>
+                                      </div>
+                                      <div>
+                                          <p className="text-xs font-bold text-muted-foreground uppercase">Destino</p>
+                                          <p className="font-medium text-lg leading-tight">{selectedRide?.destination_address}</p>
+                                      </div>
+                                  </div>
+                              </div>
+                              <div className="flex gap-4 pt-2">
+                                  <Badge variant="outline">{selectedRide?.distance}</Badge>
+                                  <Badge variant="outline">{selectedRide?.category || 'Gold Driver'}</Badge>
+                              </div>
+                          </CardContent>
+                      </Card>
+
+                      <Card className="border-0 shadow-sm bg-white dark:bg-slate-800">
+                          <CardHeader><CardTitle className="text-base font-bold flex items-center gap-2"><DollarSign className="w-4 h-4"/> Financeiro</CardTitle></CardHeader>
+                          <CardContent className="space-y-4">
+                              <div className="flex justify-between items-center p-3 bg-green-50 dark:bg-green-900/10 rounded-xl border border-green-100 dark:border-green-800/30">
+                                  <span className="text-sm font-bold text-green-800 dark:text-green-400">Preço Total</span>
+                                  <span className="text-2xl font-black text-green-700 dark:text-green-400">R$ {Number(selectedRide?.price).toFixed(2)}</span>
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                  <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl">
+                                      <p className="text-xs text-muted-foreground uppercase mb-1">Ganho Motorista</p>
+                                      <p className="font-bold">R$ {Number(selectedRide?.driver_earnings).toFixed(2)}</p>
+                                  </div>
+                                  <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl">
+                                      <p className="text-xs text-muted-foreground uppercase mb-1">Taxa App</p>
+                                      <p className="font-bold">R$ {Number(selectedRide?.platform_fee).toFixed(2)}</p>
+                                  </div>
+                              </div>
+                              <div className="flex justify-between items-center pt-2">
+                                  <span className="text-sm text-muted-foreground">Método</span>
+                                  <Badge variant="secondary" className="font-mono">{selectedRide?.payment_method === 'WALLET' ? 'CARTEIRA DIGITAL' : 'DINHEIRO / PIX'}</Badge>
+                              </div>
+                          </CardContent>
+                      </Card>
+                  </div>
+
+                  {/* DIREITA: ENVOLVIDOS + TIMELINE */}
+                  <div className="space-y-6">
+                      <div className="grid grid-cols-1 gap-4">
+                          {/* PASSAGEIRO */}
+                          <Card className="border-0 shadow-sm bg-white dark:bg-slate-800 relative overflow-hidden">
+                              <div className="absolute top-0 right-0 p-2 opacity-10"><User className="w-16 h-16"/></div>
+                              <CardContent className="p-4 flex items-center gap-4 relative z-10">
+                                  <Avatar className="w-14 h-14 border-2 border-slate-100 shadow-sm">
+                                      <AvatarImage src={selectedRide?.customer?.avatar_url} />
+                                      <AvatarFallback>P</AvatarFallback>
+                                  </Avatar>
+                                  <div>
+                                      <p className="text-xs font-bold text-blue-500 uppercase mb-0.5">Passageiro</p>
+                                      <p className="font-bold text-lg">{selectedRide?.customer?.first_name} {selectedRide?.customer?.last_name}</p>
+                                      <p className="text-sm text-muted-foreground">{selectedRide?.customer?.phone || 'Sem telefone'}</p>
+                                  </div>
+                              </CardContent>
+                          </Card>
+
+                          {/* MOTORISTA */}
+                          <Card className="border-0 shadow-sm bg-white dark:bg-slate-800 relative overflow-hidden">
+                              <div className="absolute top-0 right-0 p-2 opacity-10"><Car className="w-16 h-16"/></div>
+                              <CardContent className="p-4 flex items-center gap-4 relative z-10">
+                                  {selectedRide?.driver ? (
+                                      <>
+                                          <Avatar className="w-14 h-14 border-2 border-yellow-100 shadow-sm">
+                                              <AvatarImage src={selectedRide?.driver?.avatar_url} />
+                                              <AvatarFallback>M</AvatarFallback>
+                                          </Avatar>
+                                          <div>
+                                              <p className="text-xs font-bold text-yellow-600 uppercase mb-0.5">Motorista</p>
+                                              <p className="font-bold text-lg">{selectedRide?.driver?.first_name} {selectedRide?.driver?.last_name}</p>
+                                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                  <span>{selectedRide?.driver?.car_model}</span>
+                                                  <span className="w-1 h-1 bg-slate-300 rounded-full"/>
+                                                  <Badge variant="outline" className="text-[10px] h-5">{selectedRide?.driver?.car_plate}</Badge>
+                                              </div>
+                                          </div>
+                                      </>
+                                  ) : (
+                                      <div className="p-2 text-muted-foreground italic">Nenhum motorista atribuído.</div>
+                                  )}
+                              </CardContent>
+                          </Card>
+                      </div>
+
+                      <Card className="border-0 shadow-sm bg-white dark:bg-slate-800">
+                          <CardHeader><CardTitle className="text-base font-bold flex items-center gap-2"><Clock className="w-4 h-4"/> Timeline</CardTitle></CardHeader>
+                          <CardContent>
+                              <div className="space-y-4 relative">
+                                  <div className="absolute left-1.5 top-2 bottom-2 w-0.5 bg-gray-100 dark:bg-slate-700" />
+                                  <div className="flex items-start gap-3 relative z-10">
+                                      <div className="w-3.5 h-3.5 rounded-full bg-blue-500 border-2 border-white dark:border-slate-800 shadow-sm mt-1" />
+                                      <div>
+                                          <p className="text-sm font-bold">Solicitação Criada</p>
+                                          <p className="text-xs text-muted-foreground">{new Date(selectedRide?.created_at).toLocaleString()}</p>
+                                      </div>
+                                  </div>
+                                  {/* Como o DB atual só tem created_at, simulamos o estado atual como último evento */}
+                                  <div className="flex items-start gap-3 relative z-10">
+                                      <div className={`w-3.5 h-3.5 rounded-full border-2 border-white dark:border-slate-800 shadow-sm mt-1 ${selectedRide?.status === 'COMPLETED' ? 'bg-green-500' : selectedRide?.status === 'CANCELLED' ? 'bg-red-500' : 'bg-yellow-500'}`} />
+                                      <div>
+                                          <p className="text-sm font-bold">Status Atual: {selectedRide?.status}</p>
+                                          <p className="text-xs text-muted-foreground">Última atualização do sistema</p>
+                                      </div>
+                                  </div>
+                              </div>
+                          </CardContent>
+                      </Card>
+                  </div>
+              </div>
+          </DialogContent>
+      </Dialog>
+
       <Dialog open={!!reviewDriver} onOpenChange={(o) => !o && setReviewDriver(null)}><DialogContent className="max-w-3xl bg-white dark:bg-slate-950 rounded-[32px] border-0 shadow-2xl p-0 overflow-hidden">{reviewDriver && (<div className="flex flex-col h-[85vh]"><div className="bg-slate-900 text-white p-6 shrink-0 relative overflow-hidden">{justApproved && (<div className="absolute inset-0 bg-green-600 z-0 flex items-center justify-center animate-in fade-in duration-500"><div className="absolute inset-0 bg-black/10 pattern-dots" /></div>)}<div className="flex items-center gap-4 relative z-10"><Avatar className="w-16 h-16 border-4 border-white shadow-xl"><AvatarImage src={reviewDriver.face_photo_url || reviewDriver.avatar_url} /><AvatarFallback className="text-black bg-yellow-500 font-bold text-xl">{reviewDriver.first_name[0]}</AvatarFallback></Avatar><div><h2 className="text-2xl font-black">{justApproved ? "Motorista Aprovado!" : "Análise de Perfil"}</h2>{justApproved && <span className="font-bold text-white flex items-center gap-2 mt-1"><CheckCircle className="w-4 h-4"/> Acesso liberado no sistema.</span>}{!justApproved && <span className="text-sm text-gray-400">Verifique os dados abaixo com atenção.</span>}</div></div></div><ScrollArea className="flex-1 bg-gray-50 dark:bg-slate-900 p-6">{!justApproved ? (<div className="space-y-6"><div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-border/50"><h3 className="text-sm font-bold uppercase text-muted-foreground mb-3 flex items-center gap-2"><User className="w-4 h-4" /> Dados Pessoais</h3><div className="grid grid-cols-1 md:grid-cols-3 gap-4"><div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl"><p className="text-xs text-muted-foreground">Nome Completo</p><p className="font-bold truncate" title={`${reviewDriver.first_name} ${reviewDriver.last_name}`}>{reviewDriver.first_name} {reviewDriver.last_name}</p></div><div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl"><p className="text-xs text-muted-foreground">CPF</p><p className="font-bold font-mono">{reviewDriver.cpf}</p></div><div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl"><p className="text-xs text-muted-foreground">Telefone</p><p className="font-bold">{reviewDriver.phone}</p></div></div></div><div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-border/50"><h3 className="text-sm font-bold uppercase text-muted-foreground mb-3 flex items-center gap-2"><Car className="w-4 h-4" /> Dados do Veículo</h3><div className="grid grid-cols-2 md:grid-cols-4 gap-4"><div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl"><p className="text-xs text-muted-foreground">Modelo</p><p className="font-bold">{reviewDriver.car_model}</p></div><div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl"><p className="text-xs text-muted-foreground">Placa</p><p className="font-bold font-mono uppercase">{reviewDriver.car_plate}</p></div><div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl"><p className="text-xs text-muted-foreground">Cor</p><p className="font-bold">{reviewDriver.car_color}</p></div><div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl"><p className="text-xs text-muted-foreground">Ano</p><p className="font-bold">{reviewDriver.car_year}</p></div></div></div><div><h3 className="text-sm font-bold uppercase text-muted-foreground mb-3 flex items-center gap-2"><Camera className="w-4 h-4" /> Fotos de Cadastro</h3><div className="grid grid-cols-1 md:grid-cols-3 gap-4"><div className="space-y-2"><p className="text-xs font-bold pl-2 text-blue-600">Selfie (Rosto)</p><div className="aspect-[3/4] bg-black rounded-xl overflow-hidden shadow-lg border-2 border-blue-100 dark:border-blue-900 relative group cursor-pointer" onClick={() => window.open(reviewDriver.face_photo_url || reviewDriver.avatar_url, '_blank')}><img src={reviewDriver.face_photo_url || reviewDriver.avatar_url} className="w-full h-full object-cover transition-transform group-hover:scale-105" alt="Selfie" /><div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"><ExternalLink className="text-white w-8 h-8" /></div></div></div><div className="space-y-2"><p className="text-xs font-bold pl-2">CNH Frente</p><div className="aspect-video bg-black rounded-xl overflow-hidden shadow-lg border-2 border-slate-200 dark:border-slate-700 relative group cursor-pointer" onClick={() => window.open(reviewDriver.cnh_front_url, '_blank')}><img src={reviewDriver.cnh_front_url} className="w-full h-full object-cover transition-transform group-hover:scale-105" alt="CNH Frente" /><div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"><ExternalLink className="text-white w-8 h-8" /></div></div></div><div className="space-y-2"><p className="text-xs font-bold pl-2">CNH Verso</p><div className="aspect-video bg-black rounded-xl overflow-hidden shadow-lg border-2 border-slate-200 dark:border-slate-700 relative group cursor-pointer" onClick={() => window.open(reviewDriver.cnh_back_url, '_blank')}><img src={reviewDriver.cnh_back_url} className="w-full h-full object-cover transition-transform group-hover:scale-105" alt="CNH Verso" /><div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"><ExternalLink className="text-white w-8 h-8" /></div></div></div></div></div></div>) : (<div className="h-full flex flex-col items-center justify-center text-center p-8 animate-in zoom-in duration-300"><div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mb-6 shadow-green-200 shadow-xl"><CheckCircle className="w-12 h-12 text-green-600" /></div><h2 className="text-3xl font-black text-slate-900 mb-2">Sucesso!</h2><p className="text-gray-500 max-w-md mb-8">O motorista foi aprovado e o acesso ao aplicativo já foi liberado. Envie uma notificação para avisá-lo.</p><Button className="h-16 px-8 rounded-2xl bg-green-600 hover:bg-green-700 text-white font-bold text-lg shadow-xl shadow-green-600/20 w-full max-w-sm animate-bounce" onClick={() => sendWhatsAppNotice(reviewDriver)}><Smartphone className="mr-2 w-6 h-6" /> Enviar Aviso no WhatsApp</Button><Button variant="ghost" className="mt-4" onClick={() => setReviewDriver(null)}>Fechar Janela</Button></div>)}</ScrollArea>{!justApproved && (<div className="p-4 bg-white dark:bg-slate-950 border-t border-border flex gap-3 shrink-0"><Button variant="destructive" className="flex-1 h-14 rounded-xl font-bold text-lg" onClick={() => rejectDriver(reviewDriver)}><X className="mr-2 w-5 h-5" /> Reprovar</Button><Button className="flex-[2] h-14 bg-slate-900 hover:bg-black text-white rounded-xl font-bold text-lg shadow-lg" onClick={() => approveDriver(reviewDriver)}><Check className="mr-2 w-5 h-5" /> Aprovar Cadastro</Button></div>)}</div>)}</DialogContent></Dialog>
       <Dialog open={!!detailUser} onOpenChange={(o) => !o && setDetailUser(null)}><DialogContent className="max-w-4xl bg-white dark:bg-slate-950 rounded-[32px] border-0 shadow-2xl p-0 overflow-hidden h-[90vh] flex flex-col">{detailUser && (<><div className="bg-slate-900 p-8 shrink-0 relative overflow-hidden text-white"><div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-yellow-500/10 to-transparent rounded-full blur-3xl pointer-events-none" /><div className="flex justify-between items-start relative z-10"><div className="flex items-center gap-6"><Avatar className="w-24 h-24 border-4 border-white dark:border-slate-800 shadow-xl"><AvatarImage src={detailUser.avatar_url} className="object-cover" /><AvatarFallback className="text-2xl bg-yellow-500 text-black font-black">{detailUser.first_name?.[0]}</AvatarFallback></Avatar><div><div className="flex items-center gap-3 mb-1"><h2 className="text-3xl font-black tracking-tight">{detailUser.first_name} {detailUser.last_name}</h2>{detailUser.role === 'driver' && <Badge className="bg-yellow-500 text-black font-bold">Motorista</Badge>}{detailUser.role === 'client' && <Badge variant="secondary" className="bg-white/20 text-white hover:bg-white/30">Passageiro</Badge>}{detailUser.is_blocked && <Badge variant="destructive" className="ml-2 font-bold bg-red-600 text-white">BLOQUEADO</Badge>}</div><p className="text-slate-400 flex items-center gap-2 text-sm"><Mail className="w-3 h-3" /> {detailUser.email}<span className="w-1 h-1 bg-slate-600 rounded-full" /><Smartphone className="w-3 h-3" /> {detailUser.phone || "Sem telefone"}</p></div></div><div className="text-right hidden md:block"><p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Saldo Atual</p><h3 className="text-4xl font-black text-green-500">R$ {detailUser.balance?.toFixed(2)}</h3></div></div></div><Tabs defaultValue="overview" className="flex-1 flex flex-col overflow-hidden"><div className="px-8 pt-4 border-b border-border/50 bg-white dark:bg-slate-950"><TabsList className="bg-transparent p-0 gap-6"><TabsTrigger value="overview" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 border-slate-900 dark:border-white rounded-none px-0 pb-3 font-bold text-muted-foreground data-[state=active]:text-foreground transition-all">Visão Geral</TabsTrigger><TabsTrigger value="history" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 border-slate-900 dark:border-white rounded-none px-0 pb-3 font-bold text-muted-foreground data-[state=active]:text-foreground transition-all">Histórico de Corridas</TabsTrigger><TabsTrigger value="edit" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 border-slate-900 dark:border-white rounded-none px-0 pb-3 font-bold text-muted-foreground data-[state=active]:text-foreground transition-all">Editar Perfil</TabsTrigger></TabsList></div><div className="flex-1 overflow-hidden bg-slate-50 dark:bg-slate-900/50">{isDetailLoading ? (<div className="h-full flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-slate-300" /></div>) : (<><TabsContent value="overview" className="h-full overflow-y-auto p-8 m-0 space-y-8 custom-scrollbar"><div className="grid grid-cols-2 md:grid-cols-4 gap-4"><Card className="border-0 shadow-sm bg-white dark:bg-slate-800"><CardContent className="p-4 flex items-center gap-4"><div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center text-yellow-600"><Star className="w-6 h-6 fill-yellow-600" /></div><div><p className="text-xs text-muted-foreground font-bold uppercase">Nota Média</p><p className="text-xl font-black">{detailUserStats.avgRating.toFixed(1)}</p></div></CardContent></Card><Card className="border-0 shadow-sm bg-white dark:bg-slate-800"><CardContent className="p-4 flex items-center gap-4"><div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-600"><MapIcon className="w-6 h-6" /></div><div><p className="text-xs text-muted-foreground font-bold uppercase">Total Viagens</p><p className="text-xl font-black">{detailUserStats.totalRides}</p></div></CardContent></Card><Card className="border-0 shadow-sm bg-white dark:bg-slate-800 col-span-2"><CardContent className="p-4 flex items-center gap-4"><div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center text-green-600"><DollarSign className="w-6 h-6" /></div><div><p className="text-xs text-muted-foreground font-bold uppercase">{detailUser.role === 'driver' ? 'Total Ganho' : 'Total Gasto'}</p><p className="text-xl font-black">R$ {detailUserStats.totalSpent.toFixed(2)}</p></div></CardContent></Card></div><div className="grid grid-cols-1 md:grid-cols-3 gap-6"><Card className="border-0 shadow-sm bg-white dark:bg-slate-800 md:col-span-2"><CardHeader><CardTitle className="text-base font-bold flex items-center gap-2"><User className="w-4 h-4"/> Informações Pessoais</CardTitle></CardHeader><CardContent className="grid grid-cols-2 gap-6"><div><Label className="text-xs text-muted-foreground uppercase">Nome Completo</Label><p className="font-medium text-lg">{detailUser.first_name} {detailUser.last_name}</p></div><div><Label className="text-xs text-muted-foreground uppercase">CPF</Label><p className="font-mono font-medium text-lg">{detailUser.cpf || 'Não informado'}</p></div><div><Label className="text-xs text-muted-foreground uppercase">Telefone</Label><p className="font-medium text-lg">{detailUser.phone}</p></div><div><Label className="text-xs text-muted-foreground uppercase">Data Cadastro</Label><p className="font-medium text-lg">{new Date(detailUser.created_at).toLocaleDateString()}</p></div></CardContent></Card><div className="space-y-4">{detailUser.role === 'driver' && (<Button className={`w-full h-12 font-bold rounded-xl ${detailUser.is_blocked ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`} onClick={handleToggleBlock}>{detailUser.is_blocked ? (<><Unlock className="mr-2 w-4 h-4"/> Desbloquear Motorista</>) : (<><Lock className="mr-2 w-4 h-4"/> Bloquear Motorista</>)}</Button>)}<Button variant="outline" className="w-full h-12 font-bold rounded-xl" onClick={() => handleResetPassword(detailUser.email)}><Mail className="mr-2 w-4 h-4" /> Enviar Redefinição de Senha</Button><Button variant="ghost" className="w-full h-12 font-bold rounded-xl text-red-600 hover:bg-red-50" onClick={() => setIsDeleteDialogOpen(true)}><Trash2 className="mr-2 w-4 h-4" /> Excluir Conta</Button></div></div>{detailUser.role === 'driver' && (<div className="space-y-4"><h3 className="font-bold text-lg flex items-center gap-2"><FileText className="w-5 h-5"/> Documentação e Veículo</h3><div className="grid grid-cols-1 md:grid-cols-4 gap-4"><div className="bg-white p-4 rounded-xl shadow-sm border border-border/50"><p className="text-xs text-muted-foreground uppercase mb-1">Veículo</p><p className="font-bold">{detailUser.car_model}</p><p className="text-sm text-muted-foreground">{detailUser.car_color} • {detailUser.car_year}</p><Badge variant="outline" className="mt-2 font-mono">{detailUser.car_plate}</Badge></div>{['cnh_front_url', 'cnh_back_url', 'face_photo_url'].map((field) => (detailUser[field] && (<div key={field} className="aspect-video bg-black rounded-xl overflow-hidden relative group cursor-pointer" onClick={() => window.open(detailUser[field], '_blank')}><img src={detailUser[field]} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" /><div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 transition-opacity"><ExternalLink className="text-white w-6 h-6"/></div><div className="absolute bottom-2 left-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded font-bold uppercase">{field.replace('_url', '').replace('_', ' ')}</div></div>) )) }</div></div>)}</TabsContent><TabsContent value="history" className="h-full overflow-y-auto p-0 m-0">{detailUserHistory.length === 0 ? (<div className="h-full flex flex-col items-center justify-center text-muted-foreground"><MapIcon className="w-12 h-12 mb-2 opacity-20" /><p>Nenhuma corrida registrada.</p></div>) : (<Table><TableHeader className="bg-white dark:bg-slate-950 sticky top-0 z-10"><TableRow><TableHead className="pl-8">Data</TableHead><TableHead>Origem / Destino</TableHead><TableHead>Status</TableHead><TableHead className="text-right pr-8">Valor</TableHead></TableRow></TableHeader><TableBody>{detailUserHistory.map(ride => (<TableRow key={ride.id} className="hover:bg-white/50"><TableCell className="pl-8 text-muted-foreground">{new Date(ride.created_at).toLocaleDateString()}</TableCell><TableCell><div className="max-w-xs"><p className="font-medium truncate">{ride.destination_address}</p><p className="text-xs text-muted-foreground truncate">{ride.pickup_address}</p></div></TableCell><TableCell><Badge variant="outline">{ride.status}</Badge></TableCell><TableCell className="text-right pr-8 font-bold">R$ {Number(ride.price).toFixed(2)}</TableCell></TableRow>))}</TableBody></Table>)}</TabsContent><TabsContent value="edit" className="h-full p-8 m-0 overflow-y-auto"><Card className="max-w-lg mx-auto border-0 shadow-none bg-transparent"><CardContent className="space-y-6"><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>Nome</Label><Input value={editFormData.first_name} onChange={e => setEditFormData({...editFormData, first_name: e.target.value})} className="h-12 rounded-xl" /></div><div className="space-y-2"><Label>Sobrenome</Label><Input value={editFormData.last_name} onChange={e => setEditFormData({...editFormData, last_name: e.target.value})} className="h-12 rounded-xl" /></div></div><div className="space-y-2"><Label>Telefone</Label><Input value={editFormData.phone} onChange={e => setEditFormData({...editFormData, phone: e.target.value})} className="h-12 rounded-xl" /></div><Button onClick={handleSaveUserDetail} className="w-full h-12 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-lg">Salvar Alterações</Button></CardContent></Card></TabsContent></>)}</div></Tabs></>)}</DialogContent></Dialog>
     </div>
