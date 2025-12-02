@@ -95,18 +95,9 @@ const AdminDashboard = () => {
   const [filterStatus, setFilterStatus] = useState("ALL");
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Polling de Status Online Real-Time
+  // Polling de Status Online Real-Time (Apenas conta, o FetchData faz a limpeza pesada)
   useEffect(() => {
       const fetchOnlineCount = async () => {
-          // Limpeza de inativos antes de contar
-          const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-          await supabase
-            .from('profiles')
-            .update({ is_online: false })
-            .eq('role', 'driver')
-            .eq('is_online', true)
-            .lt('last_active', tenMinutesAgo);
-
           const { count } = await supabase
             .from('profiles')
             .select('*', { count: 'exact', head: true })
@@ -117,13 +108,12 @@ const AdminDashboard = () => {
       };
 
       const interval = setInterval(fetchOnlineCount, 5000); 
-      fetchOnlineCount(); 
       return () => clearInterval(interval);
   }, []);
 
   useEffect(() => { fetchData(); }, []);
 
-  const fetchData = async () => {
+  const fetchData = async (isManual = false) => {
     setLoading(true);
     try {
         const { data: { user } } = await supabase.auth.getUser();
@@ -137,26 +127,48 @@ const AdminDashboard = () => {
             }
         }
 
-        const { data: ridesData } = await supabase
-            .from('rides')
-            .select(`*, driver:profiles!public_rides_driver_id_fkey(*), customer:profiles!public_rides_customer_id_fkey(*)`)
-            .order('created_at', { ascending: false });
-        const currentRides = ridesData || [];
+        // 0. Limpeza de Motoristas Inativos (Heartbeat > 10 min)
+        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+        await supabase
+          .from('profiles')
+          .update({ is_online: false })
+          .eq('role', 'driver')
+          .eq('is_online', true)
+          .lt('last_active', tenMinutesAgo);
+
+        // 1. Executar queries em paralelo para performance
+        const [
+            ridesRes, 
+            profilesRes, 
+            settingsRes, 
+            pricingRes, 
+            catRes, 
+            adminConfigRes
+        ] = await Promise.all([
+            supabase.from('rides').select(`*, driver:profiles!public_rides_driver_id_fkey(*), customer:profiles!public_rides_customer_id_fkey(*)`).order('created_at', { ascending: false }),
+            supabase.from('profiles').select('*').order('created_at', { ascending: false }),
+            supabase.from('app_settings').select('*'),
+            supabase.from('pricing_tiers').select('*').order('display_order', { ascending: true }),
+            supabase.from('car_categories').select('*').order('base_fare', { ascending: true }),
+            supabase.from('admin_config').select('*')
+        ]);
+
+        // Processar Rides
+        const currentRides = ridesRes.data || [];
         setRides(currentRides);
 
-        const { data: profilesData } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
-        const allProfiles = profilesData || [];
+        // Processar Perfis
+        const allProfiles = profilesRes.data || [];
         setPassengers(allProfiles.filter((p: any) => p.role === 'client'));
-        
         const allDrivers = allProfiles.filter((p: any) => p.role === 'driver');
         setDrivers(allDrivers);
         setPendingDrivers(allDrivers.filter((p: any) => p.driver_status === 'PENDING'));
 
-        const { data: settingsData } = await supabase.from('app_settings').select('*');
-        if (settingsData) {
-            const cash = settingsData.find(s => s.key === 'enable_cash');
-            const wallet = settingsData.find(s => s.key === 'enable_wallet');
-            const subMode = settingsData.find(s => s.key === 'is_subscription_mode');
+        // Processar Settings
+        if (settingsRes.data) {
+            const cash = settingsRes.data.find(s => s.key === 'enable_cash');
+            const wallet = settingsRes.data.find(s => s.key === 'enable_wallet');
+            const subMode = settingsRes.data.find(s => s.key === 'is_subscription_mode');
             
             setConfig(prev => ({ 
                 ...prev, 
@@ -166,23 +178,17 @@ const AdminDashboard = () => {
             }));
         }
 
-        const { data: pricingData } = await supabase.from('pricing_tiers').select('*').order('display_order', { ascending: true });
-        if (pricingData) setPricingTiers(pricingData);
-
-        const { data: catData } = await supabase.from('car_categories').select('*').order('base_fare', { ascending: true });
-        if (catData) setCategories(catData);
-
-        const { data: adminConfigData } = await supabase.from('admin_config').select('*');
-        if (adminConfigData) {
+        // Processar Tabelas e Configs
+        if (pricingRes.data) setPricingTiers(pricingRes.data);
+        if (catRes.data) setCategories(catRes.data);
+        if (adminConfigRes.data) {
             const newConf: any = {};
-            adminConfigData.forEach((item: any) => newConf[item.key] = item.value);
+            adminConfigRes.data.forEach((item: any) => newConf[item.key] = item.value);
             setAdminConfigs(prev => ({ ...prev, ...newConf }));
-            
-            if (newConf.platform_fee) {
-                setConfig(prev => ({ ...prev, platformFee: newConf.platform_fee }));
-            }
+            if (newConf.platform_fee) setConfig(prev => ({ ...prev, platformFee: newConf.platform_fee }));
         }
 
+        // 5. Calcular Estatísticas
         const now = new Date();
         const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
@@ -197,8 +203,11 @@ const AdminDashboard = () => {
         const driverEarn = currentRides.reduce((acc, curr) => acc + (Number(curr.driver_earnings) || 0), 0);
         
         const activeCount = currentRides.filter(r => ['SEARCHING', 'ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(r.status)).length;
+        
+        // Contagem atualizada após a limpeza do passo 0
         const driversOnlineCount = allDrivers.filter((d: any) => d.is_online).length;
 
+        // Gráfico
         const chartMap = new Map();
         for(let i=6; i>=0; i--) {
             const d = new Date(); d.setDate(d.getDate() - i);
@@ -233,6 +242,10 @@ const AdminDashboard = () => {
         }));
         setTransactions(recentTrans);
 
+        if (isManual) {
+            showSuccess("Painel atualizado com sucesso.");
+        }
+
     } catch (e: any) {
         showError("Erro ao carregar: " + e.message);
     } finally {
@@ -243,6 +256,9 @@ const AdminDashboard = () => {
   const handleLogout = async () => {
     setLoading(true);
     try {
+      if (adminProfile?.role === 'driver') {
+          await supabase.from('profiles').update({ is_online: false }).eq('id', adminProfile.id);
+      }
       Object.keys(localStorage).forEach(key => {
         if (key.includes('supabase') || key.includes('golddrive') || key.includes('sb-')) {
           localStorage.removeItem(key);
@@ -400,7 +416,7 @@ const AdminDashboard = () => {
           }
 
           showSuccess("Todas as configurações foram salvas!"); 
-          await fetchData(); 
+          await fetchData(true); 
       } catch (e: any) { 
           showError(e.message); 
       } finally { 
@@ -577,7 +593,7 @@ const AdminDashboard = () => {
                   {/* Header da Página */}
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4 duration-700">
                       <div><h1 className="text-4xl font-black tracking-tight text-slate-900 dark:text-white capitalize mb-1">{activeTab === 'requests' ? 'Solicitações' : activeTab === 'overview' ? 'Painel Geral' : activeTab === 'rides' ? 'Corridas' : activeTab === 'users' ? 'Passageiros' : activeTab === 'drivers' ? 'Motoristas' : activeTab === 'finance' ? 'Financeiro' : 'Configurações'}</h1><p className="text-muted-foreground">Bem-vindo ao painel de controle.</p></div>
-                      <div className="flex gap-3"><Button variant="outline" className="rounded-xl h-12" onClick={fetchData}><RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} /> Atualizar</Button><Button variant="destructive" className="rounded-xl h-12 font-bold px-6 shadow-red-500/20 shadow-lg" onClick={handleLogout}><LogOut className="w-4 h-4 mr-2" /> Sair</Button></div>
+                      <div className="flex gap-3"><Button variant="outline" className="rounded-xl h-12" onClick={() => fetchData(true)}><RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} /> Atualizar</Button><Button variant="destructive" className="rounded-xl h-12 font-bold px-6 shadow-red-500/20 shadow-lg" onClick={handleLogout}><LogOut className="w-4 h-4 mr-2" /> Sair</Button></div>
                   </div>
 
                   {/* --- TAB: OVERVIEW --- */}
