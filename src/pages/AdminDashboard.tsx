@@ -7,7 +7,7 @@ import {
   CreditCard, BellRing, Save, AlertTriangle, Smartphone, Globe,
   Menu, Banknote, FileText, Check, X, ExternalLink, Camera, User,
   Moon as MoonIcon, List, Plus, Power, Pencil, Star, Calendar, ArrowUpRight, ArrowDownLeft,
-  Activity, BarChart3, PieChart, Coins, Lock, Unlock, Calculator, Info, MapPin
+  Activity, BarChart3, PieChart, Coins, Lock, Unlock, Calculator, Info, MapPin, Zap
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -554,13 +554,13 @@ const AdminDashboard = () => {
       </aside>
 
       {/* --- MAIN CONTENT --- */}
-      <main className="flex-1 flex flex-col overflow-hidden relative z-10">
+      <main className="flex-1 flex flex-col overflow-hidden relative z-10 w-full overflow-x-hidden">
           <header className="lg:hidden h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b px-4 flex items-center justify-between sticky top-0 z-50">
                <div className="flex items-center gap-2 font-black text-xl">Gold<span className="text-yellow-500">Admin</span></div>
                <Sheet><SheetTrigger asChild><Button variant="ghost" size="icon"><Menu /></Button></SheetTrigger><SheetContent side="left" className="p-0 border-r-0 bg-slate-900 text-white w-72"><div className="p-6 font-black text-2xl">Menu</div><div className="px-4 space-y-2">{['overview', 'requests', 'rides', 'users', 'drivers', 'finance', 'config'].map(id => (<Button key={id} variant="ghost" className="w-full justify-start text-lg capitalize h-14 rounded-xl" onClick={() => setActiveTab(id)}>{id}</Button>))}</div></SheetContent></Sheet>
           </header>
 
-          <div className="flex-1 overflow-y-auto p-4 lg:p-10 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto p-4 lg:p-10 custom-scrollbar w-full overflow-x-hidden">
               <div className="max-w-7xl mx-auto space-y-8 pb-20">
                   
                   {/* Header da Página */}
@@ -611,14 +611,14 @@ const AdminDashboard = () => {
                   {activeTab === 'drivers' && <UserManagementTable data={drivers} type="driver" />}
                   {activeTab === 'finance' && <div className="space-y-6 animate-in fade-in slide-in-from-bottom-8"><div className="grid grid-cols-1 md:grid-cols-2 gap-8"><div className="bg-slate-900 text-white rounded-[32px] p-8 shadow-2xl relative overflow-hidden h-64 flex flex-col justify-between group hover:scale-[1.01] transition-transform"><div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-yellow-500/20 to-transparent rounded-full blur-[80px]" /><div className="relative z-10 flex justify-between items-start"><CreditCard className="w-10 h-10 text-yellow-500" /><span className="font-mono text-sm opacity-60">GOLD MOBILE</span></div><div className="relative z-10"><p className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-1">Saldo Disponível</p><h2 className="text-5xl font-black tracking-tight">R$ {stats.adminRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2></div><div className="relative z-10 flex justify-between items-end"><div><p className="text-xs text-slate-500 uppercase font-bold">Titular</p><p className="font-bold">ADMINISTRADOR</p></div><div className="flex gap-2"><div className="w-8 h-8 rounded-full bg-red-500/80" /><div className="w-8 h-8 rounded-full bg-yellow-500/80 -ml-4" /></div></div></div></div><Card className="border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] overflow-hidden"><CardHeader><CardTitle>Histórico de Transações</CardTitle></CardHeader><CardContent className="p-0"><Table><TableHeader className="bg-slate-50/50 dark:bg-slate-800/50"><TableRow><TableHead className="pl-8">Descrição</TableHead><TableHead>Usuário</TableHead><TableHead>Data</TableHead><TableHead className="text-right pr-8">Valor</TableHead></TableRow></TableHeader><TableBody>{transactions.map((t, i) => (<TableRow key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 border-b border-border/50"><TableCell className="pl-8 font-bold">{t.description}</TableCell><TableCell>{t.user}</TableCell><TableCell className="text-muted-foreground">{new Date(t.date).toLocaleDateString()}</TableCell><TableCell className="text-right pr-8 font-black text-green-600">+ R$ {t.amount.toFixed(2)}</TableCell></TableRow>))}</TableBody></Table></CardContent></Card></div>}
 
-                  {/* --- TAB: CONFIGURAÇÕES (ATUALIZADA) --- */}
+                  {/* --- TAB: CONFIGURAÇÕES (REORGANIZADA) --- */}
                   {activeTab === 'config' && (
                       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8">
                           <Tabs defaultValue="general" className="w-full">
                               <TabsList className="bg-slate-200 dark:bg-slate-800 rounded-xl p-1 mb-6">
                                   <TabsTrigger value="general" className="rounded-lg">Geral</TabsTrigger>
-                                  <TabsTrigger value="values" className="rounded-lg">Valores & Tabela</TabsTrigger>
                                   <TabsTrigger value="categories" className="rounded-lg">Categorias</TabsTrigger>
+                                  <TabsTrigger value="values" className="rounded-lg">Valores & Tabela</TabsTrigger>
                               </TabsList>
 
                               <TabsContent value="general">
@@ -654,11 +654,11 @@ const AdminDashboard = () => {
                                           </CardFooter>
                                       </Card>
 
-                                      {/* MEIOS DE PAGAMENTO (NOVO CARD) */}
+                                      {/* MEIOS DE PAGAMENTO (SEPARADO) */}
                                       <Card className="border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] h-fit">
                                           <CardHeader>
                                               <CardTitle className="flex items-center gap-2"><CreditCard className="w-5 h-5" /> Meios de Pagamento</CardTitle>
-                                              <CardDescription>Ative ou desative as formas de pagamento aceitas.</CardDescription>
+                                              <CardDescription>Ative ou desative as formas de pagamento.</CardDescription>
                                           </CardHeader>
                                           <CardContent className="space-y-4">
                                               <div className="flex items-center justify-between p-4 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-100 dark:border-green-800">
@@ -683,43 +683,130 @@ const AdminDashboard = () => {
                                   </div>
                               </TabsContent>
 
+                              <TabsContent value="categories">
+                                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                      <div className="col-span-1 lg:col-span-2 space-y-6">
+                                          {/* CARD 1: GOLD DRIVER */}
+                                          {goldDriverCategory && (
+                                              <Card className="border-0 shadow-xl bg-gradient-to-r from-yellow-50 to-white dark:from-yellow-900/10 dark:to-slate-900 backdrop-blur-xl rounded-[32px] overflow-hidden border-yellow-200 dark:border-yellow-800/50">
+                                                  <CardContent className="p-8 flex flex-col md:flex-row items-center justify-between gap-6">
+                                                      <div className="flex items-center gap-6">
+                                                          <div className="w-20 h-20 bg-yellow-500 rounded-2xl flex items-center justify-center shadow-lg shadow-yellow-500/20 rotate-3">
+                                                              <Car className="w-10 h-10 text-black" />
+                                                          </div>
+                                                          <div>
+                                                              <div className="flex items-center gap-3 mb-2">
+                                                                  <h3 className="text-3xl font-black text-slate-900 dark:text-white">Gold Driver</h3>
+                                                                  <Badge className="bg-black text-white dark:bg-white dark:text-black font-bold px-3 py-1 text-xs uppercase tracking-wide">Tabela Fixa</Badge>
+                                                              </div>
+                                                              <p className="text-slate-600 dark:text-slate-400 text-lg max-w-lg">
+                                                                  Categoria premium com preços definidos por tabela fixa de quilometragem. Ideal para fidelizar clientes.
+                                                              </p>
+                                                          </div>
+                                                      </div>
+                                                      <div className="flex flex-col items-end gap-3 min-w-[200px]">
+                                                          <div className="flex items-center gap-3 bg-white/80 dark:bg-black/40 p-3 rounded-2xl border border-yellow-500/20 w-full justify-between">
+                                                              <Label className="font-bold text-base cursor-pointer">Ativar Categoria</Label>
+                                                              <Switch checked={goldDriverCategory.active} onCheckedChange={(val) => updateCategory(goldDriverCategory.id, 'active', val)} className="data-[state=checked]:bg-yellow-500" />
+                                                          </div>
+                                                          <p className="text-xs text-muted-foreground text-right w-full">Ao desativar, a categoria some do app.</p>
+                                                      </div>
+                                                  </CardContent>
+                                              </Card>
+                                          )}
+
+                                          {/* CARD 2: OUTRAS CATEGORIAS */}
+                                          <Card className="border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] overflow-hidden">
+                                              <CardHeader>
+                                                  <CardTitle className="text-xl">Categorias Dinâmicas</CardTitle>
+                                                  <CardDescription>Utilizam cálculo base (Bandeirada + KM rodado).</CardDescription>
+                                              </CardHeader>
+                                              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                  {dynamicCategories.map(cat => (
+                                                      <div key={cat.id} className={`flex items-center justify-between p-5 rounded-2xl border transition-all ${cat.active ? 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-sm' : 'bg-slate-50 dark:bg-slate-900 border-transparent opacity-60'}`}>
+                                                          <div className="flex items-center gap-4">
+                                                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${cat.active ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                                                                  <Car className="w-6 h-6" />
+                                                              </div>
+                                                              <div>
+                                                                  <span className="font-bold text-lg block">{cat.name}</span>
+                                                                  <span className="text-[10px] uppercase font-bold text-blue-600 bg-blue-50 dark:bg-blue-900/30 dark:text-blue-300 px-2 py-0.5 rounded-full">Dinâmico</span>
+                                                              </div>
+                                                          </div>
+                                                          <Switch checked={cat.active} onCheckedChange={(val) => updateCategory(cat.id, 'active', val)} />
+                                                      </div>
+                                                  ))}
+                                              </CardContent>
+                                              <CardFooter>
+                                                  <Button onClick={handleSaveConfig} className="w-full bg-slate-900 text-white font-bold h-12 rounded-xl"><Save className="w-4 h-4 mr-2" /> Salvar Status das Categorias</Button>
+                                              </CardFooter>
+                                          </Card>
+                                      </div>
+
+                                      {/* ABAS DE CONFIGURAÇÃO (SÓ ATIVAS DINÂMICAS) */}
+                                      {activeCategories.length > 0 && (
+                                          <Tabs defaultValue={activeCategories[0].id} className="w-full col-span-1 lg:col-span-2 mt-4">
+                                              <div className="flex items-center justify-between mb-4">
+                                                  <h3 className="font-bold text-lg text-slate-900 dark:text-white">Configurar Valores Base</h3>
+                                                  <TabsList className="bg-slate-100 dark:bg-slate-900 p-1 h-auto">
+                                                      {activeCategories.map(cat => (
+                                                          <TabsTrigger key={cat.id} value={cat.id} className="rounded-lg">{cat.name}</TabsTrigger>
+                                                      ))}
+                                                  </TabsList>
+                                              </div>
+                                              
+                                              {activeCategories.map(cat => (
+                                                  <TabsContent key={cat.id} value={cat.id}>
+                                                      <Card className="border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+                                                          <CardContent className="space-y-6 pt-6">
+                                                              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                                                  <div className="space-y-2">
+                                                                      <Label>Valor Base (Bandeirada)</Label>
+                                                                      <div className="relative">
+                                                                          <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-muted-foreground">R$</span>
+                                                                          <Input type="number" value={cat.base_fare} onChange={e => updateCategory(cat.id, 'base_fare', e.target.value)} className="pl-10 h-12 rounded-xl bg-white dark:bg-slate-800" />
+                                                                      </div>
+                                                                  </div>
+                                                                  <div className="space-y-2">
+                                                                      <Label>Custo por KM</Label>
+                                                                      <div className="relative">
+                                                                          <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-muted-foreground">R$</span>
+                                                                          <Input type="number" value={cat.cost_per_km} onChange={e => updateCategory(cat.id, 'cost_per_km', e.target.value)} className="pl-10 h-12 rounded-xl bg-white dark:bg-slate-800" />
+                                                                      </div>
+                                                                  </div>
+                                                                  <div className="space-y-2">
+                                                                      <Label>Valor Mínimo da Corrida</Label>
+                                                                      <div className="relative">
+                                                                          <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-muted-foreground">R$</span>
+                                                                          <Input type="number" value={cat.min_fare} onChange={e => updateCategory(cat.id, 'min_fare', e.target.value)} className="pl-10 h-12 rounded-xl bg-white dark:bg-slate-800" />
+                                                                      </div>
+                                                                  </div>
+                                                              </div>
+                                                          </CardContent>
+                                                          <CardFooter>
+                                                              <Button onClick={handleSaveConfig} className="w-full bg-slate-900 text-white font-bold h-12 rounded-xl"><Save className="w-4 h-4 mr-2" /> Salvar Valores de {cat.name}</Button>
+                                                          </CardFooter>
+                                                      </Card>
+                                                  </TabsContent>
+                                              ))}
+                                          </Tabs>
+                                      )}
+                                  </div>
+                              </TabsContent>
+
                               <TabsContent value="values">
                                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                                      {/* ESTRATÉGIA DE PREÇO */}
-                                      <Card className="lg:col-span-3 border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] overflow-hidden">
-                                          <CardHeader className="flex flex-row items-center justify-between">
-                                              <div>
-                                                  <CardTitle className="flex items-center gap-2"><Calculator className="w-5 h-5"/> Estratégia de Precificação</CardTitle>
-                                                  <CardDescription>Defina como o valor das corridas será calculado para o passageiro.</CardDescription>
-                                              </div>
-                                              {/* Botão de salvar específico para estratégia com alerta */}
-                                              <Button onClick={() => setShowStrategySaveAlert(true)} className="bg-slate-900 text-white font-bold rounded-xl shadow-lg">
-                                                  Salvar Estratégia
-                                              </Button>
-                                          </CardHeader>
-                                          <CardContent>
-                                              <RadioGroup 
-                                                  value={adminConfigs.pricing_strategy} 
-                                                  onValueChange={(val) => setAdminConfigs({...adminConfigs, pricing_strategy: val})}
-                                                  className="grid grid-cols-1 md:grid-cols-2 gap-4"
-                                              >
-                                                  <div className={`flex items-center space-x-2 border p-4 rounded-xl cursor-pointer transition-all ${adminConfigs.pricing_strategy === 'FIXED' ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20' : 'border-border'}`}>
-                                                      <RadioGroupItem value="FIXED" id="fixed" />
-                                                      <Label htmlFor="fixed" className="flex-1 cursor-pointer">
-                                                          <div className="font-bold text-lg">Tabela Fixa (Gold Driver)</div>
-                                                          <div className="text-muted-foreground text-sm">Valor definido por faixas de distância pré-configuradas.</div>
-                                                      </Label>
-                                                  </div>
-                                                  <div className={`flex items-center space-x-2 border p-4 rounded-xl cursor-pointer transition-all ${adminConfigs.pricing_strategy === 'DYNAMIC' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-border'}`}>
-                                                      <RadioGroupItem value="DYNAMIC" id="dynamic" />
-                                                      <Label htmlFor="dynamic" className="flex-1 cursor-pointer">
-                                                          <div className="font-bold text-lg">Cálculo Dinâmico (Base + KM)</div>
-                                                          <div className="text-muted-foreground text-sm">Valor calculado: Bandeirada + (Custo por KM * Distância).</div>
-                                                      </Label>
-                                                  </div>
-                                              </RadioGroup>
-                                          </CardContent>
-                                      </Card>
+                                      {/* HEADER GOLD DRIVER */}
+                                      <div className="lg:col-span-3 bg-yellow-500 rounded-[32px] p-8 text-black shadow-xl relative overflow-hidden">
+                                          <div className="relative z-10">
+                                              <h2 className="text-3xl font-black mb-2">Valores & Tabela - Gold Driver</h2>
+                                              <p className="font-medium opacity-90 max-w-2xl">
+                                                  As configurações abaixo aplicam-se exclusivamente à categoria <strong>Gold Driver</strong>, que utiliza o sistema de Tabela Fixa. 
+                                                  Para as outras categorias, configure os valores base na aba "Categorias".
+                                              </p>
+                                          </div>
+                                          <div className="absolute top-0 right-0 p-8 opacity-20"><List className="w-48 h-48" /></div>
+                                      </div>
 
                                       {/* TAXA NOTURNA */}
                                       <div className="space-y-6">
@@ -770,8 +857,8 @@ const AdminDashboard = () => {
                                           <Card className="border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] overflow-hidden">
                                               <CardHeader className="flex flex-row items-center justify-between">
                                                   <div>
-                                                      <CardTitle className="flex items-center gap-2"><List className="w-5 h-5" /> Tabela de Preços Fixa (Gold Driver)</CardTitle>
-                                                      <CardDescription>Configuração válida apenas se a estratégia "Tabela Fixa" estiver ativa.</CardDescription>
+                                                      <CardTitle className="flex items-center gap-2"><List className="w-5 h-5" /> Tabela Fixa (Gold Driver)</CardTitle>
+                                                      <CardDescription>Edite os valores por faixa de distância.</CardDescription>
                                                   </div>
                                                   <Button onClick={() => setShowTableSaveAlert(true)} disabled={loading} className="bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-lg"><Save className="w-4 h-4 mr-2" /> Salvar Tabela</Button>
                                               </CardHeader>
@@ -819,124 +906,6 @@ const AdminDashboard = () => {
                                       </div>
                                   </div>
                               </TabsContent>
-
-                              <TabsContent value="categories">
-                                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                      
-                                      {/* AVISO IMPORTANTE */}
-                                      <div className="col-span-1 lg:col-span-2 bg-yellow-100 dark:bg-yellow-900/30 border-l-4 border-yellow-500 p-4 rounded-r-xl flex items-start gap-3">
-                                          <Info className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
-                                          <div>
-                                              <h4 className="font-bold text-yellow-800 dark:text-yellow-500">Atenção: Modo Dinâmico</h4>
-                                              <p className="text-sm text-yellow-700 dark:text-yellow-400">
-                                                  Os valores configurados abaixo (Base, KM, Mínimo) só serão aplicados se a Estratégia de Precificação estiver definida como <strong>"Cálculo Dinâmico"</strong>.
-                                                  No modo Tabela Fixa, apenas o valor da tabela é considerado.
-                                              </p>
-                                          </div>
-                                      </div>
-
-                                      {/* LISTA DE CATEGORIAS (TOGGLES) */}
-                                      <Card className="col-span-1 lg:col-span-2 border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] overflow-hidden">
-                                          <CardHeader>
-                                              <CardTitle>Gerenciar Categorias Ativas</CardTitle>
-                                              <CardDescription>Ative ou desative categorias disponíveis para os passageiros.</CardDescription>
-                                          </CardHeader>
-                                          <CardContent className="space-y-4">
-                                              {/* CARD DEDICADO AO GOLD DRIVER */}
-                                              {goldDriverCategory && (
-                                                  <div className="bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-700/30 rounded-2xl p-6 flex items-center justify-between">
-                                                      <div className="flex items-center gap-4">
-                                                          <div className="w-14 h-14 rounded-full bg-yellow-500 text-black flex items-center justify-center shadow-lg shadow-yellow-500/20">
-                                                              <Car className="w-7 h-7" />
-                                                          </div>
-                                                          <div>
-                                                              <div className="flex items-center gap-2">
-                                                                  <h3 className="font-black text-xl text-slate-900 dark:text-white">Gold Driver</h3>
-                                                                  <Badge className="bg-yellow-500 text-black border-0 font-bold hover:bg-yellow-400">TABELA FIXA</Badge>
-                                                              </div>
-                                                              <p className="text-sm text-slate-500 dark:text-slate-400 font-medium mt-1">Categoria principal com preço definido por tabela.</p>
-                                                          </div>
-                                                      </div>
-                                                      <div className="flex items-center gap-3 bg-white dark:bg-slate-800 py-2 px-4 rounded-xl shadow-sm border border-border/50">
-                                                          <span className="font-bold text-sm uppercase text-muted-foreground">{goldDriverCategory.active ? 'Ativo' : 'Inativo'}</span>
-                                                          <Switch checked={goldDriverCategory.active} onCheckedChange={(val) => updateCategory(goldDriverCategory.id, 'active', val)} />
-                                                      </div>
-                                                  </div>
-                                              )}
-
-                                              {/* GRID PARA OUTRAS CATEGORIAS */}
-                                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
-                                                  {dynamicCategories.map(cat => (
-                                                      <div key={cat.id} className={`flex items-center justify-between p-4 rounded-xl border transition-all ${cat.active ? 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-sm' : 'bg-slate-100 dark:bg-slate-900 border-transparent opacity-70'}`}>
-                                                          <div className="flex items-center gap-3">
-                                                              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${cat.active ? 'bg-slate-900 text-white' : 'bg-slate-300 text-slate-500'}`}>
-                                                                  <Car className="w-5 h-5" />
-                                                              </div>
-                                                              <div>
-                                                                  <span className="font-bold block">{cat.name}</span>
-                                                                  <span className="text-[10px] uppercase font-bold text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">Cálculo Dinâmico</span>
-                                                              </div>
-                                                          </div>
-                                                          <Switch checked={cat.active} onCheckedChange={(val) => updateCategory(cat.id, 'active', val)} />
-                                                      </div>
-                                                  ))}
-                                              </div>
-                                          </CardContent>
-                                      </Card>
-
-                                      {/* ABAS DE CONFIGURAÇÃO (SÓ ATIVAS) */}
-                                      {activeCategories.length > 0 && (
-                                          <Tabs defaultValue={activeCategories[0].id} className="w-full col-span-1 lg:col-span-2">
-                                              <TabsList className="bg-slate-100 dark:bg-slate-900 p-1 mb-4 flex-wrap h-auto">
-                                                  {activeCategories.map(cat => (
-                                                      <TabsTrigger key={cat.id} value={cat.id} className="rounded-lg">{cat.name}</TabsTrigger>
-                                                  ))}
-                                              </TabsList>
-                                              
-                                              {activeCategories.map(cat => (
-                                                  <TabsContent key={cat.id} value={cat.id}>
-                                                      <Card className="border-0 shadow-xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl rounded-[32px] overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-                                                          <CardHeader className="flex flex-row items-center justify-between">
-                                                              <div>
-                                                                  <CardTitle className="flex items-center gap-2">Configurar {cat.name}</CardTitle>
-                                                                  <CardDescription>Ajuste os valores base para esta categoria.</CardDescription>
-                                                              </div>
-                                                          </CardHeader>
-                                                          <CardContent className="space-y-6">
-                                                              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                                                  <div className="space-y-2">
-                                                                      <Label>Valor Base (Bandeirada)</Label>
-                                                                      <div className="relative">
-                                                                          <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-muted-foreground">R$</span>
-                                                                          <Input type="number" value={cat.base_fare} onChange={e => updateCategory(cat.id, 'base_fare', e.target.value)} className="pl-10 h-12 rounded-xl" />
-                                                                      </div>
-                                                                  </div>
-                                                                  <div className="space-y-2">
-                                                                      <Label>Custo por KM</Label>
-                                                                      <div className="relative">
-                                                                          <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-muted-foreground">R$</span>
-                                                                          <Input type="number" value={cat.cost_per_km} onChange={e => updateCategory(cat.id, 'cost_per_km', e.target.value)} className="pl-10 h-12 rounded-xl" />
-                                                                      </div>
-                                                                  </div>
-                                                                  <div className="space-y-2">
-                                                                      <Label>Valor Mínimo da Corrida</Label>
-                                                                      <div className="relative">
-                                                                          <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-muted-foreground">R$</span>
-                                                                          <Input type="number" value={cat.min_fare} onChange={e => updateCategory(cat.id, 'min_fare', e.target.value)} className="pl-10 h-12 rounded-xl" />
-                                                                      </div>
-                                                                  </div>
-                                                              </div>
-                                                          </CardContent>
-                                                          <CardFooter>
-                                                              <Button onClick={handleSaveConfig} className="w-full bg-slate-900 text-white font-bold h-12 rounded-xl"><Save className="w-4 h-4 mr-2" /> Salvar Configuração de {cat.name}</Button>
-                                                          </CardFooter>
-                                                      </Card>
-                                                  </TabsContent>
-                                              ))}
-                                          </Tabs>
-                                      )}
-                                  </div>
-                              </TabsContent>
                           </Tabs>
                       </div>
                   )}
@@ -973,168 +942,206 @@ const AdminDashboard = () => {
           </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={showStrategySaveAlert} onOpenChange={setShowStrategySaveAlert}>
-          <AlertDialogContent className="rounded-[24px]">
-              <AlertDialogHeader>
-                  <AlertDialogTitle className="flex items-center gap-2 text-blue-600"><Settings className="w-5 h-5"/> Alterar Estratégia de Preço</AlertDialogTitle>
-                  <AlertDialogDescription>
-                      Você está alterando a forma como o preço das corridas é calculado. 
-                      Isso afetará todas as novas solicitações imediatamente. Tem certeza?
-                  </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                  <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleSaveConfig} className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold">Confirmar Mudança</AlertDialogAction>
-              </AlertDialogFooter>
-          </AlertDialogContent>
-      </AlertDialog>
-
       {/* ... (Resto dos Dialogs) ... */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir Usuário?</AlertDialogTitle><AlertDialogDescription>Isso removerá o perfil do sistema permanentemente. O histórico de corridas será preservado anonimamente.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={handleDeleteUser} className="bg-red-600">Excluir Definitivamente</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
       
       {/* NOVO MODAL DE DETALHES DA CORRIDA REDESENHADO */}
       <Dialog open={!!selectedRide} onOpenChange={(o) => !o && setSelectedRide(null)}>
-          <DialogContent className="max-w-4xl bg-white dark:bg-slate-950 rounded-[32px] border-0 shadow-2xl p-0 overflow-hidden">
-              <div className="bg-slate-900 p-6 flex justify-between items-center text-white">
-                  <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center">
-                          <MapIcon className="w-6 h-6 text-yellow-500" />
+          <DialogContent className="max-w-5xl bg-white dark:bg-slate-950 rounded-[40px] border-0 shadow-2xl p-0 overflow-hidden">
+              {/* HEADER DO MODAL */}
+              <div className="bg-slate-900 p-8 flex justify-between items-start text-white relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-yellow-500/10 rounded-full blur-3xl pointer-events-none" />
+                  <div className="flex gap-6 relative z-10">
+                      <div className="w-16 h-16 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/20 shadow-xl">
+                          <MapIcon className="w-8 h-8 text-yellow-500" />
                       </div>
                       <div>
-                          <h2 className="text-xl font-black">Corrida #{selectedRide?.id.substring(0,8).toUpperCase()}</h2>
-                          <p className="text-sm text-slate-400">{selectedRide ? new Date(selectedRide.created_at).toLocaleString('pt-BR') : '--'}</p>
+                          <div className="flex items-center gap-3 mb-1">
+                              <h2 className="text-3xl font-black tracking-tight">Corrida #{selectedRide?.id.substring(0,6).toUpperCase()}</h2>
+                              <Badge className={`px-3 py-1 text-xs font-bold uppercase tracking-wider ${selectedRide?.status === 'COMPLETED' ? 'bg-green-500 text-black' : selectedRide?.status === 'CANCELLED' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'}`}>
+                                  {selectedRide?.status === 'COMPLETED' ? 'Finalizada' : selectedRide?.status === 'CANCELLED' ? 'Cancelada' : 'Em Andamento'}
+                              </Badge>
+                          </div>
+                          <p className="text-slate-400 font-medium flex items-center gap-2">
+                              <Calendar className="w-4 h-4" /> {selectedRide ? new Date(selectedRide.created_at).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }) : '--'}
+                              <span className="w-1 h-1 bg-slate-600 rounded-full" />
+                              <Clock className="w-4 h-4" /> {selectedRide ? new Date(selectedRide.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--'}
+                          </p>
                       </div>
                   </div>
-                  <Badge className={`px-4 py-1.5 text-sm font-bold ${selectedRide?.status === 'COMPLETED' ? 'bg-green-500 text-black' : selectedRide?.status === 'CANCELLED' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'}`}>
-                      {selectedRide?.status}
-                  </Badge>
+                  <div className="text-right hidden md:block relative z-10">
+                      <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mb-1">Valor Final</p>
+                      <h3 className="text-5xl font-black text-white tracking-tighter">R$ {Number(selectedRide?.price).toFixed(2)}</h3>
+                  </div>
               </div>
               
-              <div className="p-8 bg-slate-50 dark:bg-slate-900 grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  {/* ESQUERDA: MAPA/ROTA + FINANCEIRO */}
-                  <div className="space-y-6">
-                      <Card className="border-0 shadow-sm bg-white dark:bg-slate-800">
-                          <CardHeader><CardTitle className="text-base font-bold flex items-center gap-2"><MapPin className="w-4 h-4"/> Detalhes da Rota</CardTitle></CardHeader>
-                          <CardContent className="space-y-6">
-                              <div className="flex gap-4">
-                                  <div className="flex flex-col items-center pt-1">
-                                      <div className="w-3 h-3 bg-black dark:bg-white rounded-full" />
-                                      <div className="w-0.5 flex-1 bg-gray-200 dark:bg-gray-700 my-1" />
-                                      <div className="w-3 h-3 bg-yellow-500 rounded-full" />
+              <div className="p-8 bg-slate-50 dark:bg-slate-900 grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  
+                  {/* COLUNA 1: DETALHES DA VIAGEM */}
+                  <div className="lg:col-span-2 space-y-6">
+                      {/* CARD DE ROTA */}
+                      <Card className="border-0 shadow-lg bg-white dark:bg-slate-800 rounded-[32px] overflow-hidden">
+                          <CardHeader className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-800 pb-4">
+                              <CardTitle className="text-lg font-bold flex items-center gap-2"><MapPin className="w-5 h-5 text-slate-500"/> Itinerário</CardTitle>
+                          </CardHeader>
+                          <CardContent className="p-6">
+                              <div className="flex gap-6">
+                                  <div className="flex flex-col items-center pt-2">
+                                      <div className="w-4 h-4 bg-slate-900 dark:bg-white rounded-full ring-4 ring-slate-100 dark:ring-slate-800" />
+                                      <div className="w-0.5 flex-1 bg-gradient-to-b from-slate-900 via-slate-300 to-yellow-500 my-2 min-h-[60px]" />
+                                      <div className="w-4 h-4 bg-yellow-500 rounded-full ring-4 ring-yellow-100 dark:ring-yellow-900/30" />
                                   </div>
-                                  <div className="space-y-6 flex-1">
+                                  <div className="flex-1 space-y-8">
                                       <div>
-                                          <p className="text-xs font-bold text-muted-foreground uppercase">Origem</p>
-                                          <p className="font-medium text-lg leading-tight">{selectedRide?.pickup_address}</p>
+                                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Ponto de Partida</p>
+                                          <p className="font-bold text-xl text-slate-900 dark:text-white leading-tight">{selectedRide?.pickup_address}</p>
                                       </div>
                                       <div>
-                                          <p className="text-xs font-bold text-muted-foreground uppercase">Destino</p>
-                                          <p className="font-medium text-lg leading-tight">{selectedRide?.destination_address}</p>
+                                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Destino Final</p>
+                                          <p className="font-bold text-xl text-slate-900 dark:text-white leading-tight">{selectedRide?.destination_address}</p>
                                       </div>
                                   </div>
                               </div>
-                              <div className="flex gap-4 pt-2">
-                                  <Badge variant="outline">{selectedRide?.distance}</Badge>
-                                  <Badge variant="outline">{selectedRide?.category || 'Gold Driver'}</Badge>
+                              <div className="flex gap-3 mt-8 pt-6 border-t border-slate-100 dark:border-slate-800">
+                                  <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-900 rounded-xl">
+                                      <Zap className="w-4 h-4 text-slate-500" />
+                                      <span className="font-bold text-sm">{selectedRide?.category || 'Gold Driver'}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-900 rounded-xl">
+                                      <MapIcon className="w-4 h-4 text-slate-500" />
+                                      <span className="font-bold text-sm">{selectedRide?.distance}</span>
+                                  </div>
                               </div>
                           </CardContent>
                       </Card>
 
-                      <Card className="border-0 shadow-sm bg-white dark:bg-slate-800">
-                          <CardHeader><CardTitle className="text-base font-bold flex items-center gap-2"><DollarSign className="w-4 h-4"/> Financeiro</CardTitle></CardHeader>
-                          <CardContent className="space-y-4">
-                              <div className="flex justify-between items-center p-3 bg-green-50 dark:bg-green-900/10 rounded-xl border border-green-100 dark:border-green-800/30">
-                                  <span className="text-sm font-bold text-green-800 dark:text-green-400">Preço Total</span>
-                                  <span className="text-2xl font-black text-green-700 dark:text-green-400">R$ {Number(selectedRide?.price).toFixed(2)}</span>
-                              </div>
-                              <div className="grid grid-cols-2 gap-4">
-                                  <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl">
-                                      <p className="text-xs text-muted-foreground uppercase mb-1">Ganho Motorista</p>
-                                      <p className="font-bold">R$ {Number(selectedRide?.driver_earnings).toFixed(2)}</p>
-                                  </div>
-                                  <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl">
-                                      <p className="text-xs text-muted-foreground uppercase mb-1">Taxa App</p>
-                                      <p className="font-bold">R$ {Number(selectedRide?.platform_fee).toFixed(2)}</p>
-                                  </div>
-                              </div>
-                              <div className="flex justify-between items-center pt-2">
-                                  <span className="text-sm text-muted-foreground">Método</span>
-                                  <Badge variant="secondary" className="font-mono">{selectedRide?.payment_method === 'WALLET' ? 'CARTEIRA DIGITAL' : 'DINHEIRO / PIX'}</Badge>
-                              </div>
-                          </CardContent>
-                      </Card>
-                  </div>
-
-                  {/* DIREITA: ENVOLVIDOS + TIMELINE */}
-                  <div className="space-y-6">
-                      <div className="grid grid-cols-1 gap-4">
+                      {/* CARD DE ENVOLVIDOS (GRID) */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           {/* PASSAGEIRO */}
-                          <Card className="border-0 shadow-sm bg-white dark:bg-slate-800 relative overflow-hidden">
-                              <div className="absolute top-0 right-0 p-2 opacity-10"><User className="w-16 h-16"/></div>
-                              <CardContent className="p-4 flex items-center gap-4 relative z-10">
-                                  <Avatar className="w-14 h-14 border-2 border-slate-100 shadow-sm">
-                                      <AvatarImage src={selectedRide?.customer?.avatar_url} />
-                                      <AvatarFallback>P</AvatarFallback>
-                                  </Avatar>
-                                  <div>
-                                      <p className="text-xs font-bold text-blue-500 uppercase mb-0.5">Passageiro</p>
-                                      <p className="font-bold text-lg">{selectedRide?.customer?.first_name} {selectedRide?.customer?.last_name}</p>
-                                      <p className="text-sm text-muted-foreground">{selectedRide?.customer?.phone || 'Sem telefone'}</p>
+                          <Card className="border-0 shadow-md bg-white dark:bg-slate-800 rounded-[24px] relative overflow-hidden group">
+                              <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><User className="w-24 h-24"/></div>
+                              <CardContent className="p-6 relative z-10">
+                                  <div className="flex items-center gap-4 mb-4">
+                                      <Avatar className="w-16 h-16 border-4 border-slate-50 shadow-lg">
+                                          <AvatarImage src={selectedRide?.customer?.avatar_url} />
+                                          <AvatarFallback className="bg-blue-100 text-blue-700 font-bold text-xl">P</AvatarFallback>
+                                      </Avatar>
+                                      <div>
+                                          <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50 mb-1">Passageiro</Badge>
+                                          <h4 className="font-bold text-lg leading-tight">{selectedRide?.customer?.first_name} {selectedRide?.customer?.last_name}</h4>
+                                      </div>
+                                  </div>
+                                  <div className="space-y-2">
+                                      <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+                                          <Smartphone className="w-4 h-4 text-slate-400" />
+                                          <span className="font-mono text-sm font-medium">{selectedRide?.customer?.phone || 'Sem contato'}</span>
+                                      </div>
+                                      <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+                                          <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
+                                          <span className="text-sm font-medium">Nota dada: <strong>{selectedRide?.driver_rating || '-'}</strong></span>
+                                      </div>
                                   </div>
                               </CardContent>
                           </Card>
 
                           {/* MOTORISTA */}
-                          <Card className="border-0 shadow-sm bg-white dark:bg-slate-800 relative overflow-hidden">
-                              <div className="absolute top-0 right-0 p-2 opacity-10"><Car className="w-16 h-16"/></div>
-                              <CardContent className="p-4 flex items-center gap-4 relative z-10">
+                          <Card className="border-0 shadow-md bg-white dark:bg-slate-800 rounded-[24px] relative overflow-hidden group">
+                              <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><Car className="w-24 h-24"/></div>
+                              <CardContent className="p-6 relative z-10">
                                   {selectedRide?.driver ? (
                                       <>
-                                          <Avatar className="w-14 h-14 border-2 border-yellow-100 shadow-sm">
-                                              <AvatarImage src={selectedRide?.driver?.avatar_url} />
-                                              <AvatarFallback>M</AvatarFallback>
-                                          </Avatar>
-                                          <div>
-                                              <p className="text-xs font-bold text-yellow-600 uppercase mb-0.5">Motorista</p>
-                                              <p className="font-bold text-lg">{selectedRide?.driver?.first_name} {selectedRide?.driver?.last_name}</p>
-                                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                                  <span>{selectedRide?.driver?.car_model}</span>
-                                                  <span className="w-1 h-1 bg-slate-300 rounded-full"/>
-                                                  <Badge variant="outline" className="text-[10px] h-5">{selectedRide?.driver?.car_plate}</Badge>
+                                          <div className="flex items-center gap-4 mb-4">
+                                              <Avatar className="w-16 h-16 border-4 border-slate-50 shadow-lg">
+                                                  <AvatarImage src={selectedRide?.driver?.avatar_url} />
+                                                  <AvatarFallback className="bg-yellow-100 text-yellow-700 font-bold text-xl">M</AvatarFallback>
+                                              </Avatar>
+                                              <div>
+                                                  <Badge variant="outline" className="text-yellow-700 border-yellow-200 bg-yellow-50 mb-1">Motorista</Badge>
+                                                  <h4 className="font-bold text-lg leading-tight">{selectedRide?.driver?.first_name} {selectedRide?.driver?.last_name}</h4>
+                                              </div>
+                                          </div>
+                                          <div className="space-y-2">
+                                              <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+                                                  <Car className="w-4 h-4 text-slate-400" />
+                                                  <div className="flex flex-col leading-none">
+                                                      <span className="font-bold text-sm">{selectedRide?.driver?.car_model}</span>
+                                                      <span className="text-[10px] text-muted-foreground">{selectedRide?.driver?.car_color} • {selectedRide?.driver?.car_plate}</span>
+                                                  </div>
+                                              </div>
+                                              <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+                                                  <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
+                                                  <span className="text-sm font-medium">Nota recebida: <strong>{selectedRide?.customer_rating || '-'}</strong></span>
                                               </div>
                                           </div>
                                       </>
                                   ) : (
-                                      <div className="p-2 text-muted-foreground italic">Nenhum motorista atribuído.</div>
+                                      <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
+                                          <XCircle className="w-12 h-12 mb-2 opacity-20" />
+                                          <p>Sem motorista</p>
+                                      </div>
                                   )}
                               </CardContent>
                           </Card>
                       </div>
+                  </div>
 
-                      <Card className="border-0 shadow-sm bg-white dark:bg-slate-800">
-                          <CardHeader><CardTitle className="text-base font-bold flex items-center gap-2"><Clock className="w-4 h-4"/> Timeline</CardTitle></CardHeader>
-                          <CardContent>
-                              <div className="space-y-4 relative">
-                                  <div className="absolute left-1.5 top-2 bottom-2 w-0.5 bg-gray-100 dark:bg-slate-700" />
-                                  <div className="flex items-start gap-3 relative z-10">
-                                      <div className="w-3.5 h-3.5 rounded-full bg-blue-500 border-2 border-white dark:border-slate-800 shadow-sm mt-1" />
+                  {/* COLUNA 2: FINANCEIRO (LATERAL) */}
+                  <div>
+                      <Card className="border-0 shadow-lg bg-slate-900 text-white rounded-[32px] overflow-hidden h-full">
+                          <CardHeader className="border-b border-white/10 pb-6">
+                              <CardTitle className="text-xl flex items-center gap-2"><Wallet className="w-6 h-6 text-green-400"/> Financeiro</CardTitle>
+                          </CardHeader>
+                          <CardContent className="p-6 space-y-6">
+                              
+                              <div className="space-y-2">
+                                  <p className="text-sm text-slate-400 font-medium">Método de Pagamento</p>
+                                  <div className="flex items-center gap-3 bg-white/10 p-4 rounded-2xl border border-white/5">
+                                      {selectedRide?.payment_method === 'WALLET' ? <CreditCard className="w-6 h-6 text-blue-400" /> : <Banknote className="w-6 h-6 text-green-400" />}
                                       <div>
-                                          <p className="text-sm font-bold">Solicitação Criada</p>
-                                          <p className="text-xs text-muted-foreground">{new Date(selectedRide?.created_at).toLocaleString()}</p>
-                                      </div>
-                                  </div>
-                                  {/* Como o DB atual só tem created_at, simulamos o estado atual como último evento */}
-                                  <div className="flex items-start gap-3 relative z-10">
-                                      <div className={`w-3.5 h-3.5 rounded-full border-2 border-white dark:border-slate-800 shadow-sm mt-1 ${selectedRide?.status === 'COMPLETED' ? 'bg-green-500' : selectedRide?.status === 'CANCELLED' ? 'bg-red-500' : 'bg-yellow-500'}`} />
-                                      <div>
-                                          <p className="text-sm font-bold">Status Atual: {selectedRide?.status}</p>
-                                          <p className="text-xs text-muted-foreground">Última atualização do sistema</p>
+                                          <p className="font-bold text-lg">{selectedRide?.payment_method === 'WALLET' ? 'Carteira Digital' : 'Dinheiro / PIX'}</p>
+                                          <p className="text-xs text-slate-400">Pago diretamente {selectedRide?.payment_method === 'WALLET' ? 'pelo app' : 'ao motorista'}</p>
                                       </div>
                                   </div>
                               </div>
+
+                              <Separator className="bg-white/10" />
+
+                              <div className="space-y-4">
+                                  <div className="flex justify-between items-center">
+                                      <span className="text-slate-400">Valor Corrida</span>
+                                      <span className="font-bold text-lg">R$ {Number(selectedRide?.price).toFixed(2)}</span>
+                                  </div>
+                                  
+                                  {/* Breakdown */}
+                                  <div className="bg-black/20 rounded-2xl p-4 space-y-3">
+                                      <div className="flex justify-between items-center">
+                                          <div className="flex items-center gap-2">
+                                              <div className="w-2 h-2 rounded-full bg-blue-500" />
+                                              <span className="text-sm text-slate-300">Lucro Plataforma</span>
+                                          </div>
+                                          <span className="font-bold text-blue-400">+ R$ {Number(selectedRide?.platform_fee).toFixed(2)}</span>
+                                      </div>
+                                      <div className="flex justify-between items-center">
+                                          <div className="flex items-center gap-2">
+                                              <div className="w-2 h-2 rounded-full bg-orange-500" />
+                                              <span className="text-sm text-slate-300">Repasse Motorista</span>
+                                          </div>
+                                          <span className="font-bold text-orange-400">R$ {Number(selectedRide?.driver_earnings).toFixed(2)}</span>
+                                      </div>
+                                  </div>
+                              </div>
+
+                              <div className="pt-4 mt-auto">
+                                  <div className="p-4 bg-green-500/10 rounded-2xl border border-green-500/20 text-center">
+                                      <p className="text-green-400 text-xs font-bold uppercase tracking-wider mb-1">Status do Pagamento</p>
+                                      <p className="text-white font-black text-xl">CONCLUÍDO</p>
+                                  </div>
+                              </div>
+
                           </CardContent>
                       </Card>
                   </div>
+
               </div>
           </DialogContent>
       </Dialog>

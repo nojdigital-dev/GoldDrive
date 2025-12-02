@@ -93,10 +93,19 @@ const ClientDashboard = () => {
 
         if (activeTab === 'home') {
             // Busca Categorias (Apenas ATIVAS)
+            // Ordena colocando Gold Driver primeiro se existir, depois por preço
             const { data: cats } = await supabase.from('car_categories').select('*').eq('active', true).order('base_fare', { ascending: true });
+            
             if (cats && cats.length > 0) {
-                setCategories(cats); 
-                if (!selectedCategoryId) setSelectedCategoryId(cats[0].id);
+                // Força ordenação customizada para Gold Driver ficar em destaque ou primeiro
+                const sortedCats = cats.sort((a, b) => {
+                    if (a.name === 'Gold Driver') return -1;
+                    if (b.name === 'Gold Driver') return 1;
+                    return a.base_fare - b.base_fare;
+                });
+                
+                setCategories(sortedCats); 
+                if (!selectedCategoryId) setSelectedCategoryId(sortedCats[0].id);
             }
 
             // Busca Tabela de Preços e Configs Admin
@@ -145,7 +154,7 @@ const ClientDashboard = () => {
 
   const handleRequest = () => { if (!pickup || !destinationId) { showError("Preencha origem e destino"); return; } setStep('confirm'); };
 
-  // --- LÓGICA DE PREÇO ATUALIZADA ---
+  // --- LÓGICA DE PREÇO HÍBRIDA ---
   const calculatePrice = () => {
       const dest = MOCK_LOCATIONS.find(l => l.id === destinationId);
       const category = categories.find(c => c.id === selectedCategoryId);
@@ -155,12 +164,12 @@ const ClientDashboard = () => {
       const distanceKm = dest.km;
       let finalPrice = 0;
       
-      // Verifica a estratégia definida no Admin
-      // Padrão é FIXED se não estiver definido
-      const strategy = adminConfig.pricing_strategy || 'FIXED'; 
-
-      if (strategy === 'FIXED') {
-          // --- ESTRATÉGIA: TABELA FIXA (GOLD PROMO) ---
+      // REGRA HÍBRIDA:
+      // Se a categoria for "Gold Driver", usa a Tabela Fixa.
+      // Se for qualquer outra, usa Cálculo Dinâmico (Base + KM).
+      
+      if (category.name === 'Gold Driver') {
+          // --- ESTRATÉGIA: TABELA FIXA ---
           // Busca o primeiro tier que cobre a distância (ordenado por max_distance ASC)
           const tier = pricingTiers.find(t => t.max_distance >= distanceKm);
           
@@ -168,10 +177,9 @@ const ClientDashboard = () => {
               finalPrice = Number(tier.price);
           } else {
               // Se a distância for maior que a maior faixa, usa o último tier como base
-              // Ou poderia cair para o cálculo dinâmico como fallback
               const maxTier = pricingTiers[pricingTiers.length - 1];
               if (maxTier) finalPrice = Number(maxTier.price);
-              else finalPrice = 10; // Fallback extremo
+              else finalPrice = 15; // Fallback de segurança
           }
       } else {
           // --- ESTRATÉGIA: CÁLCULO DINÂMICO (BASE + KM) ---
@@ -184,7 +192,6 @@ const ClientDashboard = () => {
       }
       
       // --- TAXA NOTURNA (GLOBAL) ---
-      // Só aplica se estiver ativada no admin
       if (adminConfig.night_active === 'true') {
           const now = new Date();
           const currentHour = now.getHours();
@@ -199,15 +206,8 @@ const ClientDashboard = () => {
           const nowMinutes = currentHour * 60 + currentMinute;
           const startNight = adminConfig.night_start ? parseTime(adminConfig.night_start) : 21 * 60; // Padrão 21:00
           
-          // Tratamento para virada do dia (ex: fim 00:00 ou 05:00)
-          // Se o fim for menor que o início, assume que é no dia seguinte
-          // Simulação simples: se é >= startNight OU < endNight (madrugada)
-          
-          // Simplificação: Horário noturno geralmente cruza a meia noite.
-          // Regra 1: Adicional Noturno (ex: +3 reais)
-          // Regra 2: Mínimo da Madrugada (ex: min 25 reais)
-          
-          // Vamos assumir "Noite" como >= startNight. E "Madrugada" como < 5am (hardcoded ou config)
+          // Regra simplificada para horário noturno (passando da meia-noite)
+          // Se for >= inicio da noite OU < 5 da manhã
           if (nowMinutes >= startNight || currentHour < 5) {
               finalPrice += Number(adminConfig.night_increase || 0);
           }
@@ -325,7 +325,13 @@ const ClientDashboard = () => {
                                     <div key={cat.id} onClick={() => setSelectedCategoryId(cat.id)} className={`relative flex items-center justify-between p-4 rounded-2xl border transition-all cursor-pointer overflow-hidden group ${selectedCategoryId === cat.id ? 'border-yellow-500 bg-yellow-50/50 shadow-md' : 'border-transparent bg-gray-50 hover:bg-white'}`}>
                                         <div className="flex items-center gap-4 z-10">
                                             <div className={`w-12 h-12 rounded-full flex items-center justify-center ${selectedCategoryId === cat.id ? 'bg-yellow-500 text-black' : 'bg-white text-gray-500'}`}><Car className="w-6 h-6" /></div>
-                                            <div><h4 className="font-bold text-lg text-slate-900">{cat.name}</h4><p className="text-xs text-gray-500 font-medium">{cat.description}</p></div>
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <h4 className="font-bold text-lg text-slate-900">{cat.name}</h4>
+                                                    {cat.name === 'Gold Driver' && <Badge className="text-[10px] bg-yellow-500 text-black border-0 px-1.5 py-0">FIXO</Badge>}
+                                                </div>
+                                                <p className="text-xs text-gray-500 font-medium">{cat.description}</p>
+                                            </div>
                                         </div>
                                         <span className="font-black text-lg text-slate-900 z-10">R$ {calculatePrice().toFixed(2)}</span>
                                     </div>
