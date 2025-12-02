@@ -155,34 +155,29 @@ const ClientDashboard = () => {
   const handleRequest = () => { if (!pickup || !destinationId) { showError("Preencha origem e destino"); return; } setStep('confirm'); };
 
   // --- LÓGICA DE PREÇO HÍBRIDA ---
-  const calculatePrice = () => {
+  // CORREÇÃO: Agora aceita um catId opcional para calcular preço de uma categoria específica
+  const calculatePrice = (catId?: string) => {
+      const targetCatId = catId || selectedCategoryId;
       const dest = MOCK_LOCATIONS.find(l => l.id === destinationId);
-      const category = categories.find(c => c.id === selectedCategoryId);
+      const category = categories.find(c => c.id === targetCatId);
       
       if (!dest || !category) return 0;
 
       const distanceKm = dest.km;
       let finalPrice = 0;
       
-      // REGRA HÍBRIDA:
-      // Se a categoria for "Gold Driver", usa a Tabela Fixa.
-      // Se for qualquer outra, usa Cálculo Dinâmico (Base + KM).
-      
       if (category.name === 'Gold Driver') {
           // --- ESTRATÉGIA: TABELA FIXA ---
-          // Busca o primeiro tier que cobre a distância (ordenado por max_distance ASC)
           const tier = pricingTiers.find(t => t.max_distance >= distanceKm);
-          
           if (tier) {
               finalPrice = Number(tier.price);
           } else {
-              // Se a distância for maior que a maior faixa, usa o último tier como base
               const maxTier = pricingTiers[pricingTiers.length - 1];
               if (maxTier) finalPrice = Number(maxTier.price);
-              else finalPrice = 15; // Fallback de segurança
+              else finalPrice = 15; // Fallback
           }
       } else {
-          // --- ESTRATÉGIA: CÁLCULO DINÂMICO (BASE + KM) ---
+          // --- ESTRATÉGIA: CÁLCULO DINÂMICO ---
           const baseFare = Number(category.base_fare || 0);
           const costPerKm = Number(category.cost_per_km || 0);
           const minFare = Number(category.min_fare || 0);
@@ -196,23 +191,13 @@ const ClientDashboard = () => {
           const now = new Date();
           const currentHour = now.getHours();
           const currentMinute = now.getMinutes();
-          
-          const parseTime = (timeStr: string) => {
-              if(!timeStr) return 0;
-              const [h, m] = timeStr.split(':').map(Number);
-              return h * 60 + m;
-          };
-
+          const parseTime = (timeStr: string) => { if(!timeStr) return 0; const [h, m] = timeStr.split(':').map(Number); return h * 60 + m; };
           const nowMinutes = currentHour * 60 + currentMinute;
-          const startNight = adminConfig.night_start ? parseTime(adminConfig.night_start) : 21 * 60; // Padrão 21:00
+          const startNight = adminConfig.night_start ? parseTime(adminConfig.night_start) : 21 * 60;
           
-          // Regra simplificada para horário noturno (passando da meia-noite)
-          // Se for >= inicio da noite OU < 5 da manhã
           if (nowMinutes >= startNight || currentHour < 5) {
               finalPrice += Number(adminConfig.night_increase || 0);
           }
-          
-          // Regra de Mínima da Madrugada (00h até 05h)
           if (currentHour >= 0 && currentHour < 5) {
                const minMidnight = Number(adminConfig.midnight_min_price || 0);
                if (finalPrice < minMidnight) finalPrice = minMidnight;
@@ -222,7 +207,7 @@ const ClientDashboard = () => {
       return parseFloat(finalPrice.toFixed(2));
   };
 
-  const currentPrice = calculatePrice();
+  const currentPrice = calculatePrice(selectedCategoryId);
   const isSinglePaymentMethod = (appSettings.enableCash && !appSettings.enableWallet) || (!appSettings.enableCash && appSettings.enableWallet);
 
   const confirmRide = async () => {
@@ -342,7 +327,7 @@ const ClientDashboard = () => {
                                                 <p className="text-xs text-gray-500 font-medium">{cat.description}</p>
                                             </div>
                                         </div>
-                                        <span className="font-black text-lg text-slate-900 z-10">R$ {calculatePrice().toFixed(2)}</span>
+                                        <span className="font-black text-lg text-slate-900 z-10">R$ {calculatePrice(cat.id).toFixed(2)}</span>
                                     </div>
                                 ))}
                             </div>
