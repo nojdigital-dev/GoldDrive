@@ -6,12 +6,20 @@ import { Button } from "@/components/ui/button";
 interface LocationSearchProps {
   placeholder: string;
   icon?: React.ElementType;
-  onSelect: (location: { lat: number; lon: number; display_name: string }) => void;
+  onSelect: (location: { lat: number; lon: number; display_name: string } | null) => void;
   initialValue?: string;
   className?: string;
+  error?: boolean; // Nova prop para indicar erro
 }
 
-const LocationSearch = ({ placeholder, icon: Icon = MapPin, onSelect, initialValue = "", className = "" }: LocationSearchProps) => {
+const LocationSearch = ({ 
+  placeholder, 
+  icon: Icon = MapPin, 
+  onSelect, 
+  initialValue = "", 
+  className = "",
+  error = false 
+}: LocationSearchProps) => {
   const [query, setQuery] = useState(initialValue);
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -30,7 +38,7 @@ const LocationSearch = ({ placeholder, icon: Icon = MapPin, onSelect, initialVal
   }, []);
 
   useEffect(() => {
-    setQuery(initialValue);
+    setQuery(initialValue || "");
   }, [initialValue]);
 
   // Debounce para busca
@@ -75,24 +83,29 @@ const LocationSearch = ({ placeholder, icon: Icon = MapPin, onSelect, initialVal
 
   const handleClear = () => {
       setQuery("");
-      onSelect({ lat: 0, lon: 0, display_name: "" });
+      onSelect(null);
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      setQuery(e.target.value);
+      setIsOpen(true);
+      // Se o usuário altera o texto, invalidamos a seleção anterior (opcional, mas recomendado)
+      // onSelect(null); 
   };
 
   return (
     <div className={`relative group ${className}`} ref={containerRef}>
-      <div className="absolute left-4 top-4 z-10 text-gray-400">
+      <div className={`absolute left-4 top-4 z-10 transition-colors ${error ? "text-red-500" : "text-gray-400"}`}>
         <Icon className="w-5 h-5" />
       </div>
       
       <Input
         value={query}
-        onChange={(e) => {
-            setQuery(e.target.value);
-            setIsOpen(true);
-        }}
+        onChange={handleInputChange}
         onFocus={() => setIsOpen(true)}
         placeholder={placeholder}
-        className="pl-12 pr-10 h-14 bg-white border-gray-200 text-slate-900 rounded-2xl transition-all shadow-sm font-medium placeholder:text-gray-400 relative z-20 focus:z-30"
+        className={`pl-12 pr-10 h-14 bg-white text-slate-900 rounded-2xl transition-all shadow-sm font-medium placeholder:text-gray-400 relative z-20 focus:z-30 
+            ${error ? "border-red-500 ring-1 ring-red-500 focus:ring-red-500" : "border-gray-200"}`}
       />
 
       {query && (
