@@ -37,7 +37,7 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
   const [activeTab, setActiveTab] = useState("overview");
-  const [loading, setLoading] = useState(true); // Começa true para evitar flash
+  const [loading, setLoading] = useState(true);
   const [adminProfile, setAdminProfile] = useState<any>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   
@@ -99,7 +99,7 @@ const AdminDashboard = () => {
       midnight_min_price: "25",
       platform_fee: "10",
       pricing_strategy: "FIXED",
-      cancellation_fee_type: "FIXED", // FIXED ou PERCENTAGE
+      cancellation_fee_type: "FIXED",
       cancellation_fee_value: "5.00"
   });
 
@@ -108,82 +108,37 @@ const AdminDashboard = () => {
   const [filterStatus, setFilterStatus] = useState("ALL");
   const [searchTerm, setSearchTerm] = useState("");
 
-  // --- AUTH E INITIAL LOAD ---
+  // --- CORREÇÃO DO F5 E LOOP ---
+  // Removemos a verificação "ansiosa" de sessão aqui. 
+  // O componente ProtectedRoute no App.tsx já garante a sessão.
+  // Aqui focamos apenas em buscar os dados.
   useEffect(() => {
-    let mounted = true;
+    fetchData();
 
-    const init = async () => {
-        try {
-            const { data: { session } } = await supabase.auth.getSession();
-            
-            if (!session) {
-                if (mounted) navigate('/');
-                return;
-            }
-
-            // Verifica role APENAS se ainda não tivermos o perfil carregado
-            if (!adminProfile) {
-                const { data, error } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
-                
-                if (error || data?.role !== 'admin') {
-                    console.error("Acesso negado ou erro perfil", error);
-                    await supabase.auth.signOut();
-                    if (mounted) navigate('/');
-                    return;
-                }
-                
-                if (mounted) setAdminProfile(data);
-            }
-
-            // Carrega dados iniciais
-            if (mounted) await fetchData();
-
-        } catch (error) {
-            console.error("Erro fatal init admin:", error);
-        }
-    };
-
-    init();
-
-    // Listener de Auth para evitar F5 quebrado
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+    // Listener de Auth apenas para logout explícito
+    const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
         if (event === 'SIGNED_OUT') {
             navigate('/');
         }
     });
 
     return () => {
-        mounted = false;
         authListener.subscription.unsubscribe();
     };
-  }, []);
-
-  // Polling de Status Online Real-Time (Otimizado)
-  useEffect(() => {
-      const fetchOnlineCount = async () => {
-          const { count } = await supabase
-            .from('profiles')
-            .select('*', { count: 'exact', head: true })
-            .eq('role', 'driver')
-            .eq('is_online', true);
-          
-          setStats(prev => ({ ...prev, driversOnline: count || 0 }));
-      };
-
-      const interval = setInterval(fetchOnlineCount, 10000); // Aumentado para 10s para leveza
-      fetchOnlineCount();
-      return () => clearInterval(interval);
   }, []);
 
   const fetchData = async (isManual = false) => {
     if (isManual) setLoading(true);
     
     try {
-        // Limpeza de online ghosts
-        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-        await supabase.from('profiles').update({ is_online: false }).eq('role', 'driver').eq('is_online', true).lt('last_active', tenMinutesAgo);
+        // Recupera usuário atual para garantir que é admin
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return; // ProtectedRoute cuidará do redirect se necessário
 
-        // Fetchs paralelos com tratamento de falha individual (Promise.allSettled seria ideal, mas manteremos simples)
+        const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+        if (profile) setAdminProfile(profile);
+
+        // Fetchs paralelos
         const [ridesRes, profilesRes, settingsRes, pricingRes, catRes, adminConfigRes] = await Promise.all([
             supabase.from('rides').select(`*, driver:profiles!public_rides_driver_id_fkey(*), customer:profiles!public_rides_customer_id_fkey(*)`).order('created_at', { ascending: false }),
             supabase.from('profiles').select('*').order('created_at', { ascending: false }),
@@ -227,7 +182,7 @@ const AdminDashboard = () => {
             if (newConf.platform_fee) setConfig(prev => ({ ...prev, platformFee: newConf.platform_fee }));
         }
 
-        // Stats Calc (Seguro contra nulos)
+        // Stats Calc
         const currentRides = ridesRes.data || [];
         const allDrivers = profilesRes.data?.filter((p: any) => p.role === 'driver') || [];
 
@@ -296,7 +251,7 @@ const AdminDashboard = () => {
 
   const openUserDetail = async (user: any) => {
       setDetailUser(user); 
-      setIsDetailLoading(true); 
+      setIsDetailLoading(true); // Liga loading
       setIsEditingInDetail(false);
       setEditFormData({ first_name: user.first_name || "", last_name: user.last_name || "", phone: user.phone || "", email: user.email || "" });
       
@@ -319,8 +274,7 @@ const AdminDashboard = () => {
           console.error(e);
           showError("Erro ao carregar detalhes: " + e.message);
       } finally { 
-          // GARANTIA que o loading sai
-          setIsDetailLoading(false); 
+          setIsDetailLoading(false); // Garante que desliga
       }
   };
 
@@ -381,17 +335,17 @@ const AdminDashboard = () => {
           ]);
           if (settingsError) throw settingsError;
           
-          const adminConfigUpdates = Object.entries(adminConfigs).filter(([key]) => key !== 'platform_fee').map(([key, value]) => ({ key, value }));
-          adminConfigUpdates.push({ key: 'platform_fee', value: config.platformFee });
-          
+          // Salva todas as configs admin, incluindo a nova taxa
+          const adminConfigUpdates = Object.entries(adminConfigs).map(([key, value]) => ({ key, value }));
           const { error: adminConfigError } = await supabase.from('admin_config').upsert(adminConfigUpdates);
           if (adminConfigError) throw adminConfigError;
           
           for (const tier of pricingTiers) { const { error: tierError } = await supabase.from('pricing_tiers').update({ price: tier.price, label: tier.label }).eq('id', tier.id); if (tierError) throw tierError; }
+          
           // Salva apenas categorias dinâmicas aqui
           for (const cat of categories.filter(c => c.name !== 'Gold Driver')) { const { error: catError } = await supabase.from('car_categories').update({ base_fare: cat.base_fare, cost_per_km: cat.cost_per_km, min_fare: cat.min_fare, active: cat.active }).eq('id', cat.id); if (catError) throw catError; }
           
-          showSuccess("Configurações salvas!"); await fetchData(false); // False para evitar duplo toast
+          showSuccess("Configurações salvas!"); await fetchData(false);
       } catch (e: any) { showError(e.message); } finally { setLoading(false); }
   };
 
@@ -600,6 +554,7 @@ const AdminDashboard = () => {
                               </TabsContent>
 
                               <TabsContent value="categories">
+                                  {/* CORREÇÃO: Layout Vertical (flex-col) ao invés de grid */}
                                   <div className="flex flex-col gap-8">
                                       {/* SEÇÃO 1: CATEGORIAS FIXAS (GOLD DRIVER) */}
                                       <div className="space-y-4">
@@ -608,7 +563,7 @@ const AdminDashboard = () => {
                                           </h3>
                                           
                                           {goldDriverCategory ? (
-                                              <Card className="border-0 shadow-lg bg-gradient-to-r from-yellow-50 to-white dark:from-slate-800 dark:to-slate-900 border-l-4 border-l-yellow-500 overflow-hidden">
+                                              <Card className="border-0 shadow-lg bg-gradient-to-r from-yellow-50 to-white dark:from-slate-800 dark:to-slate-900 border-l-4 border-l-yellow-500 overflow-hidden w-full">
                                                   <CardContent className="p-6 flex flex-col md:flex-row items-center justify-between gap-6">
                                                       <div className="flex items-center gap-4">
                                                           <div className="w-16 h-16 bg-yellow-500 rounded-2xl flex items-center justify-center shadow-lg text-black">
@@ -635,6 +590,7 @@ const AdminDashboard = () => {
                                                       </div>
                                                   </CardContent>
                                                   <CardFooter className="bg-yellow-500/10 border-t border-yellow-500/20 p-4">
+                                                       {/* BOTÃO ESPECÍFICO DE SALVAR GOLD DRIVER */}
                                                        <Button onClick={handleSaveGoldDriver} disabled={isSavingGold} className="ml-auto bg-yellow-500 hover:bg-yellow-400 text-black font-bold h-10 rounded-xl">
                                                           {isSavingGold ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Save className="w-4 h-4 mr-2" /> Salvar Status Gold Driver</>}
                                                       </Button>
@@ -655,9 +611,10 @@ const AdminDashboard = () => {
                                               <Activity className="w-5 h-5 text-blue-500" /> Categorias Dinâmicas
                                           </h3>
                                           
-                                          <div className="grid grid-cols-1 gap-4">
+                                          {/* CORREÇÃO: Cards um embaixo do outro */}
+                                          <div className="flex flex-col gap-4">
                                               {dynamicCategories.map(cat => (
-                                                  <Card key={cat.id} className={`border-0 shadow-sm transition-all ${cat.active ? 'bg-white dark:bg-slate-800 ring-1 ring-slate-200 dark:ring-slate-700' : 'bg-slate-50 dark:bg-slate-900/50 opacity-70'}`}>
+                                                  <Card key={cat.id} className={`border-0 shadow-sm transition-all w-full ${cat.active ? 'bg-white dark:bg-slate-800 ring-1 ring-slate-200 dark:ring-slate-700' : 'bg-slate-50 dark:bg-slate-900/50 opacity-70'}`}>
                                                       <CardContent className="p-5 flex items-center justify-between">
                                                           <div className="flex items-center gap-3">
                                                               <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${cat.active ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-slate-200 text-slate-500'}`}>

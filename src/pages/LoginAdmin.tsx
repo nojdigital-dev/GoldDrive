@@ -32,8 +32,6 @@ const LoginAdmin = () => {
     console.log('🔐 Tentando login...');
     
     try {
-        // REMOVIDO: await supabase.auth.signOut({ scope: 'global' });
-        
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if(error) throw error;
         
@@ -48,6 +46,7 @@ const LoginAdmin = () => {
             }
             
             console.log('🚀 Redirecionando para admin dashboard...');
+            // REPLACE: TRUE é crucial para evitar que o usuário volte para o login com o botão "Voltar"
             navigate('/admin', { replace: true });
         }
     } catch (e: any) {
