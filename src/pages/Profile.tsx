@@ -5,26 +5,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ArrowLeft, Camera, Loader2, Edit2, Save, X, Smartphone, MapPin, Calendar, Star, History, LogOut, Car, Mail, Phone } from "lucide-react";
+import { ArrowLeft, Camera, Loader2, LogOut, Smartphone, Calendar, Star, History, Car, Mail, Phone, ShieldCheck, User } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 
 const Profile = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
   const [showPWA, setShowPWA] = useState(false);
   
   const [profile, setProfile] = useState<any>({
     id: "", first_name: "", last_name: "", email: "", phone: "", bio: "", avatar_url: "", role: "", created_at: "", car_model: "", car_plate: "", car_color: "", total_rides: 0, rating: 5.0
   });
-
-  // Backup para cancelar edição e reverter dados
-  const [originalProfile, setOriginalProfile] = useState<any>(null);
 
   useEffect(() => { getProfile(); }, []);
 
@@ -38,7 +33,6 @@ const Profile = () => {
       const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).single();
       if (error) throw error;
       
-      // Calcular rating se for motorista
       let avgRating = 5.0;
       if (data.role === 'driver') {
           const { data: rides } = await supabase.from('rides').select('customer_rating').eq('driver_id', user.id).not('customer_rating', 'is', null);
@@ -47,51 +41,16 @@ const Profile = () => {
           }
       }
 
-      const finalData = { 
+      setProfile({ 
           ...data, 
           email: user.email || "",
           rating: avgRating 
-      };
-      
-      setProfile(finalData);
-      setOriginalProfile(finalData);
+      });
     } catch (error: any) { 
         showError(error.message); 
     } finally { 
         setLoading(false); 
     }
-  };
-
-  const handleUpdate = async () => {
-    setSaving(true);
-    try {
-      const { error } = await supabase.from('profiles').update({
-          first_name: profile.first_name, 
-          last_name: profile.last_name, 
-          phone: profile.phone, 
-          bio: profile.bio,
-          car_model: profile.car_model, // Caso motorista edite
-          car_plate: profile.car_plate,
-          car_color: profile.car_color,
-          updated_at: new Date().toISOString()
-      }).eq('id', profile.id);
-      
-      if (error) throw error;
-      
-      showSuccess("Perfil atualizado!");
-      setOriginalProfile(profile);
-      setIsEditing(false);
-    } catch (error: any) { 
-        showError(error.message); 
-    } finally { 
-        setSaving(false); 
-    }
-  };
-
-  const handleCancel = () => {
-      // Reverte para os dados originais
-      setProfile(originalProfile);
-      setIsEditing(false);
   };
 
   const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -115,7 +74,6 @@ const Profile = () => {
       await supabase.from('profiles').update({ avatar_url: data.publicUrl }).eq('id', profile.id);
       
       setProfile({ ...profile, avatar_url: data.publicUrl });
-      setOriginalProfile({ ...originalProfile, avatar_url: data.publicUrl });
       showSuccess("Foto atualizada!");
       
     } catch (error: any) {
@@ -138,202 +96,165 @@ const Profile = () => {
   if (loading) return <div className="h-screen flex items-center justify-center bg-gray-50"><Loader2 className="animate-spin w-10 h-10 text-yellow-500" /></div>;
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans pb-20 relative overflow-x-hidden">
+    <div className="min-h-screen bg-gray-100 font-sans pb-20 overflow-x-hidden">
       <PWAInstallPrompt openForce={showPWA} onCloseForce={() => setShowPWA(false)} />
 
-      {/* Header com Capa Estilo Rede Social */}
-      <div className="h-64 bg-slate-900 w-full relative">
-         <div className="absolute inset-0 bg-gradient-to-br from-slate-900 to-black" />
-         {/* Padrão decorativo */}
-         <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_1px_1px,#ffffff_1px,transparent_0)] bg-[length:20px_20px]" />
+      {/* Header / Cover */}
+      <div className="h-60 bg-slate-900 w-full relative">
+         <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1494976388531-d1058494cdd8?q=80&w=2670&auto=format&fit=crop')] bg-cover bg-center opacity-40 mix-blend-overlay" />
+         <div className="absolute inset-0 bg-gradient-to-b from-transparent to-slate-900/90" />
          
+         {/* Top Bar */}
          <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-center z-10">
-             <Button variant="secondary" size="icon" className="rounded-full bg-white/10 hover:bg-white/20 text-white border-0 backdrop-blur-md h-10 w-10" onClick={() => navigate(-1)}>
-                <ArrowLeft className="w-5 h-5" />
+             <Button variant="ghost" size="icon" className="rounded-full bg-black/20 hover:bg-black/40 text-white backdrop-blur-md" onClick={() => navigate(-1)}>
+                <ArrowLeft className="w-6 h-6" />
              </Button>
-             
-             {!isEditing ? (
-                 <Button onClick={() => setIsEditing(true)} className="rounded-full bg-white/10 hover:bg-white/20 text-white border-0 backdrop-blur-md gap-2 h-10 px-4 font-semibold">
-                     <Edit2 className="w-4 h-4" /> Editar Perfil
-                 </Button>
-             ) : (
-                 <div className="flex gap-2">
-                     <Button onClick={handleCancel} className="rounded-full bg-red-500/80 hover:bg-red-600 text-white border-0 backdrop-blur-md h-10 w-10 p-0" size="icon">
-                         <X className="w-5 h-5" />
-                     </Button>
-                     <Button onClick={handleUpdate} disabled={saving} className="rounded-full bg-green-500 hover:bg-green-600 text-white border-0 backdrop-blur-md gap-2 h-10 px-4 font-bold">
-                         {saving ? <Loader2 className="animate-spin w-4 h-4" /> : <><Save className="w-4 h-4" /> Salvar</>}
-                     </Button>
-                 </div>
-             )}
+             <div className="text-white font-bold tracking-widest text-xs uppercase opacity-80">Meu Perfil</div>
+             <div className="w-10" /> {/* Spacer */}
          </div>
       </div>
 
-      <div className="px-4 -mt-24 relative z-10 max-w-xl mx-auto pb-10">
-        {/* Card Principal */}
-        <div className="bg-white rounded-[40px] shadow-2xl overflow-hidden">
+      <div className="px-4 -mt-20 relative z-10 max-w-lg mx-auto pb-10">
+        
+        {/* Card de Identidade */}
+        <div className="bg-white rounded-[32px] shadow-xl p-6 pb-8 border border-white/50 relative overflow-visible mb-6">
             
-            {/* Seção do Avatar e Infos Principais */}
-            <div className="pt-0 pb-6 px-6 text-center border-b border-gray-100">
-                <div className="relative inline-block -mt-16 mb-4">
-                    <Avatar className="w-32 h-32 border-[6px] border-white shadow-xl bg-white">
-                        <AvatarImage src={profile.avatar_url} className="object-cover" />
-                        <AvatarFallback className="text-4xl bg-yellow-500 text-black font-black">{profile.first_name[0]}</AvatarFallback>
-                    </Avatar>
-                    {isEditing && (
-                        <>
-                            <Label htmlFor="avatar-upload" className="absolute bottom-1 right-1 bg-blue-600 text-white p-2.5 rounded-full shadow-lg border-4 border-white cursor-pointer hover:bg-blue-700 transition-all active:scale-95">
-                                {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
-                            </Label>
-                            <Input id="avatar-upload" type="file" accept="image/*" className="hidden" onChange={handleUpload} disabled={uploading} />
-                        </>
-                    )}
+            {/* Avatar Centralizado e Sobreposto */}
+            <div className="absolute -top-16 left-1/2 -translate-x-1/2">
+                <div className="relative group">
+                    <div className="w-32 h-32 rounded-full p-1 bg-white shadow-2xl">
+                        <Avatar className="w-full h-full rounded-full">
+                            <AvatarImage src={profile.avatar_url} className="object-cover" />
+                            <AvatarFallback className="text-4xl bg-slate-100 text-slate-400 font-bold">{profile.first_name?.[0]}</AvatarFallback>
+                        </Avatar>
+                    </div>
+                    
+                    {/* Botão de Câmera Flutuante */}
+                    <Label 
+                        htmlFor="avatar-upload" 
+                        className="absolute bottom-1 right-1 bg-yellow-500 text-black p-2.5 rounded-full shadow-lg border-[3px] border-white cursor-pointer hover:bg-yellow-400 transition-transform hover:scale-110 active:scale-95 flex items-center justify-center z-20"
+                    >
+                        {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+                    </Label>
+                    <Input id="avatar-upload" type="file" accept="image/*" className="hidden" onChange={handleUpload} disabled={uploading} />
                 </div>
+            </div>
 
-                <h1 className="text-3xl font-black text-slate-900 leading-tight mb-1">{profile.first_name} {profile.last_name}</h1>
-                <div className="flex items-center justify-center gap-2 mb-4">
-                    <Badge className={`px-3 py-1 text-xs font-bold uppercase tracking-wider ${profile.role === 'driver' ? 'bg-yellow-500 text-black hover:bg-yellow-600' : 'bg-slate-900 text-white hover:bg-slate-800'}`}>
-                        {profile.role === 'driver' ? 'Motorista Parceiro' : 'Passageiro VIP'}
+            {/* Nome e Role */}
+            <div className="mt-16 text-center">
+                <h1 className="text-2xl font-black text-slate-900 leading-tight mb-1">{profile.first_name} {profile.last_name}</h1>
+                <div className="flex items-center justify-center gap-2 mb-6">
+                    <Badge className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${profile.role === 'driver' ? 'bg-black text-white' : 'bg-blue-600 text-white'}`}>
+                        {profile.role === 'driver' ? 'Motorista' : 'Passageiro'}
                     </Badge>
                     {profile.role === 'driver' && (
-                        <div className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-md">
-                            <Star className="w-3 h-3 fill-yellow-500 text-yellow-500" />
-                            <span className="text-xs font-bold text-slate-900">{profile.rating?.toFixed(1) || '5.0'}</span>
+                        <div className="flex items-center gap-1 bg-yellow-100 px-2 py-1 rounded-md border border-yellow-200">
+                            <Star className="w-3 h-3 fill-yellow-600 text-yellow-600" />
+                            <span className="text-xs font-bold text-yellow-800">{profile.rating?.toFixed(1) || '5.0'}</span>
                         </div>
                     )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 max-w-xs mx-auto">
-                    <div className="bg-gray-50 p-3 rounded-2xl">
-                        <p className="text-[10px] uppercase font-bold text-gray-400 mb-1">Desde</p>
-                        <p className="font-bold text-slate-900 flex items-center justify-center gap-1"><Calendar className="w-3 h-3 text-slate-400"/> {new Date(profile.created_at).getFullYear()}</p>
+                {/* Stats Grid */}
+                <div className="grid grid-cols-3 gap-3 border-t border-b border-gray-100 py-4">
+                    <div className="text-center">
+                        <p className="text-xs text-gray-400 font-bold uppercase mb-1">Viagens</p>
+                        <p className="font-black text-slate-900 text-lg">{profile.total_rides || 0}</p>
                     </div>
-                    <div className="bg-gray-50 p-3 rounded-2xl cursor-pointer hover:bg-gray-100 transition-colors" onClick={goToHistory}>
-                        <p className="text-[10px] uppercase font-bold text-gray-400 mb-1">Viagens</p>
-                        <p className="font-bold text-slate-900 flex items-center justify-center gap-1"><History className="w-3 h-3 text-slate-400"/> {profile.total_rides || 0}</p>
+                    <div className="text-center border-l border-r border-gray-100">
+                        <p className="text-xs text-gray-400 font-bold uppercase mb-1">Entrou em</p>
+                        <p className="font-black text-slate-900 text-lg">{new Date(profile.created_at).getFullYear()}</p>
+                    </div>
+                    <div className="text-center">
+                        <p className="text-xs text-gray-400 font-bold uppercase mb-1">Status</p>
+                        <p className="font-black text-green-600 text-lg flex items-center justify-center gap-1">
+                            <ShieldCheck className="w-4 h-4" /> Ativo
+                        </p>
                     </div>
                 </div>
             </div>
 
-            {/* Conteúdo / Formulário */}
-            <div className="p-6 space-y-6">
-                
-                {/* Inputs Pessoais */}
-                <div className="space-y-4">
-                    <div className="flex items-center gap-2 mb-2">
-                        <div className="w-1 h-6 bg-yellow-500 rounded-full"/>
-                        <h3 className="font-bold text-lg text-slate-900">Dados Pessoais</h3>
+            {/* Informações de Contato (Lista Limpa) */}
+            <div className="mt-6 space-y-5">
+                <div className="flex items-center gap-4 group">
+                    <div className="w-10 h-10 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-slate-100 group-hover:text-slate-600 transition-colors">
+                        <User className="w-5 h-5" />
                     </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
-                            <Label className="text-xs font-bold text-gray-400 uppercase ml-1">Nome</Label>
-                            <Input 
-                                value={profile.first_name} 
-                                onChange={(e) => setProfile({...profile, first_name: e.target.value})} 
-                                disabled={!isEditing}
-                                className={`h-12 rounded-xl transition-all ${isEditing ? 'bg-white border-blue-500 ring-1 ring-blue-500 shadow-sm' : 'bg-gray-50 border-transparent text-slate-600'}`} 
-                            />
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label className="text-xs font-bold text-gray-400 uppercase ml-1">Sobrenome</Label>
-                            <Input 
-                                value={profile.last_name} 
-                                onChange={(e) => setProfile({...profile, last_name: e.target.value})} 
-                                disabled={!isEditing}
-                                className={`h-12 rounded-xl transition-all ${isEditing ? 'bg-white border-blue-500 ring-1 ring-blue-500 shadow-sm' : 'bg-gray-50 border-transparent text-slate-600'}`} 
-                            />
-                        </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                        <Label className="text-xs font-bold text-gray-400 uppercase ml-1 flex items-center gap-1"><Phone className="w-3 h-3"/> Telefone / WhatsApp</Label>
-                        <Input 
-                            value={profile.phone} 
-                            onChange={(e) => setProfile({...profile, phone: e.target.value})} 
-                            disabled={!isEditing}
-                            className={`h-12 rounded-xl transition-all ${isEditing ? 'bg-white border-blue-500 ring-1 ring-blue-500 shadow-sm' : 'bg-gray-50 border-transparent text-slate-600'}`} 
-                        />
-                    </div>
-
-                    <div className="space-y-1.5">
-                        <Label className="text-xs font-bold text-gray-400 uppercase ml-1 flex items-center gap-1"><Mail className="w-3 h-3"/> Email</Label>
-                        <Input 
-                            value={profile.email} 
-                            disabled
-                            className="h-12 bg-gray-100 border-transparent text-gray-400 rounded-xl cursor-not-allowed font-medium" 
-                        />
+                    <div>
+                        <p className="text-[10px] uppercase font-bold text-gray-400">Nome Completo</p>
+                        <p className="font-bold text-slate-900 text-sm">{profile.first_name} {profile.last_name}</p>
                     </div>
                 </div>
 
-                {/* Seção Veículo (Só para motorista) */}
-                {profile.role === 'driver' && (
-                    <div className="space-y-4 pt-4 border-t border-gray-100">
-                        <div className="flex items-center gap-2 mb-2">
-                            <div className="w-1 h-6 bg-slate-900 rounded-full"/>
-                            <h3 className="font-bold text-lg text-slate-900">Veículo</h3>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1.5">
-                                <Label className="text-xs font-bold text-gray-400 uppercase ml-1">Modelo</Label>
-                                <Input 
-                                    value={profile.car_model} 
-                                    onChange={(e) => setProfile({...profile, car_model: e.target.value})} 
-                                    disabled={!isEditing}
-                                    className={`h-12 rounded-xl transition-all ${isEditing ? 'bg-white border-blue-500 ring-1 ring-blue-500' : 'bg-gray-50 border-transparent text-slate-600 font-medium'}`}
-                                />
-                            </div>
-                            <div className="space-y-1.5">
-                                <Label className="text-xs font-bold text-gray-400 uppercase ml-1">Cor</Label>
-                                <Input 
-                                    value={profile.car_color} 
-                                    onChange={(e) => setProfile({...profile, car_color: e.target.value})} 
-                                    disabled={!isEditing}
-                                    className={`h-12 rounded-xl transition-all ${isEditing ? 'bg-white border-blue-500 ring-1 ring-blue-500' : 'bg-gray-50 border-transparent text-slate-600 font-medium'}`}
-                                />
-                            </div>
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label className="text-xs font-bold text-gray-400 uppercase ml-1">Placa</Label>
-                            <Input 
-                                value={profile.car_plate} 
-                                onChange={(e) => setProfile({...profile, car_plate: e.target.value})} 
-                                disabled={!isEditing}
-                                className={`h-12 rounded-xl uppercase font-mono tracking-wider transition-all ${isEditing ? 'bg-white border-blue-500 ring-1 ring-blue-500' : 'bg-gray-50 border-transparent text-slate-600 font-bold'}`}
-                            />
-                        </div>
+                <div className="flex items-center gap-4 group">
+                    <div className="w-10 h-10 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-slate-100 group-hover:text-slate-600 transition-colors">
+                        <Phone className="w-5 h-5" />
                     </div>
-                )}
+                    <div>
+                        <p className="text-[10px] uppercase font-bold text-gray-400">Celular</p>
+                        <p className="font-bold text-slate-900 text-sm">{profile.phone || 'Não informado'}</p>
+                    </div>
+                </div>
 
-                {/* Botões de Ação */}
-                <div className="pt-6 space-y-3">
-                    <Button 
-                        onClick={goToHistory} 
-                        className="w-full h-14 rounded-2xl bg-white border-2 border-gray-100 hover:bg-gray-50 text-slate-900 font-bold shadow-sm"
-                    >
-                        <History className="mr-2 w-5 h-5 text-slate-400" /> Ver Minhas Corridas
-                    </Button>
-
-                    <Button 
-                        onClick={() => setShowPWA(true)} 
-                        className="w-full h-14 rounded-2xl bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-600 text-black font-black shadow-lg shadow-yellow-500/20"
-                    >
-                        <Smartphone className="mr-2 w-5 h-5" /> BAIXAR APLICATIVO
-                    </Button>
-
-                    <Button 
-                        onClick={handleLogout} 
-                        variant="ghost"
-                        className="w-full h-12 rounded-2xl text-red-500 hover:bg-red-50 hover:text-red-700 font-bold mt-4"
-                    >
-                        <LogOut className="mr-2 w-4 h-4" /> Sair da Conta
-                    </Button>
+                <div className="flex items-center gap-4 group">
+                    <div className="w-10 h-10 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-slate-100 group-hover:text-slate-600 transition-colors">
+                        <Mail className="w-5 h-5" />
+                    </div>
+                    <div>
+                        <p className="text-[10px] uppercase font-bold text-gray-400">Email</p>
+                        <p className="font-bold text-slate-900 text-sm">{profile.email}</p>
+                    </div>
                 </div>
             </div>
         </div>
+
+        {/* Card do Veículo (Apenas Motorista) */}
+        {profile.role === 'driver' && (
+            <div className="bg-white rounded-[32px] shadow-lg p-6 mb-6 border border-gray-100">
+                <h3 className="font-black text-slate-900 mb-4 flex items-center gap-2 text-lg">
+                    <Car className="w-5 h-5 text-yellow-500" /> Meu Veículo
+                </h3>
+                <div className="bg-slate-50 rounded-2xl p-4 flex justify-between items-center">
+                    <div>
+                        <p className="text-sm font-bold text-slate-900">{profile.car_model}</p>
+                        <p className="text-xs text-gray-500">{profile.car_color}</p>
+                    </div>
+                    <Badge variant="outline" className="bg-white border-slate-200 text-slate-900 font-mono text-sm px-3 py-1">
+                        {profile.car_plate}
+                    </Badge>
+                </div>
+            </div>
+        )}
+
+        {/* Botões de Ação */}
+        <div className="space-y-3">
+            <Button 
+                onClick={goToHistory} 
+                className="w-full h-14 rounded-2xl bg-slate-900 hover:bg-black text-white font-bold shadow-xl shadow-slate-200 flex items-center justify-between px-6 group"
+            >
+                <span className="flex items-center gap-3"><History className="w-5 h-5 text-yellow-500" /> Ver Minhas Corridas</span>
+                <div className="bg-white/10 p-1 rounded-full group-hover:translate-x-1 transition-transform">
+                    <ArrowLeft className="w-4 h-4 rotate-180" />
+                </div>
+            </Button>
+
+            <Button 
+                onClick={() => setShowPWA(true)} 
+                className="w-full h-14 rounded-2xl bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-600 text-black font-black shadow-lg shadow-yellow-500/20 flex items-center gap-2"
+            >
+                <Smartphone className="w-5 h-5" /> BAIXAR APLICATIVO
+            </Button>
+
+            <Button 
+                onClick={handleLogout} 
+                variant="ghost"
+                className="w-full h-12 rounded-2xl text-red-500 hover:bg-red-50 hover:text-red-700 font-bold mt-2"
+            >
+                <LogOut className="mr-2 w-4 h-4" /> Sair da Conta
+            </Button>
+        </div>
         
-        <p className="text-center text-xs text-gray-400 mt-8 font-medium">Gold Mobile v1.0.0</p>
+        <p className="text-center text-[10px] text-gray-300 mt-8 font-medium tracking-widest uppercase">Gold Mobile &copy; 2024</p>
       </div>
     </div>
   );
