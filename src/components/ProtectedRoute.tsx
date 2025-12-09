@@ -32,7 +32,6 @@ const ProtectedRoute = ({ children, allowedRoles }: Props) => {
 
         if (userError || !user) {
           console.warn("Sessão inválida ou expirada no servidor.");
-          // Se falhar aqui, forçamos limpeza local para evitar loop
           if (mounted) {
              localStorage.clear();
              setStatus('unauthenticated');
@@ -64,12 +63,12 @@ const ProtectedRoute = ({ children, allowedRoles }: Props) => {
 
     verifyAccess();
 
-    // Timeout de segurança
+    // Timeout reduzido para 5 segundos conforme solicitado
     const timeout = setTimeout(() => {
         if (mounted && status === 'loading') {
             setStatus('unauthorized');
         }
-    }, 10000);
+    }, 5000);
 
     return () => {
       mounted = false;
@@ -78,22 +77,22 @@ const ProtectedRoute = ({ children, allowedRoles }: Props) => {
   }, [allowedRoles]);
 
   const handleForceLogout = () => {
-      // NÃO use async/await aqui. Se a rede estiver ruim, o botão trava.
-      // Queremos sair IMEDIATAMENTE.
-      
-      try {
-          // Tenta avisar o servidor, mas sem esperar (fire and forget)
-          supabase.auth.signOut(); 
-      } catch (e) {
-          console.error(e);
-      }
+      // Fire and forget logout
+      try { supabase.auth.signOut(); } catch (e) { console.error(e); }
 
       // Limpeza brutal e imediata
       localStorage.clear();
       sessionStorage.clear();
       
-      // Redirecionamento via window.location para garantir reload limpo
-      window.location.replace('/login');
+      // Redirecionamento inteligente baseado na permissão da rota
+      let redirectUrl = '/login';
+      if (allowedRoles.includes('admin')) {
+          redirectUrl = '/login/admin';
+      } else if (allowedRoles.includes('driver')) {
+          redirectUrl = '/login/driver';
+      }
+
+      window.location.replace(redirectUrl);
   };
 
   if (status === 'loading') {
@@ -108,7 +107,12 @@ const ProtectedRoute = ({ children, allowedRoles }: Props) => {
   }
 
   if (status === 'unauthenticated') {
-    return <Navigate to="/login" replace />;
+    // Redirecionamento inteligente também para casos não autenticados
+    let redirectUrl = '/login';
+    if (allowedRoles.includes('admin')) redirectUrl = '/login/admin';
+    else if (allowedRoles.includes('driver')) redirectUrl = '/login/driver';
+    
+    return <Navigate to={redirectUrl} replace />;
   }
 
   if (status === 'unauthorized') {
