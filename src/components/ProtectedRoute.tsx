@@ -27,18 +27,20 @@ const ProtectedRoute = ({ children, allowedRoles }: Props) => {
           return;
         }
 
-        // 2. VALIDAÇÃO REAL: Confirma com o servidor se o usuário ainda existe e o token é válido
-        // Isso corrige o problema do F5 onde o cache local diz que está logado mas o token expirou
+        // 2. Valida usuário no servidor
         const { data: { user }, error: userError } = await supabase.auth.getUser();
 
         if (userError || !user) {
           console.warn("Sessão inválida ou expirada no servidor.");
-          await supabase.auth.signOut(); // Limpa sessão inválida
-          if (mounted) setStatus('unauthenticated');
+          // Se falhar aqui, forçamos limpeza local para evitar loop
+          if (mounted) {
+             localStorage.clear();
+             setStatus('unauthenticated');
+          }
           return;
         }
 
-        // 3. Busca perfil e role
+        // 3. Busca perfil
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('role')
@@ -48,10 +50,8 @@ const ProtectedRoute = ({ children, allowedRoles }: Props) => {
         if (mounted) {
           if (profileError || !profile) {
             console.error('Erro ao buscar perfil:', profileError);
-            // Se o usuário existe mas não tem perfil, é um erro de dados
             setStatus('unauthorized');
           } else {
-            // 4. Valida permissão da role
             const hasAccess = allowedRoles.includes(profile.role);
             setStatus(hasAccess ? 'authorized' : 'unauthorized');
           }
@@ -64,13 +64,12 @@ const ProtectedRoute = ({ children, allowedRoles }: Props) => {
 
     verifyAccess();
 
-    // Timeout de segurança aumentado para conexões lentas
+    // Timeout de segurança
     const timeout = setTimeout(() => {
         if (mounted && status === 'loading') {
-             // Tenta verificar se é apenas lentidão ou erro real
-             setStatus('unauthorized');
+            setStatus('unauthorized');
         }
-    }, 15000);
+    }, 10000);
 
     return () => {
       mounted = false;
@@ -78,21 +77,23 @@ const ProtectedRoute = ({ children, allowedRoles }: Props) => {
     };
   }, [allowedRoles]);
 
-  const handleForceLogout = async () => {
+  const handleForceLogout = () => {
+      // NÃO use async/await aqui. Se a rede estiver ruim, o botão trava.
+      // Queremos sair IMEDIATAMENTE.
+      
       try {
-          // 1. Logout no Supabase
-          await supabase.auth.signOut();
+          // Tenta avisar o servidor, mas sem esperar (fire and forget)
+          supabase.auth.signOut(); 
       } catch (e) {
-          console.error("Erro ao deslogar:", e);
-      } finally {
-          // 2. LIMPEZA BRUTAL: Remove manualmente o token do localStorage
-          // Isso garante que o loop seja quebrado
-          localStorage.removeItem('golddrive-auth-token');
-          localStorage.clear(); // Limpa tudo por garantia
-          
-          // 3. Redirecionamento forçado via window.location para limpar estado da memória
-          window.location.href = '/login';
+          console.error(e);
       }
+
+      // Limpeza brutal e imediata
+      localStorage.clear();
+      sessionStorage.clear();
+      
+      // Redirecionamento via window.location para garantir reload limpo
+      window.location.replace('/login');
   };
 
   if (status === 'loading') {
@@ -118,7 +119,7 @@ const ProtectedRoute = ({ children, allowedRoles }: Props) => {
         </div>
         <h1 className="text-3xl font-black text-white mb-2">Acesso Negado</h1>
         <p className="text-gray-400 max-w-md mb-8 leading-relaxed">
-            Não foi possível validar suas permissões. Isso pode ocorrer se sua conta foi alterada ou se houve um erro de conexão.
+            Não foi possível recuperar suas credenciais. Isso pode ocorrer por falha na conexão ou sessão expirada.
         </p>
         <div className="flex flex-col sm:flex-row gap-4 w-full max-w-sm">
             <Button 
@@ -130,7 +131,7 @@ const ProtectedRoute = ({ children, allowedRoles }: Props) => {
             <Button 
                 variant="destructive"
                 onClick={handleForceLogout}
-                className="flex-1 h-14 rounded-2xl font-bold bg-red-600 hover:bg-red-700"
+                className="flex-1 h-14 rounded-2xl font-bold bg-red-600 hover:bg-red-700 shadow-lg shadow-red-900/20"
             >
                 <LogOut className="mr-2 h-5 w-5" /> Sair Agora
             </Button>
