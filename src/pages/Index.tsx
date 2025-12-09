@@ -1,6 +1,6 @@
 import { MadeWithDyad } from "@/components/made-with-dyad";
 import { Button } from "@/components/ui/button";
-import { Car, MapPin, ArrowRight, ShieldCheck } from "lucide-react";
+import { Car, ArrowRight, ShieldCheck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -47,18 +47,15 @@ const Index = () => {
       <div className="flex-1 flex flex-col px-6 pt-12 pb-6 relative z-10 max-w-md mx-auto w-full justify-between">
         
         {/* Header / Logo */}
-        <div className="text-center space-y-4 mt-8 animate-in slide-in-from-top-10 duration-700">
-            <div className="inline-flex items-center justify-center p-3 bg-yellow-500/10 rounded-2xl border border-yellow-500/20 mb-4 shadow-[0_0_30px_rgba(234,179,8,0.2)]">
-                <MapPin className="w-8 h-8 text-yellow-500" />
-            </div>
-            <div>
-                <h1 className="text-5xl font-black text-white tracking-tighter mb-2">
-                  Gold<span className="text-yellow-500">Mobile</span>
-                </h1>
-                <p className="text-zinc-400 text-lg font-medium leading-relaxed">
-                  Mobilidade premium <br/> na palma da sua mão.
-                </p>
-            </div>
+        <div className="text-center space-y-4 mt-12 animate-in slide-in-from-top-10 duration-700 flex flex-col items-center">
+            <img 
+              src="/logo-gold-mobile.png" 
+              alt="Gold Mobile" 
+              className="w-64 h-auto drop-shadow-2xl"
+            />
+            <p className="text-zinc-400 text-lg font-medium leading-relaxed max-w-[260px]">
+              Mobilidade premium <br/> na palma da sua mão.
+            </p>
         </div>
 
         {/* Action Area */}

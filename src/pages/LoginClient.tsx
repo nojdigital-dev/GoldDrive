@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
-import { ArrowLeft, Loader2, ArrowRight, MapPin, User, Lock, Mail, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Loader2, ArrowRight, User, Lock, Mail, Eye, EyeOff } from "lucide-react";
 
 const LoginClient = () => {
   const navigate = useNavigate();
@@ -64,10 +64,8 @@ const LoginClient = () => {
                 style={{ backgroundImage: `url('https://images.unsplash.com/photo-1496442226666-8d4a0e29f122?q=80&w=2576&auto=format&fit=crop')` }}
            />
            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent" />
-           <div className="relative z-10 text-center px-12">
-                <div className="w-20 h-20 bg-yellow-500 rounded-2xl mx-auto mb-8 flex items-center justify-center shadow-[0_0_40px_rgba(234,179,8,0.3)]">
-                    <MapPin className="w-10 h-10 text-black" />
-                </div>
+           <div className="relative z-10 text-center px-12 flex flex-col items-center">
+                <img src="/logo-gold-mobile.png" alt="Gold Mobile" className="w-64 h-auto mb-8 drop-shadow-2xl" />
                 <h2 className="text-5xl font-black text-white mb-6 tracking-tight">Sua cidade, <br/>suas regras.</h2>
                 <p className="text-gray-400 text-xl font-light leading-relaxed max-w-md mx-auto">
                     Conecte-se aos melhores motoristas da região com a segurança e o conforto que você merece.
@@ -85,8 +83,9 @@ const LoginClient = () => {
 
            <div className="flex-1 flex flex-col justify-center px-8 sm:px-16 max-w-xl mx-auto w-full">
                <div className="mb-10 animate-in slide-in-from-bottom-4 duration-700">
-                   <h1 className="text-4xl font-black text-slate-900 tracking-tighter mb-2">Gold<span className="text-yellow-500"> Mobile</span></h1>
-                   <div className="h-1.5 w-16 bg-yellow-500 rounded-full mb-6" />
+                   <div className="lg:hidden mb-6 flex justify-center">
+                       <img src="/logo-gold-mobile.png" alt="Gold Mobile" className="w-48 h-auto" />
+                   </div>
                    <h2 className="text-2xl font-bold text-slate-800">{isSignUp ? "Comece sua jornada" : "Bem-vindo de volta"}</h2>
                    <p className="text-gray-500 mt-2">{isSignUp ? "Preencha seus dados para criar uma conta gratuita." : "Faça login para solicitar sua próxima corrida."}</p>
                </div>

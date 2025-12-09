@@ -64,11 +64,8 @@ const LoginAdmin = () => {
        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none"></div>
 
        <div className="w-full max-w-md relative z-10 animate-in fade-in slide-in-from-bottom-8 duration-700">
-           <div className="mb-8 text-center">
-               <div className="w-16 h-16 bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-2xl border border-white/10 ring-4 ring-white/5">
-                   <Shield className="w-8 h-8 text-yellow-500" />
-               </div>
-               <h1 className="text-3xl font-black text-white tracking-tight mb-2">Gold<span className="text-yellow-500"> Mobile</span></h1>
+           <div className="mb-8 text-center flex flex-col items-center">
+               <img src="/logo-gold-mobile.png" alt="Gold Mobile" className="w-48 h-auto mb-6" />
                <p className="text-slate-400">Credenciais de alta segurança necessárias.</p>
            </div>
 

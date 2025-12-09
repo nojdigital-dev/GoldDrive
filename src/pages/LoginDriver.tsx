@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
-import { ArrowLeft, Loader2, ArrowRight, Car, Camera, ShieldCheck, Mail, Lock, Phone, CreditCard, ChevronLeft, Eye, EyeOff, KeyRound, Ban, XCircle } from "lucide-react";
+import { ArrowLeft, Loader2, ArrowRight, Car, Camera, ShieldCheck, Mail, Lock, Phone, CreditCard, ChevronLeft, Eye, EyeOff, KeyRound, Ban } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 
@@ -313,10 +313,8 @@ const LoginDriver = () => {
                 style={{ backgroundImage: `url('https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?q=80&w=2070&auto=format&fit=crop')` }}
            />
            <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent" />
-           <div className="relative z-10 text-center px-12">
-                <div className="w-20 h-20 bg-yellow-500 rounded-2xl mx-auto mb-8 flex items-center justify-center shadow-[0_0_40px_rgba(234,179,8,0.3)]">
-                    <Car className="w-10 h-10 text-black" />
-                </div>
+           <div className="relative z-10 text-center px-12 flex flex-col items-center">
+                <img src="/logo-gold-mobile.png" alt="Gold Mobile" className="w-64 h-auto mb-8 drop-shadow-2xl" />
                 <h2 className="text-5xl font-black text-white mb-6 tracking-tight">Dirija e<br/>Lucre Mais.</h2>
                 <p className="text-gray-400 text-xl font-light leading-relaxed max-w-md mx-auto">
                     A plataforma que valoriza o motorista. Taxas justas, pagamentos rápidos e suporte 24h.
@@ -346,7 +344,9 @@ const LoginDriver = () => {
            <div className="flex-1 flex flex-col justify-center px-8 sm:px-16 max-w-xl mx-auto w-full pb-10">
                
                <div className="mb-8 animate-in slide-in-from-bottom-4 duration-700">
-                   <h1 className="text-4xl font-black text-slate-900 tracking-tighter mb-2">Gold<span className="text-yellow-500"> Mobile</span></h1>
+                   <div className="lg:hidden mb-6 flex justify-center">
+                       <img src="/logo-gold-mobile.png" alt="Gold Mobile" className="w-48 h-auto" />
+                   </div>
                    {!isSignUp ? (
                        <>
                            <h2 className="text-2xl font-bold text-slate-800">Acesse seu painel</h2>

@@ -182,8 +182,8 @@ const Login = () => {
           activeTab === 'driver' ? 'bg-yellow-500' : activeTab === 'admin' ? 'bg-slate-900' : 'bg-black'
       }`} />
       
-      <div className="mb-8 text-center text-white z-10">
-        <h1 className="text-4xl font-bold tracking-tight mb-2">Gold Mobile</h1>
+      <div className="mb-8 text-center text-white z-10 flex flex-col items-center">
+        <img src="/logo-gold-mobile.png" alt="Gold Mobile" className="w-48 h-auto mb-2 drop-shadow-lg" />
         <p className="opacity-90">Sua plataforma premium de mobilidade</p>
       </div>
 

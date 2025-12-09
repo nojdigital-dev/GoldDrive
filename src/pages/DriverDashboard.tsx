@@ -218,11 +218,14 @@ const DriverDashboard = () => {
   return (
     <div className="h-screen flex flex-col bg-slate-50 relative overflow-hidden font-sans">
       
+      {/* MARCA D'ÁGUA FIXA NO TOPO */}
+      <img src="/logo-gold-mobile.png" alt="Logo" className="fixed top-4 left-1/2 -translate-x-1/2 h-6 opacity-80 z-50 pointer-events-none drop-shadow-md" />
+
       <div className="absolute inset-0 z-0">
           <MapComponent className="h-full w-full" showPickup={isOnTrip} />
       </div>
 
-      <div className="absolute top-0 left-0 right-0 p-6 z-20 flex justify-between items-start pointer-events-none">
+      <div className="absolute top-0 left-0 right-0 p-6 z-20 flex justify-between items-start pointer-events-none mt-4">
           <div className={`pointer-events-auto backdrop-blur-xl border border-white/20 p-2 pr-4 rounded-full flex items-center gap-3 shadow-lg transition-all duration-300 ${isOnline ? 'bg-black/80' : 'bg-white/80'}`}>
              <Switch checked={isOnline} onCheckedChange={toggleOnline} className="data-[state=checked]:bg-green-500" />
              <span className={`text-xs font-bold uppercase tracking-wider ${isOnline ? 'text-white' : 'text-slate-500'}`}>{isOnline ? 'Online' : 'Offline'}</span>
@@ -405,49 +408,40 @@ const DriverDashboard = () => {
           <AlertDialogContent className="rounded-3xl bg-white border-0"><AlertDialogHeader><AlertDialogTitle className="flex items-center gap-2 text-red-600"><AlertTriangle /> Cancelar Corrida?</AlertDialogTitle><AlertDialogDescription>Esta ação prejudica sua taxa de aceitação.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel className="rounded-xl h-12">Voltar</AlertDialogCancel><AlertDialogAction onClick={confirmCancel} className="bg-red-600 hover:bg-red-700 rounded-xl h-12 font-bold text-white">Confirmar</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
       </AlertDialog>
 
-      {/* MODAL DETALHES DA CORRIDA (REDESENHADO) */}
+      {/* MODAL DETALHES DA CORRIDA (HISTÓRICO) */}
       <Dialog open={showHistoryDetail} onOpenChange={setShowHistoryDetail}>
-          <DialogContent className="sm:max-w-md bg-white rounded-3xl border-0 p-0 overflow-hidden">
-              <div className="bg-slate-900 p-6 text-white text-center">
-                  <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Detalhes da Viagem</p>
-                  <h2 className="text-3xl font-black">R$ {Number(selectedHistoryItem?.price).toFixed(2)}</h2>
-                  <p className="text-slate-400 text-sm mt-1">{selectedHistoryItem ? new Date(selectedHistoryItem.created_at).toLocaleDateString() + ' • ' + new Date(selectedHistoryItem.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}</p>
-              </div>
-              <div className="p-6 space-y-6">
+          <DialogContent className="sm:max-w-md bg-white rounded-3xl border-0 shadow-2xl">
+              <DialogHeader><DialogTitle className="text-xl font-black">Detalhes da Corrida</DialogTitle></DialogHeader>
+              <div className="py-2 space-y-6">
                   {/* Passageiro */}
-                  <div className="bg-gray-50 p-4 rounded-2xl flex items-center gap-4 border border-gray-100">
-                      <Avatar className="h-12 w-12 border-2 border-white shadow-sm"><AvatarImage src={selectedHistoryItem?.customer?.avatar_url} /><AvatarFallback className="bg-slate-200 text-slate-600 font-bold">{selectedHistoryItem?.customer?.first_name?.[0]}</AvatarFallback></Avatar>
+                  <div className="flex items-center gap-4 bg-gray-50 p-4 rounded-2xl">
+                      <Avatar className="w-14 h-14 border-2 border-white shadow-sm"><AvatarImage src={selectedHistoryItem?.customer?.avatar_url} /><AvatarFallback>{selectedHistoryItem?.customer?.first_name?.[0]}</AvatarFallback></Avatar>
                       <div>
-                          <p className="font-bold text-slate-900">{selectedHistoryItem?.customer?.first_name} {selectedHistoryItem?.customer?.last_name}</p>
-                          <p className="text-xs text-gray-500">{selectedHistoryItem?.customer?.phone || 'Sem telefone'}</p>
+                          <p className="font-bold text-lg text-slate-900">{selectedHistoryItem?.customer?.first_name} {selectedHistoryItem?.customer?.last_name}</p>
+                          <p className="text-sm text-gray-500">{selectedHistoryItem?.customer?.phone || 'Sem telefone'}</p>
                       </div>
                   </div>
 
                   {/* Rota */}
-                  <div className="space-y-4">
+                  <div className="space-y-4 px-2">
                        <div className="flex gap-4">
-                           <div className="flex flex-col items-center pt-1"><div className="w-3 h-3 bg-slate-900 rounded-full" /><div className="w-0.5 flex-1 bg-gray-200 my-1 min-h-[30px]" /><div className="w-3 h-3 bg-green-500 rounded-full" /></div>
+                           <div className="flex flex-col items-center pt-1"><div className="w-3 h-3 bg-slate-900 rounded-full" /><div className="w-0.5 flex-1 bg-gray-200 my-1" /><div className="w-3 h-3 bg-green-500 rounded-full" /></div>
                            <div className="space-y-6 flex-1">
                                <div><p className="text-xs font-bold text-gray-400 uppercase">Origem</p><p className="font-medium text-slate-900 leading-tight">{selectedHistoryItem?.pickup_address}</p></div>
                                <div><p className="text-xs font-bold text-gray-400 uppercase">Destino</p><p className="font-medium text-slate-900 leading-tight">{selectedHistoryItem?.destination_address}</p></div>
                            </div>
                        </div>
                   </div>
-                  
-                  {/* Rating Info */}
-                  <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-gray-50 p-3 rounded-xl text-center">
-                          <p className="text-[10px] text-gray-400 font-bold uppercase">Sua Nota</p>
-                          <div className="flex justify-center items-center gap-1 font-bold text-slate-900"><Star className="w-3 h-3 fill-yellow-400 text-yellow-400" /> {selectedHistoryItem?.driver_rating || '-'}</div>
-                      </div>
-                      <div className="bg-gray-50 p-3 rounded-xl text-center">
-                          <p className="text-[10px] text-gray-400 font-bold uppercase">Status</p>
-                          <p className="font-bold text-slate-900">{selectedHistoryItem?.status === 'COMPLETED' ? 'Finalizada' : selectedHistoryItem?.status}</p>
-                      </div>
-                  </div>
 
-                  <div className="pt-2">
-                      <Button className="w-full h-12 bg-gray-100 hover:bg-gray-200 text-slate-900 font-bold rounded-xl" onClick={() => setSelectedHistoryItem(null)}>Fechar Detalhes</Button>
+                  {/* Valores (Atualizado) */}
+                  <div className="bg-slate-900 text-white p-6 rounded-2xl flex items-center justify-between">
+                       <div><p className="text-gray-400 text-xs font-bold uppercase">Valor Total</p><h3 className="text-3xl font-black">R$ {Number(selectedHistoryItem?.price).toFixed(2)}</h3></div>
+                  </div>
+                  
+                  {/* Infos Extras */}
+                  <div className="grid grid-cols-2 gap-4 text-center">
+                       <div className="bg-gray-50 p-3 rounded-xl"><p className="text-xs text-gray-400 font-bold uppercase">Avaliação</p><div className="flex items-center justify-center gap-1 font-bold text-slate-900"><Star className="w-4 h-4 fill-yellow-400 text-yellow-400" /> {selectedHistoryItem?.customer_rating || '-'}</div></div>
+                       <div className="bg-gray-50 p-3 rounded-xl"><p className="text-xs text-gray-400 font-bold uppercase">Data</p><p className="font-bold text-slate-900">{selectedHistoryItem ? new Date(selectedHistoryItem.created_at).toLocaleDateString() : '-'}</p></div>
                   </div>
               </div>
           </DialogContent>
