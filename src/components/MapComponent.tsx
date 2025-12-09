@@ -3,18 +3,13 @@ import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline } from 'react-
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
-// Fix para ícones do leaflet no vite
-import icon from 'leaflet/dist/images/marker-icon.png';
-import iconShadow from 'leaflet/dist/images/marker-shadow.png';
-
-const DefaultIcon = L.icon({
-    iconUrl: typeof icon === 'string' ? icon : (icon as any).src,
-    shadowUrl: typeof iconShadow === 'string' ? iconShadow : (iconShadow as any).src,
-    iconSize: [25, 41],
-    iconAnchor: [12, 41]
+// Fix oficial para ícones do Leaflet em React
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
-
-L.Marker.prototype.options.icon = DefaultIcon;
 
 // Ícone Personalizado para Origem (Verde)
 const PickupIcon = new L.Icon({
@@ -51,15 +46,21 @@ const MapController = ({
   const map = useMap();
 
   useEffect(() => {
+    if (!map) return;
+
     // 1. Prioridade: Se tiver uma rota desenhada, foca nela
     if (routeCoords && routeCoords.length > 0) {
         const bounds = L.latLngBounds(routeCoords);
-        map.fitBounds(bounds, { padding: [50, 50] });
+        if (bounds.isValid()) {
+            map.fitBounds(bounds, { padding: [50, 50] });
+        }
     } 
     // 2. Se tiver origem e destino, foca nos dois
     else if (pickup && destination) {
         const bounds = L.latLngBounds([pickup, destination]);
-        map.fitBounds(bounds, { padding: [50, 50] });
+        if (bounds.isValid()) {
+            map.fitBounds(bounds, { padding: [50, 50] });
+        }
     }
     // 3. Se tiver só um ponto (ex: origem selecionada), vai para ele
     else if (pickup) {
@@ -70,8 +71,8 @@ const MapController = ({
         map.flyTo(center, 13);
     }
 
-    // Fix render
-    setTimeout(() => map.invalidateSize(), 100);
+    // Force resize apenas uma vez para corrigir problemas de renderização
+    map.invalidateSize();
   }, [center, pickup, destination, routeCoords, map]);
 
   return null;
@@ -81,7 +82,7 @@ interface MapProps {
   className?: string;
   pickupLocation?: { lat: number; lon: number } | null;
   destinationLocation?: { lat: number; lon: number } | null;
-  routeCoordinates?: [number, number][]; // Array de lat/long para desenhar a linha
+  routeCoordinates?: [number, number][]; 
 }
 
 const MapComponent = ({ 
@@ -126,14 +127,22 @@ const MapComponent = ({
         
         {/* Marcador de Origem */}
         {pickupPos && (
-            <Marker position={pickupPos} icon={PickupIcon}>
+            <Marker 
+                key={`pickup-${pickupPos[0]}-${pickupPos[1]}`} 
+                position={pickupPos} 
+                icon={PickupIcon}
+            >
               <Popup>Local de Embarque</Popup>
             </Marker>
         )}
 
         {/* Marcador de Destino */}
         {destPos && (
-             <Marker position={destPos} icon={DestinationIcon}>
+             <Marker 
+                key={`dest-${destPos[0]}-${destPos[1]}`} 
+                position={destPos} 
+                icon={DestinationIcon}
+             >
               <Popup>Destino</Popup>
             </Marker>
         )}
@@ -141,11 +150,12 @@ const MapComponent = ({
         {/* Linha da Rota */}
         {routeCoordinates && routeCoordinates.length > 0 && (
             <Polyline 
+                key={`route-${routeCoordinates.length}`}
                 positions={routeCoordinates} 
-                color="#000" // Cor da linha (preto estilo Uber)
+                color="#000"
                 weight={4}
                 opacity={0.7}
-                dashArray="10, 10" // Linha tracejada se quiser, ou solida se remover isso
+                dashArray="10, 10"
             />
         )}
 
