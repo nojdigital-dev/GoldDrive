@@ -66,12 +66,13 @@ const MapController = ({
     else if (pickup) {
         map.flyTo(pickup, 16, { animate: true, duration: 1.5 });
     }
-    // 4. Default
+    // 4. Default (Apenas se não houver interação do usuário ainda)
     else {
-        map.flyTo(center, 13);
+        // Não forçamos o pan para o centro padrão se o usuário já moveu o mapa
+        // mas aqui no useEffect inicial, podemos definir a view
+        map.setView(center, 14);
     }
 
-    // Force resize apenas uma vez para corrigir problemas de renderização
     map.invalidateSize();
   }, [center, pickup, destination, routeCoords, map]);
 
@@ -92,7 +93,8 @@ const MapComponent = ({
     routeCoordinates 
 }: MapProps) => {
   const [isMounted, setIsMounted] = useState(false);
-  const defaultCenter: [number, number] = [-23.55052, -46.633309]; // SP Default
+  // Coordenadas de Patrocínio - MG
+  const defaultCenter: [number, number] = [-18.9469, -46.9928];
 
   useEffect(() => {
     setIsMounted(true);
@@ -109,13 +111,15 @@ const MapComponent = ({
   // Prepara posições para o Leaflet
   const pickupPos: [number, number] | null = pickupLocation ? [pickupLocation.lat, pickupLocation.lon] : null;
   const destPos: [number, number] | null = destinationLocation ? [destinationLocation.lat, destinationLocation.lon] : null;
+  
+  // Se não tiver pickup, usa o centro padrão
   const activeCenter = pickupPos || defaultCenter;
 
   return (
     <div className={`relative z-0 ${className} bg-gray-100`}>
       <MapContainer 
-        center={activeCenter} 
-        zoom={13} 
+        center={defaultCenter} 
+        zoom={14} 
         scrollWheelZoom={false} 
         className="h-full w-full isolate"
         zoomControl={false}

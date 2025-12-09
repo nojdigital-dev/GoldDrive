@@ -48,7 +48,6 @@ const DriverDashboard = () => {
 
   const isOnTrip = !!ride && ['ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(ride?.status || '');
 
-  // Monitoramento de Bloqueio em Tempo Real
   useEffect(() => {
       if (!currentUserId) return;
 
@@ -75,15 +74,14 @@ const DriverDashboard = () => {
       };
   }, [currentUserId]);
 
-  // Heartbeat Effect: Atualiza last_active a cada 2 minutos se estiver online
   useEffect(() => {
       let interval: NodeJS.Timeout;
       if (isOnline && driverProfile?.id) {
           const sendHeartbeat = async () => {
               await supabase.from('profiles').update({ last_active: new Date().toISOString() }).eq('id', driverProfile.id);
           };
-          sendHeartbeat(); // Imediato
-          interval = setInterval(sendHeartbeat, 120000); // A cada 2 min
+          sendHeartbeat();
+          interval = setInterval(sendHeartbeat, 120000);
       }
       return () => clearInterval(interval);
   }, [isOnline, driverProfile?.id]);
@@ -108,20 +106,15 @@ const DriverDashboard = () => {
 
           setDriverProfile(data);
           
-          // Sincroniza estado local com banco
           if (data.is_online !== undefined) {
               setIsOnline(data.is_online);
           }
           
-          // Checagem de carro
           if (!data.car_model || !data.car_plate) { setShowCarForm(true); setIsOnline(false); }
 
           if (activeTab === 'history') {
                const { data: rides } = await supabase.from('rides')
-                .select(`
-                    *, 
-                    customer:profiles!public_rides_customer_id_fkey(first_name, last_name, avatar_url, phone)
-                `)
+                .select(`*, customer:profiles!public_rides_customer_id_fkey(first_name, last_name, avatar_url, phone)`)
                 .eq('driver_id', user.id)
                 .order('created_at', { ascending: false });
                setHistory(rides || []);
@@ -167,7 +160,8 @@ const DriverDashboard = () => {
 
   const handleFinish = async () => {
       if(ride) {
-          setFinishedRideData({ ...ride, earned: Number(ride.price) * 0.8 });
+          // CORREÇÃO: Usa o valor total (price) em vez de 0.8
+          setFinishedRideData({ ...ride, earned: Number(ride.price) });
           await finishRide(ride.id);
           setShowFinishScreen(true);
       }
@@ -184,15 +178,9 @@ const DriverDashboard = () => {
 
   const toggleOnline = async (val: boolean) => { 
       if (val && (!driverProfile?.car_model)) { setShowCarForm(true); return; } 
-      
       setIsOnline(val);
-      
-      // Atualiza no banco
       if (driverProfile?.id) {
-          await supabase.from('profiles').update({ 
-              is_online: val,
-              last_active: new Date().toISOString()
-          }).eq('id', driverProfile.id);
+          await supabase.from('profiles').update({ is_online: val, last_active: new Date().toISOString() }).eq('id', driverProfile.id);
       }
   };
 
@@ -269,7 +257,6 @@ const DriverDashboard = () => {
                             <div className="w-10 h-10 rounded-full border-2 border-white/20 flex items-center justify-center font-bold text-lg">{timer}</div>
                         </div>
 
-                        {/* Dados do Passageiro na Solicitação */}
                         <div className="flex items-center gap-3 bg-white/10 p-3 rounded-2xl mb-4">
                              <Avatar className="h-10 w-10 border border-white/30">
                                  <AvatarImage src={incomingRide.client_details?.avatar_url} />
@@ -285,8 +272,9 @@ const DriverDashboard = () => {
                         </div>
 
                         <div className="text-center mb-6">
-                            <p className="text-slate-400 text-xs uppercase font-bold mb-1">Ganho Estimado</p>
-                            <h2 className="text-5xl font-black tracking-tighter text-white">R$ {(incomingRide.price * 0.8).toFixed(2)}</h2>
+                            <p className="text-slate-400 text-xs uppercase font-bold mb-1">Valor da Corrida</p>
+                            {/* CORREÇÃO: Mostrando valor TOTAL */}
+                            <h2 className="text-5xl font-black tracking-tighter text-white">R$ {incomingRide.price.toFixed(2)}</h2>
                             <div className="flex justify-center gap-3 mt-4"><Badge variant="outline" className="border-white/20 text-slate-300">{incomingRide.distance}</Badge><Badge variant="outline" className="border-white/20 text-slate-300">{incomingRide.category}</Badge></div>
                         </div>
 
@@ -295,7 +283,11 @@ const DriverDashboard = () => {
                              <div className="flex items-start gap-3"><div className="w-2 h-2 mt-2 bg-green-500 rounded-full"/><div><p className="text-xs text-slate-400 font-bold uppercase">Destino</p><p className="font-medium text-sm leading-tight">{incomingRide.destination_address}</p></div></div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4"><Button variant="ghost" className="h-14 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold" onClick={handleReject}>Recusar</Button><Button className="h-14 rounded-xl bg-green-500 hover:bg-green-400 text-black font-black animate-pulse" onClick={handleAccept}>ACEITAR</Button></div>
+                        {/* CORREÇÃO: Contraste do Botão Aceitar */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <Button variant="ghost" className="h-14 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold" onClick={handleReject}>Recusar</Button>
+                            <Button className="h-14 rounded-xl bg-green-500 hover:bg-green-400 text-black font-black animate-pulse shadow-lg shadow-green-500/20" onClick={handleAccept}>ACEITAR</Button>
+                        </div>
                     </div>
                 )}
 
@@ -307,11 +299,11 @@ const DriverDashboard = () => {
                                 <h3 className="text-2xl font-bold text-slate-900">{ride?.client_details?.name}</h3>
                                 {ride?.client_details?.phone && <p className="text-sm text-gray-500 flex items-center gap-1"><Phone className="w-3 h-3" /> {ride.client_details.phone}</p>}
                             </div>
-                            <div className="text-right"><h3 className="text-3xl font-black text-slate-900">R$ {(Number(ride?.price) * 0.8).toFixed(2)}</h3><p className="text-gray-400 text-xs uppercase font-bold tracking-wider">Ganhos</p></div>
+                            {/* CORREÇÃO: Valor Total */}
+                            <div className="text-right"><h3 className="text-3xl font-black text-slate-900">R$ {Number(ride?.price).toFixed(2)}</h3><p className="text-gray-400 text-xs uppercase font-bold tracking-wider">Valor</p></div>
                         </div>
 
                         <div className="flex flex-col gap-3">
-                             {/* BOTÃO DE CHAT EMBUTIDO */}
                              <div 
                                 className="bg-gray-100 hover:bg-gray-200 p-3 rounded-2xl flex items-center gap-3 cursor-pointer transition-colors"
                                 onClick={() => setShowChat(true)}
@@ -334,7 +326,7 @@ const DriverDashboard = () => {
             </div>
          )}
 
-         {/* --- VIEW: HISTÓRICO --- */}
+         {/* --- VIEW: HISTÓRICO (Com Valor Total) --- */}
          {activeTab === 'history' && (
             <div className={`w-full max-w-md h-[65vh] ${cardBaseClasses} flex flex-col pointer-events-auto`}>
                  <h2 className="text-2xl font-black text-slate-900 mb-6 flex items-center gap-2">
@@ -351,7 +343,7 @@ const DriverDashboard = () => {
                                         <p className="text-xs text-gray-500">{formatDate(item.created_at).day} • {formatDate(item.created_at).time}</p>
                                     </div>
                                 </div>
-                                <span className="font-black text-green-700">R$ {Number(item.driver_earnings).toFixed(2)}</span>
+                                <span className="font-black text-green-700">R$ {Number(item.price).toFixed(2)}</span>
                              </div>
                              <p className="text-xs text-gray-500 truncate mt-1">{item.destination_address}</p>
                          </div>
@@ -360,7 +352,7 @@ const DriverDashboard = () => {
             </div>
          )}
 
-         {/* --- VIEW: CARTEIRA --- */}
+         {/* ... (Wallet Tab mantida) ... */}
          {activeTab === 'wallet' && (
              <div className="w-full max-w-md pointer-events-auto animate-in slide-in-from-bottom">
                  <Card className="bg-black text-white border-0 shadow-2xl rounded-[32px] mb-4 overflow-hidden relative">
@@ -395,12 +387,13 @@ const DriverDashboard = () => {
 
       </div>
 
+      {/* ... (Dialogs de Carro e Cancel mantidos) ... */}
       <Dialog open={showCarForm} onOpenChange={(open) => !open && (!driverProfile?.car_model ? setShowCarForm(true) : setShowCarForm(false))}>
           <DialogContent className="sm:max-w-md bg-white rounded-3xl border-0"><DialogHeader><DialogTitle>Cadastro do Veículo</DialogTitle><DialogDescription>Dados obrigatórios para rodar.</DialogDescription></DialogHeader><div className="grid gap-4 py-4"><div className="grid gap-2"><Label>Modelo</Label><Input value={carData.model} onChange={e => setCarData({...carData, model: e.target.value})} className="rounded-xl" /></div><div className="grid gap-2"><Label>Placa</Label><Input value={carData.plate} onChange={e => setCarData({...carData, plate: e.target.value.toUpperCase()})} className="rounded-xl" /></div><div className="grid grid-cols-2 gap-4"><div className="grid gap-2"><Label>Ano</Label><Input value={carData.year} type="number" onChange={e => setCarData({...carData, year: e.target.value})} className="rounded-xl" /></div><div className="grid gap-2"><Label>Cor</Label><Input value={carData.color} onChange={e => setCarData({...carData, color: e.target.value})} className="rounded-xl" /></div></div></div><DialogFooter><Button onClick={handleSaveCar} className="w-full bg-black rounded-xl h-12 font-bold">Salvar Veículo</Button></DialogFooter></DialogContent>
       </Dialog>
 
       <AlertDialog open={showCancelAlert} onOpenChange={setShowCancelAlert}>
-          <AlertDialogContent className="rounded-3xl bg-white border-0"><AlertDialogHeader><AlertDialogTitle className="flex items-center gap-2 text-red-600"><AlertTriangle /> Cancelar Corrida?</AlertDialogTitle><AlertDialogDescription>Esta ação prejudica sua taxa de aceitação.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel className="rounded-xl h-12">Voltar</AlertDialogCancel><AlertDialogAction onClick={confirmCancel} className="bg-red-600 hover:bg-red-700 rounded-xl h-12 font-bold">Confirmar</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+          <AlertDialogContent className="rounded-3xl bg-white border-0"><AlertDialogHeader><AlertDialogTitle className="flex items-center gap-2 text-red-600"><AlertTriangle /> Cancelar Corrida?</AlertDialogTitle><AlertDialogDescription>Esta ação prejudica sua taxa de aceitação.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel className="rounded-xl h-12">Voltar</AlertDialogCancel><AlertDialogAction onClick={confirmCancel} className="bg-red-600 hover:bg-red-700 rounded-xl h-12 font-bold text-white">Confirmar</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
       </AlertDialog>
 
       {/* MODAL DETALHES DA CORRIDA (HISTÓRICO) */}
@@ -428,10 +421,9 @@ const DriverDashboard = () => {
                        </div>
                   </div>
 
-                  {/* Valores */}
+                  {/* Valores (Atualizado) */}
                   <div className="bg-slate-900 text-white p-6 rounded-2xl flex items-center justify-between">
-                       <div><p className="text-gray-400 text-xs font-bold uppercase">Seu Ganho</p><h3 className="text-3xl font-black">R$ {Number(selectedHistoryItem?.driver_earnings).toFixed(2)}</h3></div>
-                       <div className="text-right"><p className="text-gray-400 text-xs font-bold uppercase">Taxa App</p><p className="font-bold">R$ {Number(selectedHistoryItem?.platform_fee).toFixed(2)}</p></div>
+                       <div><p className="text-gray-400 text-xs font-bold uppercase">Valor Total</p><h3 className="text-3xl font-black">R$ {Number(selectedHistoryItem?.price).toFixed(2)}</h3></div>
                   </div>
                   
                   {/* Infos Extras */}
@@ -454,7 +446,7 @@ const DriverDashboard = () => {
 
               <div className="w-full max-w-sm bg-gradient-to-b from-green-50 to-white rounded-3xl p-8 mb-8 border border-green-100 shadow-xl">
                   <div className="text-center border-b border-dashed border-green-200 pb-6 mb-6">
-                      <p className="text-sm font-bold text-green-700 uppercase tracking-widest mb-2">Seu Ganho Líquido</p>
+                      <p className="text-sm font-bold text-green-700 uppercase tracking-widest mb-2">Valor da Corrida</p>
                       <h2 className="text-6xl font-black text-slate-900 tracking-tighter">R$ {finishedRideData.earned.toFixed(2)}</h2>
                   </div>
               </div>
@@ -468,12 +460,11 @@ const DriverDashboard = () => {
                           </button>
                       ))}
                   </div>
-                  <Button className="w-full h-14 text-lg font-bold bg-slate-900 hover:bg-slate-800 rounded-2xl" onClick={() => handleSubmitRating(rating || 5)}>Receber Nova Corrida</Button>
+                  <Button className="w-full h-14 text-lg font-bold bg-slate-900 hover:bg-slate-800 rounded-2xl text-white" onClick={() => handleSubmitRating(rating || 5)}>Receber Nova Corrida</Button>
               </div>
           </div>
       )}
 
-      {/* CHAT FLUTUANTE */}
       {showChat && ride && ['ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(ride.status) && currentUserId && (
           <RideChat 
             rideId={ride.id} 
