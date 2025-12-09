@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useState } from "react";
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { Loader2 } from "lucide-react";
 
 interface Props {
   children: ReactNode;
@@ -9,82 +10,68 @@ interface Props {
 
 const ProtectedRoute = ({ children, allowedRoles }: Props) => {
   const [loading, setLoading] = useState(true);
-  const [authorized, setAuthorized] = useState(false);
-  const location = useLocation();
+  const [isAllowed, setIsAllowed] = useState(false);
 
   useEffect(() => {
     let mounted = true;
 
-    const checkAuth = async () => {
+    const checkSession = async () => {
       try {
+        // 1. Pega a sessão atual (recupera do localStorage se der F5)
         const { data: { session } } = await supabase.auth.getSession();
-        
-        if (!mounted) return;
-        
+
         if (!session) {
-          setAuthorized(false);
-          setLoading(false);
+          if (mounted) {
+            setIsAllowed(false);
+            setLoading(false);
+          }
           return;
         }
 
-        const { data, error } = await supabase.from('profiles')
+        // 2. Se tem sessão, verifica a Role no banco
+        const { data: profile, error } = await supabase
+          .from('profiles')
           .select('role')
           .eq('id', session.user.id)
-          .maybeSingle();
+          .single();
 
-        if (!mounted) return;
-
-        if (error) {
-          console.error('Erro ao buscar role:', error);
-          setAuthorized(false);
-        } else if (data && allowedRoles.includes(data.role)) {
-          setAuthorized(true);
+        if (error || !profile) {
+          console.error("Erro ao verificar permissão:", error);
+          if (mounted) setIsAllowed(false);
         } else {
-          setAuthorized(false);
+          // 3. Verifica se a role bate com o permitido
+          if (mounted) {
+             setIsAllowed(allowedRoles.includes(profile.role));
+          }
         }
-      } catch (error) {
-        console.error('Erro na verificação:', error);
-        if (mounted) setAuthorized(false);
+      } catch (err) {
+        console.error("Erro crítico na rota protegida:", err);
+        if (mounted) setIsAllowed(false);
       } finally {
         if (mounted) setLoading(false);
       }
     };
 
-    checkAuth();
-
-    // Listener para mudanças de autenticação
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('Auth event no ProtectedRoute:', event);
-      
-      // Só reage a eventos relevantes
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        checkAuth();
-      } else if (event === 'SIGNED_OUT') {
-        if (mounted) {
-          setAuthorized(false);
-          setLoading(false);
-        }
-      }
-    });
+    checkSession();
 
     return () => {
       mounted = false;
-      subscription.unsubscribe();
     };
-  }, [allowedRoles, location.pathname]);
+  }, [allowedRoles]);
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-950">
         <div className="text-center space-y-4">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-yellow-500 border-t-transparent mx-auto"></div>
-          <p className="text-white font-medium">Verificando acesso...</p>
+          <Loader2 className="animate-spin h-12 w-12 text-yellow-500 mx-auto" />
+          <p className="text-white font-medium text-sm animate-pulse">Verificando credenciais...</p>
         </div>
       </div>
     );
   }
 
-  return authorized ? <>{children}</> : <Navigate to="/" replace />;
+  // Se não for permitido, manda pra home (ou login) para quebrar o ciclo
+  return isAllowed ? <>{children}</> : <Navigate to="/" replace />;
 };
 
 export default ProtectedRoute;
