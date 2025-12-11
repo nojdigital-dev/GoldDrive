@@ -1,7 +1,7 @@
 import { ReactNode, useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Shield } from "lucide-react";
+import { Loader2, AlertTriangle, LogOut, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface Props {
@@ -17,55 +17,82 @@ const ProtectedRoute = ({ children, allowedRoles }: Props) => {
   useEffect(() => {
     let mounted = true;
 
-    const checkUser = async () => {
-        try {
-            const { data: { user } } = await supabase.auth.getUser();
-            
-            if (!user) {
-                if (mounted) setStatus('unauthenticated');
-                return;
-            }
+    const verifyAccess = async () => {
+      try {
+        // 1. Tenta pegar a sessão local
+        const { data: { session } } = await supabase.auth.getSession();
 
-            const { data: profile } = await supabase
-                .from('profiles')
-                .select('role')
-                .eq('id', user.id)
-                .maybeSingle();
-            
-            if (mounted) {
-                if (!profile) {
-                    setStatus('unauthorized');
-                } else if (!allowedRoles.includes(profile.role)) {
-                    setStatus('unauthorized');
-                } else {
-                    setStatus('authorized');
-                }
-            }
-        } catch (error) {
-            console.error("Auth check error:", error);
-            if (mounted) setStatus('unauthorized');
+        if (!session) {
+          if (mounted) setStatus('unauthenticated');
+          return;
         }
+
+        // 2. Valida usuário no servidor
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+        if (userError || !user) {
+          console.warn("Sessão inválida ou expirada no servidor.");
+          if (mounted) {
+             localStorage.clear();
+             setStatus('unauthenticated');
+          }
+          return;
+        }
+
+        // 3. Busca perfil
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (mounted) {
+          if (profileError || !profile) {
+            console.error('Erro ao buscar perfil:', profileError);
+            setStatus('unauthorized');
+          } else {
+            const hasAccess = allowedRoles.includes(profile.role);
+            setStatus(hasAccess ? 'authorized' : 'unauthorized');
+          }
+        }
+      } catch (error) {
+        console.error('Erro crítico na verificação:', error);
+        if (mounted) setStatus('unauthorized');
+      }
     };
 
-    checkUser();
+    verifyAccess();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-            checkUser();
-        } else if (event === 'SIGNED_OUT') {
-            if (mounted) setStatus('unauthenticated');
+    // Timeout reduzido para 5 segundos conforme solicitado
+    const timeout = setTimeout(() => {
+        if (mounted && status === 'loading') {
+            setStatus('unauthorized');
         }
-    });
+    }, 5000);
 
     return () => {
-        mounted = false;
-        subscription.unsubscribe();
+      mounted = false;
+      clearTimeout(timeout);
     };
   }, [allowedRoles]);
 
-  const handleForceLogout = async () => {
-      await supabase.auth.signOut();
-      window.location.href = '/login';
+  const handleForceLogout = () => {
+      // Fire and forget logout
+      try { supabase.auth.signOut(); } catch (e) { console.error(e); }
+
+      // Limpeza brutal e imediata
+      localStorage.clear();
+      sessionStorage.clear();
+      
+      // Redirecionamento inteligente baseado na permissão da rota
+      let redirectUrl = '/login';
+      if (allowedRoles.includes('admin')) {
+          redirectUrl = '/login/admin';
+      } else if (allowedRoles.includes('driver')) {
+          redirectUrl = '/login/driver';
+      }
+
+      window.location.replace(redirectUrl);
   };
 
   if (status === 'loading') {
@@ -80,35 +107,37 @@ const ProtectedRoute = ({ children, allowedRoles }: Props) => {
   }
 
   if (status === 'unauthenticated') {
+    // Redirecionamento inteligente também para casos não autenticados
     let redirectUrl = '/login';
     if (allowedRoles.includes('admin')) redirectUrl = '/login/admin';
     else if (allowedRoles.includes('driver')) redirectUrl = '/login/driver';
+    
     return <Navigate to={redirectUrl} replace />;
   }
 
   if (status === 'unauthorized') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 p-6 text-center animate-in fade-in">
-        <div className="w-24 h-24 bg-yellow-500 rounded-full flex items-center justify-center mb-6 shadow-[0_0_40px_rgba(234,179,8,0.3)]">
-            <Shield className="w-12 h-12 text-black" />
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 p-4 text-center animate-in fade-in">
+        <div className="w-24 h-24 bg-red-500/10 rounded-full flex items-center justify-center mb-6 ring-1 ring-red-500/20">
+            <AlertTriangle className="w-12 h-12 text-red-500" />
         </div>
-        <h1 className="text-3xl font-black text-white mb-3">Acesso Negado</h1>
-        <p className="text-gray-400 max-w-md mb-8 leading-relaxed text-sm">
+        <h1 className="text-3xl font-black text-white mb-2">Acesso Negado</h1>
+        <p className="text-gray-400 max-w-md mb-8 leading-relaxed">
             Não foi possível recuperar suas credenciais. Isso pode ocorrer por falha na conexão ou sessão expirada.
         </p>
-        <div className="flex flex-col sm:flex-row gap-4 w-full max-w-xs">
+        <div className="flex flex-col sm:flex-row gap-4 w-full max-w-sm">
             <Button 
                 onClick={() => window.location.reload()} 
-                className="flex-1 h-12 bg-white text-black hover:bg-gray-200 font-bold rounded-xl"
+                className="flex-1 h-14 bg-white text-black hover:bg-gray-200 font-bold rounded-2xl"
             >
-                Tentar Novamente
+                <RefreshCw className="mr-2 h-5 w-5" /> Tentar Novamente
             </Button>
             <Button 
                 variant="destructive"
                 onClick={handleForceLogout}
-                className="flex-1 h-12 rounded-xl font-bold bg-red-600 hover:bg-red-700 shadow-lg shadow-red-900/20"
+                className="flex-1 h-14 rounded-2xl font-bold bg-red-600 hover:bg-red-700 shadow-lg shadow-red-900/20"
             >
-                Sair Agora
+                <LogOut className="mr-2 h-5 w-5" /> Sair Agora
             </Button>
         </div>
       </div>

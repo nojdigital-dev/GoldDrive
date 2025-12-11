@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
-import { ArrowLeft, Loader2, Car, Camera, Mail, Lock, Phone, CreditCard, ChevronLeft, Eye, EyeOff, KeyRound, Ban, User, FileText } from "lucide-react";
+import { ArrowLeft, Loader2, ArrowRight, Car, Camera, ShieldCheck, Mail, Lock, Phone, CreditCard, ChevronLeft, Eye, EyeOff, KeyRound, Ban, User, FileText } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 
@@ -71,18 +71,6 @@ const LoginDriver = () => {
     else if (step === 2 && validateStep2()) setStep(3);
   };
 
-  const handleBack = () => {
-      if (isSignUp) {
-          if (step > 1) {
-              setStep(s => s - 1);
-          } else {
-              setIsSignUp(false);
-          }
-      } else {
-          navigate('/');
-      }
-  };
-
   const uploadFile = async (file: File, path: string) => {
     const fileName = `${path}-${Date.now()}.${file.name.split('.').pop()}`;
     const { error } = await supabase.storage.from('avatars').upload(`driver_docs/${fileName}`, file);
@@ -140,24 +128,17 @@ const LoginDriver = () => {
 
        {/* Lado Direito - Form */}
        <div className="w-full lg:w-1/2 flex flex-col bg-zinc-950 relative overflow-y-auto">
-           {/* Header Mobile - Fixado no topo e com z-index alto */}
-           <div className="p-6 flex items-center justify-between w-full fixed top-0 left-0 right-0 z-50 bg-transparent lg:absolute">
-               <Button 
-                    variant="ghost" 
-                    onClick={handleBack} 
-                    className="bg-white/10 hover:bg-white/20 text-white rounded-full w-12 h-12 p-0 shrink-0 cursor-pointer shadow-lg backdrop-blur-sm"
-                >
+           {/* Header Mobile */}
+           <div className="p-6 flex items-center lg:absolute lg:top-0 lg:left-0 lg:z-20 lg:w-full">
+               <Button variant="ghost" onClick={() => isSignUp && step > 1 ? setStep(s => s - 1) : isSignUp ? setIsSignUp(false) : navigate('/')} className="hover:bg-zinc-800 text-white rounded-full w-12 h-12 p-0 shrink-0">
                    {isSignUp && step > 1 ? <ChevronLeft className="w-6 h-6" /> : <ArrowLeft className="w-6 h-6" />}
                </Button>
                
-               {/* Logo Mobile Header */}
-               <img src="/logo-goldmobile-2.png" alt="Gold" className="h-8 lg:hidden drop-shadow-md" />
-               
-               {/* Espaçador para equilibrar no mobile */}
-               <div className="w-12 lg:hidden"></div>
+               {/* Logo Mobile Header (Fora do Card) */}
+               <img src="/logo-goldmobile-2.png" alt="Gold" className="h-8 ml-4 lg:hidden" />
            </div>
 
-           <div className="flex-1 flex flex-col justify-center px-6 sm:px-12 md:px-24 py-24 relative z-10">
+           <div className="flex-1 flex flex-col justify-center px-6 sm:px-12 md:px-24 py-10">
                <div className="bg-white rounded-[40px] p-8 shadow-2xl animate-in slide-in-from-bottom-8 duration-700 relative overflow-hidden">
                    <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-yellow-500 via-zinc-800 to-black" />
                    
@@ -171,12 +152,11 @@ const LoginDriver = () => {
                            <form onSubmit={handleLogin} className="space-y-5">
                                <div className="relative group">
                                    <Mail className="absolute left-4 top-4 w-5 h-5 text-gray-400 group-focus-within:text-yellow-600 transition-colors" />
-                                   <Input type="email" placeholder="Email cadastrado" className="h-14 pl-12 bg-gray-50 border-gray-200 text-base rounded-2xl focus:ring-2 focus:ring-yellow-500/20 focus:border-yellow-500 transition-all text-black" value={form.email} onChange={e => handleChange('email', e.target.value)} />
+                                   <Input type="email" placeholder="Email cadastrado" className="h-14 pl-12 bg-gray-50 border-gray-200 text-base rounded-2xl focus:ring-2 focus:ring-yellow-500/20 focus:border-yellow-500 transition-all text-slate-900" value={form.email} onChange={e => handleChange('email', e.target.value)} />
                                </div>
                                <div className="relative group">
                                    <Lock className="absolute left-4 top-4 w-5 h-5 text-gray-400 group-focus-within:text-yellow-600 transition-colors" />
-                                   <Input type={showPassword ? "text" : "password"} placeholder="Sua senha" className="h-14 pl-12 pr-12 bg-gray-50 border-gray-200 text-base rounded-2xl focus:ring-2 focus:ring-yellow-500/20 focus:border-yellow-500 transition-all text-black" value={form.password} onChange={e => handleChange('password', e.target.value)} />
-                                   <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-4 text-gray-400 hover:text-gray-600"><Eye className="w-5 h-5" /></button>
+                                   <Input type={showPassword ? "text" : "password"} placeholder="Sua senha" className="h-14 pl-12 pr-12 bg-gray-50 border-gray-200 text-base rounded-2xl focus:ring-2 focus:ring-yellow-500/20 focus:border-yellow-500 transition-all text-slate-900" value={form.password} onChange={e => handleChange('password', e.target.value)} /><button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-4 text-gray-400 hover:text-gray-600"><Eye className="w-5 h-5" /></button>
                                </div>
                                <Button className="w-full h-14 text-lg font-bold rounded-2xl bg-slate-900 hover:bg-black text-white shadow-xl mt-4" disabled={loading}>{loading ? <Loader2 className="animate-spin" /> : "Acessar Painel"}</Button>
                            </form>
@@ -216,17 +196,17 @@ const LoginDriver = () => {
                            {step === 1 && (
                                <div className="space-y-4 animate-in fade-in slide-in-from-right duration-300">
                                    <div className="grid grid-cols-2 gap-4">
-                                       <Input placeholder="Nome" className="h-14 bg-gray-50 border-gray-200 rounded-2xl text-black" value={form.firstName} onChange={e => handleChange('firstName', e.target.value)} />
-                                       <Input placeholder="Sobrenome" className="h-14 bg-gray-50 border-gray-200 rounded-2xl text-black" value={form.lastName} onChange={e => handleChange('lastName', e.target.value)} />
+                                       <Input placeholder="Nome" className="h-14 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.firstName} onChange={e => handleChange('firstName', e.target.value)} />
+                                       <Input placeholder="Sobrenome" className="h-14 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.lastName} onChange={e => handleChange('lastName', e.target.value)} />
                                    </div>
                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                       <div className="relative group"><CreditCard className="absolute left-4 top-4 w-5 h-5 text-gray-400"/><Input placeholder="CPF" className="h-14 pl-12 bg-gray-50 border-gray-200 rounded-2xl font-mono text-black" value={form.cpf} onChange={e => handleChange('cpf', e.target.value)} /></div>
-                                       <div className="relative group"><Phone className="absolute left-4 top-4 w-5 h-5 text-gray-400"/><Input placeholder="WhatsApp" className="h-14 pl-12 bg-gray-50 border-gray-200 rounded-2xl text-black" value={form.phone} onChange={e => handleChange('phone', e.target.value)} /></div>
+                                       <div className="relative group"><CreditCard className="absolute left-4 top-4 w-5 h-5 text-gray-400"/><Input placeholder="CPF" className="h-14 pl-12 bg-gray-50 border-gray-200 rounded-2xl font-mono text-slate-900" value={form.cpf} onChange={e => handleChange('cpf', e.target.value)} /></div>
+                                       <div className="relative group"><Phone className="absolute left-4 top-4 w-5 h-5 text-gray-400"/><Input placeholder="WhatsApp" className="h-14 pl-12 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.phone} onChange={e => handleChange('phone', e.target.value)} /></div>
                                    </div>
-                                   <div className="space-y-1"><div className="relative"><Mail className="absolute left-4 top-4 w-5 h-5 text-gray-400"/><Input placeholder="Email" className="h-14 pl-12 bg-gray-50 border-gray-200 rounded-2xl text-black" value={form.email} onChange={e => handleChange('email', e.target.value)} /></div></div>
+                                   <div className="space-y-1"><div className="relative"><Mail className="absolute left-4 top-4 w-5 h-5 text-gray-400"/><Input placeholder="Email" className="h-14 pl-12 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.email} onChange={e => handleChange('email', e.target.value)} /></div></div>
                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                       <div className="relative"><Lock className="absolute left-4 top-4 w-5 h-5 text-gray-400"/><Input type={showPassword ? "text" : "password"} placeholder="Senha" className="h-14 pl-12 pr-10 bg-gray-50 border-gray-200 rounded-2xl text-black" value={form.password} onChange={e => handleChange('password', e.target.value)} /><button onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-4 text-gray-400"><Eye className="w-5 h-5"/></button></div>
-                                       <div className="relative"><KeyRound className="absolute left-4 top-4 w-5 h-5 text-gray-400"/><Input type={showConfirmPassword ? "text" : "password"} placeholder="Confirmar" className="h-14 pl-12 pr-10 bg-gray-50 border-gray-200 rounded-2xl text-black" value={form.confirmPassword} onChange={e => handleChange('confirmPassword', e.target.value)} /><button onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-4 text-gray-400"><Eye className="w-5 h-5"/></button></div>
+                                       <div className="relative"><Lock className="absolute left-4 top-4 w-5 h-5 text-gray-400"/><Input type={showPassword ? "text" : "password"} placeholder="Senha" className="h-14 pl-12 pr-10 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.password} onChange={e => handleChange('password', e.target.value)} /><button onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-4 text-gray-400"><Eye className="w-5 h-5"/></button></div>
+                                       <div className="relative"><KeyRound className="absolute left-4 top-4 w-5 h-5 text-gray-400"/><Input type={showConfirmPassword ? "text" : "password"} placeholder="Confirmar" className="h-14 pl-12 pr-10 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.confirmPassword} onChange={e => handleChange('confirmPassword', e.target.value)} /><button onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-4 text-gray-400"><Eye className="w-5 h-5"/></button></div>
                                    </div>
                                    <Button onClick={() => validateStep1() && setStep(2)} className="w-full h-14 bg-black text-white hover:bg-zinc-800 rounded-2xl mt-4">Continuar</Button>
                                </div>
@@ -246,12 +226,12 @@ const LoginDriver = () => {
                            {step === 3 && (
                                <div className="space-y-4 animate-in fade-in slide-in-from-right duration-300">
                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                       <Input placeholder="Modelo (ex: Civic)" className="h-14 bg-gray-50 border-gray-200 rounded-2xl text-black" value={form.carModel} onChange={e => handleChange('carModel', e.target.value)} />
-                                       <Input placeholder="Placa" className="h-14 bg-gray-50 border-gray-200 rounded-2xl uppercase text-black" value={form.carPlate} onChange={e => handleChange('carPlate', e.target.value.toUpperCase())} maxLength={7} />
+                                       <Input placeholder="Modelo (ex: Civic)" className="h-14 bg-gray-50 border-gray-200 rounded-2xl" value={form.carModel} onChange={e => handleChange('carModel', e.target.value)} />
+                                       <Input placeholder="Placa" className="h-14 bg-gray-50 border-gray-200 rounded-2xl uppercase" value={form.carPlate} onChange={e => handleChange('carPlate', e.target.value.toUpperCase())} maxLength={7} />
                                    </div>
                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                       <Input type="number" placeholder="Ano" className="h-14 bg-gray-50 border-gray-200 rounded-2xl text-black" value={form.carYear} onChange={e => handleChange('carYear', e.target.value)} />
-                                       <Input placeholder="Cor" className="h-14 bg-gray-50 border-gray-200 rounded-2xl text-black" value={form.carColor} onChange={e => handleChange('carColor', e.target.value)} />
+                                       <Input type="number" placeholder="Ano" className="h-14 bg-gray-50 border-gray-200 rounded-2xl" value={form.carYear} onChange={e => handleChange('carYear', e.target.value)} />
+                                       <Input placeholder="Cor" className="h-14 bg-gray-50 border-gray-200 rounded-2xl" value={form.carColor} onChange={e => handleChange('carColor', e.target.value)} />
                                    </div>
                                    <Button onClick={handleSignUp} disabled={loading} className="w-full h-14 bg-yellow-500 hover:bg-yellow-400 text-black font-black rounded-2xl mt-6 shadow-xl">{loading ? <Loader2 className="animate-spin"/> : "FINALIZAR CADASTRO"}</Button>
                                </div>

@@ -11,39 +11,29 @@ const LoginAdmin = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
-  const [accessDenied, setAccessDenied] = useState(false);
-  
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
-    // Adiciona delay de 5 segundos para a verificação inicial
-    const timeout = setTimeout(() => {
-        const checkExistingSession = async () => {
-            try {
-                const { data: { session } } = await supabase.auth.getSession();
-                if (session) {
-                    const { data } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
-                    if (data?.role === 'admin') {
-                        // Usuário já é admin, redirecionar direto
-                        navigate('/admin', { replace: true });
-                        return;
-                    } else {
-                        // Logado mas não é admin
-                        setAccessDenied(true);
-                    }
-                }
-            } catch (e) {
-                console.error("Erro check session admin:", e);
-            } finally {
-                setCheckingSession(false);
+    const checkExistingSession = async () => {
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                 const { data } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+                 if (data?.role === 'admin') {
+                     // Usuário já é admin, redirecionar direto
+                     navigate('/admin', { replace: true });
+                     return;
+                 }
             }
-        };
-        checkExistingSession();
-    }, 5000); 
-
-    return () => clearTimeout(timeout);
+        } catch (e) {
+            console.error("Erro check session admin:", e);
+        } finally {
+            setCheckingSession(false);
+        }
+    };
+    checkExistingSession();
   }, [navigate]);
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -58,7 +48,7 @@ const LoginAdmin = () => {
         if(user) {
             const { data } = await supabase.from('profiles').select('role').eq('id', user.id).single();
             if(data?.role !== 'admin') {
-                setAccessDenied(true);
+                await supabase.auth.signOut();
                 throw new Error("Acesso negado: Este usuário não é um administrador.");
             }
             navigate('/admin', { replace: true });
@@ -69,46 +59,12 @@ const LoginAdmin = () => {
     }
   };
 
-  const handleForceLogout = async () => {
-      await supabase.auth.signOut();
-      window.location.reload();
-  };
-
   if (checkingSession) {
       return (
         <div className="min-h-screen bg-slate-950 flex items-center justify-center">
             <Loader2 className="w-8 h-8 text-yellow-500 animate-spin" />
         </div>
       );
-  }
-
-  if (accessDenied) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 p-6 text-center animate-in fade-in">
-        <div className="w-24 h-24 bg-yellow-500 rounded-full flex items-center justify-center mb-6 shadow-[0_0_40px_rgba(234,179,8,0.3)]">
-            <Shield className="w-12 h-12 text-black" />
-        </div>
-        <h1 className="text-3xl font-black text-white mb-3">Acesso Negado</h1>
-        <p className="text-gray-400 max-w-md mb-8 leading-relaxed text-sm">
-            Não foi possível recuperar suas credenciais. Isso pode ocorrer por falha na conexão ou sessão expirada.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-4 w-full max-w-xs">
-            <Button 
-                onClick={() => window.location.reload()} 
-                className="flex-1 h-12 bg-white text-black hover:bg-gray-200 font-bold rounded-xl"
-            >
-                Tentar Novamente
-            </Button>
-            <Button 
-                variant="destructive"
-                onClick={handleForceLogout}
-                className="flex-1 h-12 rounded-xl font-bold bg-red-600 hover:bg-red-700 shadow-lg shadow-red-900/20"
-            >
-                Sair Agora
-            </Button>
-        </div>
-      </div>
-    );
   }
 
   return (
