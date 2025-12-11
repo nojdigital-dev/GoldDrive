@@ -160,8 +160,7 @@ const LoginDriver = () => {
                                <Button className="w-full h-14 text-lg font-bold rounded-2xl bg-slate-900 hover:bg-black text-white shadow-xl mt-4" disabled={loading}>{loading ? <Loader2 className="animate-spin" /> : "Acessar Painel"}</Button>
                            </form>
                            
-                           {/* DESTAQUE DE CADASTRO */}
-                            <div className="mt-8 bg-yellow-50 border border-yellow-200 rounded-3xl p-6 text-center space-y-3">
+                           <div className="mt-8 bg-yellow-50 border border-yellow-200 rounded-3xl p-6 text-center space-y-3">
                                 <p className="text-slate-800 font-bold text-sm">
                                     Ainda não tem conta? <br/>
                                     <span className="font-normal text-slate-600">Clique no botão abaixo e crie em menos de 1 minuto.</span>
@@ -172,7 +171,7 @@ const LoginDriver = () => {
                             </div>
                        </div>
                    ) : (
-                       <div className="flex flex-col h-full animate-in slide-in-from-right fade-in duration-300">
+                       <div className="animate-in slide-in-from-right fade-in duration-300">
                            {/* STEPPER VISUAL */}
                            <div className="flex items-center justify-between px-6 mb-8 relative">
                                <div className="absolute left-0 right-0 top-1/2 h-1 bg-gray-100 -z-10 mx-10"></div>

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
-import { ArrowLeft, Loader2, ArrowRight, User, Lock, Mail, Eye, EyeOff, Camera, ShieldCheck, ChevronLeft, KeyRound, Check } from "lucide-react";
+import { ArrowLeft, Loader2, ArrowRight, User, Lock, Mail, Eye, EyeOff, Camera, ShieldCheck, ChevronLeft, KeyRound } from "lucide-react";
 
 const LoginClient = () => {
   const navigate = useNavigate();
