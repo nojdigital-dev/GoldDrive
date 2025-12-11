@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
-import { ArrowLeft, Loader2, ArrowRight, Car, Camera, ShieldCheck, Mail, Lock, Phone, CreditCard, ChevronLeft, Eye, EyeOff, KeyRound, Ban, User } from "lucide-react";
+import { ArrowLeft, Loader2, ArrowRight, Car, Camera, ShieldCheck, Mail, Lock, Phone, CreditCard, ChevronLeft, Eye, EyeOff, KeyRound, Ban, User, FileText } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 
@@ -56,14 +56,19 @@ const LoginDriver = () => {
   };
 
   const validateStep1 = () => {
-    if (!form.firstName || !form.lastName || !form.email || !form.password || !form.cpf || !form.phone || !form.confirmPassword) return showError("Preencha todos os campos.");
-    if (form.password.length < 6) return showError("Senha curta.");
-    if (form.password !== form.confirmPassword) return showError("Senhas não coincidem.");
+    if (!form.firstName || !form.lastName || !form.email || !form.password || !form.cpf || !form.phone || !form.confirmPassword) { showError("Preencha todos os campos."); return false; }
+    if (form.password.length < 6) { showError("Senha curta."); return false; }
+    if (form.password !== form.confirmPassword) { showError("Senhas não coincidem."); return false; }
     return true;
   };
   const validateStep2 = () => {
-    if (!form.facePhoto || !form.cnhFront || !form.cnhBack) return showError("Envie todas as fotos.");
+    if (!form.facePhoto || !form.cnhFront || !form.cnhBack) { showError("Envie todas as fotos."); return false; }
     return true;
+  };
+
+  const nextStep = () => {
+    if (step === 1 && validateStep1()) setStep(2);
+    else if (step === 2 && validateStep2()) setStep(3);
   };
 
   const uploadFile = async (file: File, path: string) => {
@@ -85,7 +90,7 @@ const LoginDriver = () => {
   };
 
   const handleSignUp = async () => {
-    if (!form.carModel || !form.carPlate || !form.carYear || !form.carColor) return showError("Preencha o veículo.");
+    if (!form.carModel || !form.carPlate || !form.carYear || !form.carColor) { showError("Preencha o veículo."); return; }
     setLoading(true);
     try {
       const { data: auth, error } = await supabase.auth.signUp({ email: form.email, password: form.password, options: { data: { role: 'driver', first_name: form.firstName, last_name: form.lastName } } });
@@ -142,46 +147,62 @@ const LoginDriver = () => {
                    </div>
 
                    {!isSignUp ? (
-                       <div className="space-y-6">
-                           <form onSubmit={handleLogin} className="space-y-4">
-                               <div className="space-y-1">
-                                    <label className="text-xs font-bold text-slate-500 uppercase ml-3">Email</label>
-                                    <div className="relative group">
-                                        <Mail className="absolute left-4 top-4 w-5 h-5 text-gray-400 group-focus-within:text-black transition-colors" />
-                                        <Input type="email" placeholder="seu@email.com" className="h-14 pl-12 bg-gray-50 border-gray-200 rounded-2xl focus:border-black focus:ring-0 text-slate-900 font-medium" value={form.email} onChange={e => handleChange('email', e.target.value)} />
-                                    </div>
+                       <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                           <form onSubmit={handleLogin} className="space-y-5">
+                               <div className="relative group">
+                                   <Mail className="absolute left-4 top-4 w-5 h-5 text-gray-400 group-focus-within:text-yellow-600 transition-colors" />
+                                   <Input type="email" placeholder="Email cadastrado" className="h-14 pl-12 bg-gray-50 border-gray-200 text-base rounded-2xl focus:ring-2 focus:ring-yellow-500/20 focus:border-yellow-500 transition-all text-slate-900" value={form.email} onChange={e => handleChange('email', e.target.value)} />
                                </div>
-                               <div className="space-y-1">
-                                    <label className="text-xs font-bold text-slate-500 uppercase ml-3">Senha</label>
-                                    <div className="relative group">
-                                        <Lock className="absolute left-4 top-4 w-5 h-5 text-gray-400 group-focus-within:text-black transition-colors" />
-                                        <Input type={showPassword ? "text" : "password"} placeholder="******" className="h-14 pl-12 pr-12 bg-gray-50 border-gray-200 rounded-2xl focus:border-black focus:ring-0 text-slate-900 font-medium" value={form.password} onChange={e => handleChange('password', e.target.value)} />
-                                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-4 text-gray-400 hover:text-black"><Eye className="w-5 h-5" /></button>
-                                    </div>
+                               <div className="relative group">
+                                   <Lock className="absolute left-4 top-4 w-5 h-5 text-gray-400 group-focus-within:text-yellow-600 transition-colors" />
+                                   <Input type={showPassword ? "text" : "password"} placeholder="Sua senha" className="h-14 pl-12 pr-12 bg-gray-50 border-gray-200 text-base rounded-2xl focus:ring-2 focus:ring-yellow-500/20 focus:border-yellow-500 transition-all text-slate-900" value={form.password} onChange={e => handleChange('password', e.target.value)} /><button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-4 text-gray-400 hover:text-gray-600"><Eye className="w-5 h-5" /></button>
                                </div>
-                               <Button className="w-full h-14 text-lg font-bold rounded-2xl bg-black text-white hover:bg-zinc-800 mt-4 shadow-xl" disabled={loading}>{loading ? <Loader2 className="animate-spin" /> : "Acessar Painel"}</Button>
+                               <Button className="w-full h-14 text-lg font-bold rounded-2xl bg-slate-900 hover:bg-black text-white shadow-xl mt-4" disabled={loading}>{loading ? <Loader2 className="animate-spin" /> : "Acessar Painel"}</Button>
                            </form>
                            
-                           <div className="relative py-4"><div className="absolute inset-0 flex items-center"><span className="w-full border-t border-gray-100" /></div><div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-2 text-gray-400 font-bold">Ou</span></div></div>
-                           <Button onClick={() => { setIsSignUp(true); setStep(1); }} className="w-full h-14 bg-yellow-500 hover:bg-yellow-400 text-black font-black rounded-2xl shadow-lg shadow-yellow-500/20 text-base border-2 border-transparent hover:border-black/10 transition-all">QUERO SER MOTORISTA</Button>
+                           {/* DESTAQUE DE CADASTRO */}
+                            <div className="mt-8 bg-yellow-50 border border-yellow-200 rounded-3xl p-6 text-center space-y-3">
+                                <p className="text-slate-800 font-bold text-sm">
+                                    Ainda não tem conta? <br/>
+                                    <span className="font-normal text-slate-600">Clique no botão abaixo e crie em menos de 1 minuto.</span>
+                                </p>
+                                <Button onClick={() => { setIsSignUp(true); setStep(1); }} className="w-full h-12 bg-yellow-500 hover:bg-yellow-400 text-black font-black rounded-xl shadow-lg shadow-yellow-500/20 text-base uppercase tracking-wide">
+                                    QUERO SER MOTORISTA
+                                </Button>
+                            </div>
                        </div>
                    ) : (
-                       <div className="animate-in slide-in-from-right fade-in duration-300">
-                           <div className="flex items-center gap-2 mb-8 bg-gray-50 p-1.5 rounded-xl">
-                               {[1, 2, 3].map(i => (<div key={i} className={`flex-1 py-2 rounded-lg text-center text-xs font-bold transition-all ${step === i ? 'bg-black text-white shadow-md' : 'text-gray-400'}`}>{i === 1 ? 'Dados' : i === 2 ? 'Docs' : 'Veículo'}</div>))}
+                       <div className="flex flex-col h-full animate-in slide-in-from-right fade-in duration-300">
+                           {/* STEPPER VISUAL */}
+                           <div className="flex items-center justify-between px-6 mb-8 relative">
+                               <div className="absolute left-0 right-0 top-1/2 h-1 bg-gray-100 -z-10 mx-10"></div>
+                               <div className={`absolute left-0 top-1/2 h-1 bg-yellow-500 -z-10 mx-10 transition-all duration-500 ${step === 1 ? 'w-[0%]' : step === 2 ? 'w-[50%]' : 'w-[100%]'}`}></div>
+
+                               {[
+                                   { num: 1, label: 'Dados', icon: User },
+                                   { num: 2, label: 'Docs', icon: FileText },
+                                   { num: 3, label: 'Veículo', icon: Car }
+                               ].map((s) => (
+                                   <div key={s.num} className="flex flex-col items-center gap-1 bg-white px-2">
+                                       <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all duration-300 ${step >= s.num ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/30 scale-110' : 'bg-gray-200 text-gray-500'}`}>
+                                           {s.num}
+                                       </div>
+                                       <span className={`text-[10px] font-bold uppercase ${step >= s.num ? 'text-black' : 'text-gray-400'}`}>{s.label}</span>
+                                   </div>
+                               ))}
                            </div>
 
                            {step === 1 && (
-                               <div className="space-y-4">
-                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                       <div className="space-y-1"><Label className="text-xs font-bold text-slate-500 uppercase ml-2">Nome</Label><Input className="h-14 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.firstName} onChange={e => handleChange('firstName', e.target.value)} /></div>
-                                       <div className="space-y-1"><Label className="text-xs font-bold text-slate-500 uppercase ml-2">Sobrenome</Label><Input className="h-14 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.lastName} onChange={e => handleChange('lastName', e.target.value)} /></div>
+                               <div className="space-y-4 animate-in fade-in slide-in-from-right duration-300">
+                                   <div className="grid grid-cols-2 gap-4">
+                                       <Input placeholder="Nome" className="h-14 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.firstName} onChange={e => handleChange('firstName', e.target.value)} />
+                                       <Input placeholder="Sobrenome" className="h-14 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.lastName} onChange={e => handleChange('lastName', e.target.value)} />
                                    </div>
                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                        <div className="relative group"><CreditCard className="absolute left-4 top-4 w-5 h-5 text-gray-400"/><Input placeholder="CPF" className="h-14 pl-12 bg-gray-50 border-gray-200 rounded-2xl font-mono text-slate-900" value={form.cpf} onChange={e => handleChange('cpf', e.target.value)} /></div>
                                        <div className="relative group"><Phone className="absolute left-4 top-4 w-5 h-5 text-gray-400"/><Input placeholder="WhatsApp" className="h-14 pl-12 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.phone} onChange={e => handleChange('phone', e.target.value)} /></div>
                                    </div>
-                                   <div className="space-y-1"><Label className="text-xs font-bold text-slate-500 uppercase ml-2">Login</Label><div className="relative"><Mail className="absolute left-4 top-4 w-5 h-5 text-gray-400"/><Input placeholder="Email" className="h-14 pl-12 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.email} onChange={e => handleChange('email', e.target.value)} /></div></div>
+                                   <div className="space-y-1"><div className="relative"><Mail className="absolute left-4 top-4 w-5 h-5 text-gray-400"/><Input placeholder="Email" className="h-14 pl-12 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.email} onChange={e => handleChange('email', e.target.value)} /></div></div>
                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                        <div className="relative"><Lock className="absolute left-4 top-4 w-5 h-5 text-gray-400"/><Input type={showPassword ? "text" : "password"} placeholder="Senha" className="h-14 pl-12 pr-10 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.password} onChange={e => handleChange('password', e.target.value)} /><button onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-4 text-gray-400"><Eye className="w-5 h-5"/></button></div>
                                        <div className="relative"><KeyRound className="absolute left-4 top-4 w-5 h-5 text-gray-400"/><Input type={showConfirmPassword ? "text" : "password"} placeholder="Confirmar" className="h-14 pl-12 pr-10 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.confirmPassword} onChange={e => handleChange('confirmPassword', e.target.value)} /><button onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-4 text-gray-400"><Eye className="w-5 h-5"/></button></div>
@@ -191,7 +212,7 @@ const LoginDriver = () => {
                            )}
 
                            {step === 2 && (
-                               <div className="space-y-4">
+                               <div className="space-y-4 animate-in fade-in slide-in-from-right duration-300">
                                    <UploadBox label="Sua Foto (Selfie)" field="facePhoto" preview={previews.face} />
                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                        <UploadBox label="CNH Frente" field="cnhFront" preview={previews.cnhFront} />
@@ -202,7 +223,7 @@ const LoginDriver = () => {
                            )}
 
                            {step === 3 && (
-                               <div className="space-y-4">
+                               <div className="space-y-4 animate-in fade-in slide-in-from-right duration-300">
                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                        <Input placeholder="Modelo (ex: Civic)" className="h-14 bg-gray-50 border-gray-200 rounded-2xl" value={form.carModel} onChange={e => handleChange('carModel', e.target.value)} />
                                        <Input placeholder="Placa" className="h-14 bg-gray-50 border-gray-200 rounded-2xl uppercase" value={form.carPlate} onChange={e => handleChange('carPlate', e.target.value.toUpperCase())} maxLength={7} />
@@ -217,7 +238,7 @@ const LoginDriver = () => {
                        </div>
                    )}
                </div>
-               <p className="text-center text-xs text-zinc-500 mt-8 font-medium">Gold Mobile Driver &copy; 2024</p>
+               <p className="text-center text-xs text-zinc-500 mt-8 font-medium">Gold Mobile Driver &copy; 2025</p>
            </div>
        </div>
     </div>

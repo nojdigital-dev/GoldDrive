@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
-import { ArrowLeft, Loader2, ArrowRight, User, Lock, Mail, Eye, EyeOff, Camera, ShieldCheck, ChevronLeft, KeyRound } from "lucide-react";
+import { ArrowLeft, Loader2, ArrowRight, User, Lock, Mail, Eye, EyeOff, Camera, ShieldCheck, ChevronLeft, KeyRound, Check } from "lucide-react";
 
 const LoginClient = () => {
   const navigate = useNavigate();
@@ -135,12 +135,12 @@ const LoginClient = () => {
                    <div className="mb-8 text-center">
                        <img src="/logo-goldmobile-2.png" alt="Logo" className="h-10 mx-auto mb-6 hidden lg:block" />
                        <h2 className="text-3xl font-black text-slate-900">{isSignUp ? "Criar Conta" : "Login Passageiro"}</h2>
-                       <p className="text-gray-500 mt-2 text-sm">{isSignUp ? "Preencha seus dados para começar." : "Entre para solicitar sua corrida."}</p>
+                       <p className="text-gray-500 mt-2 text-sm">{isSignUp ? "Siga as etapas para começar." : "Entre para solicitar sua corrida."}</p>
                    </div>
 
                    {/* LOGIN FORM */}
                    {!isSignUp && (
-                       <div className="space-y-6">
+                       <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                             <form onSubmit={handleLogin} className="space-y-4">
                                 <div className="space-y-1">
                                     <label className="text-xs font-bold text-slate-500 uppercase ml-3">Email</label>
@@ -173,28 +173,47 @@ const LoginClient = () => {
                                 </Button>
                             </form>
 
-                            <div className="relative py-4">
-                                <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-gray-100" /></div>
-                                <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-2 text-gray-400 font-bold">Ou</span></div>
+                            {/* DESTAQUE DE CADASTRO */}
+                            <div className="mt-8 bg-yellow-50 border border-yellow-200 rounded-3xl p-6 text-center space-y-3">
+                                <p className="text-slate-800 font-bold text-sm">
+                                    Ainda não tem conta? <br/>
+                                    <span className="font-normal text-slate-600">Clique no botão abaixo e crie em menos de 1 minuto.</span>
+                                </p>
+                                <Button onClick={() => { setIsSignUp(true); setStep(1); }} className="w-full h-12 bg-yellow-500 hover:bg-yellow-400 text-black font-black rounded-xl shadow-lg shadow-yellow-500/20 text-base uppercase tracking-wide">
+                                    CRIAR CONTA GRÁTIS
+                                </Button>
                             </div>
-
-                            <Button onClick={() => { setIsSignUp(true); setStep(1); }} className="w-full h-14 bg-yellow-500 hover:bg-yellow-400 text-black font-black rounded-2xl shadow-lg shadow-yellow-500/20 text-base border-2 border-transparent hover:border-black/10 transition-all">
-                                CRIAR CONTA GRÁTIS
-                            </Button>
                        </div>
                    )}
 
                    {/* SIGNUP FLOW */}
                    {isSignUp && (
                        <div className="animate-in slide-in-from-right fade-in duration-300">
-                           {/* Stepper */}
-                           <div className="flex items-center gap-2 mb-8 bg-gray-50 p-1.5 rounded-xl">
-                               <div className={`flex-1 py-2 rounded-lg text-center text-xs font-bold transition-all ${step === 1 ? 'bg-black text-white shadow-md' : 'text-gray-400'}`}>1. Dados</div>
-                               <div className={`flex-1 py-2 rounded-lg text-center text-xs font-bold transition-all ${step === 2 ? 'bg-black text-white shadow-md' : 'text-gray-400'}`}>2. Foto</div>
+                           
+                           {/* Stepper Visual */}
+                           <div className="flex items-center justify-between px-8 mb-8 relative">
+                               {/* Linha de fundo */}
+                               <div className="absolute left-0 right-0 top-1/2 h-1 bg-gray-100 -z-10 mx-12"></div>
+                               {/* Progresso Ativo */}
+                               <div className={`absolute left-0 top-1/2 h-1 bg-yellow-500 -z-10 mx-12 transition-all duration-500 ${step === 2 ? 'right-0' : 'right-1/2'}`}></div>
+
+                               <div className="flex flex-col items-center gap-1">
+                                   <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all duration-300 ${step >= 1 ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/30 scale-110' : 'bg-gray-200 text-gray-500'}`}>
+                                       1
+                                   </div>
+                                   <span className={`text-[10px] font-bold uppercase ${step >= 1 ? 'text-black' : 'text-gray-400'}`}>Dados</span>
+                               </div>
+
+                               <div className="flex flex-col items-center gap-1">
+                                   <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all duration-300 ${step >= 2 ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/30 scale-110' : 'bg-gray-200 text-gray-500'}`}>
+                                       2
+                                   </div>
+                                   <span className={`text-[10px] font-bold uppercase ${step >= 2 ? 'text-black' : 'text-gray-400'}`}>Foto</span>
+                               </div>
                            </div>
 
                            {step === 1 && (
-                               <div className="space-y-4">
+                               <div className="space-y-4 animate-in fade-in slide-in-from-right duration-300">
                                    <div className="space-y-1">
                                         <label className="text-xs font-bold text-slate-500 uppercase ml-3">Nome Completo</label>
                                         <div className="relative group">
@@ -235,7 +254,7 @@ const LoginClient = () => {
                            )}
 
                            {step === 2 && (
-                               <div className="space-y-6 text-center animate-in fade-in">
+                               <div className="space-y-6 text-center animate-in fade-in slide-in-from-right duration-300">
                                    <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-2xl text-left flex gap-3">
                                        <ShieldCheck className="w-6 h-6 text-yellow-700 shrink-0" />
                                        <p className="text-sm text-yellow-800 font-medium">Para sua segurança e dos motoristas, precisamos de uma foto real do seu rosto.</p>
@@ -268,7 +287,7 @@ const LoginClient = () => {
                        </div>
                    )}
                </div>
-               <p className="text-center text-xs text-zinc-500 mt-8 font-medium">Gold Mobile &copy; 2024</p>
+               <p className="text-center text-xs text-zinc-500 mt-8 font-medium">Gold Mobile &copy; 2025</p>
            </div>
        </div>
     </div>
