@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
-import { ArrowLeft, Loader2, ArrowRight, User, Lock, Mail, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Loader2, ArrowRight, User, Lock, Mail, Eye, EyeOff, Camera, Plus } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const LoginClient = () => {
   const navigate = useNavigate();
@@ -14,18 +15,29 @@ const LoginClient = () => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [name, setName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  
+  // Estados para foto
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string>("");
 
-  // Verificação em segundo plano (Não bloqueia a tela)
   useEffect(() => {
     const checkUser = async () => {
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
-            // Se já tiver sessão, redireciona suavemente
             navigate('/client');
         }
     };
     checkUser();
   }, [navigate]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setAvatarFile(file);
+      const url = URL.createObjectURL(file);
+      setAvatarPreview(url);
+    }
+  };
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,15 +47,38 @@ const LoginClient = () => {
     setLoading(true);
     try {
         if(isSignUp) {
-            const { error } = await supabase.auth.signUp({
+            // 1. Criar Usuário
+            const { data: authData, error: authError } = await supabase.auth.signUp({
                 email, password,
                 options: { data: { role: 'client', first_name: name.split(' ')[0], last_name: name.split(' ').slice(1).join(' ') } }
             });
-            if(error) throw error;
-            showSuccess("Conta criada! Verifique seu email.");
-        } else {
-            // REMOVIDO: await supabase.auth.signOut({ scope: 'global' });
+            if(authError) throw authError;
 
+            // 2. Upload da Foto (se houver)
+            if (authData.user && avatarFile) {
+                const fileExt = avatarFile.name.split('.').pop();
+                const filePath = `${authData.user.id}/avatar-${Date.now()}.${fileExt}`;
+                
+                const { error: uploadError } = await supabase.storage
+                    .from('avatars')
+                    .upload(filePath, avatarFile);
+                
+                if (!uploadError) {
+                    const { data: { publicUrl } } = supabase.storage
+                        .from('avatars')
+                        .getPublicUrl(filePath);
+                    
+                    // Atualiza o perfil com a URL da foto
+                    await supabase.from('profiles')
+                        .update({ avatar_url: publicUrl })
+                        .eq('id', authData.user.id);
+                }
+            }
+
+            showSuccess("Conta criada! Verifique seu email.");
+            // Opcional: Auto-login ou esperar confirmação de email
+            
+        } else {
             const { error } = await supabase.auth.signInWithPassword({ email, password });
             if(error) throw error;
             navigate('/client');
@@ -74,23 +109,57 @@ const LoginClient = () => {
        </div>
 
        {/* Lado Direito - Form */}
-       <div className="w-full lg:w-1/2 flex flex-col relative">
+       <div className="w-full lg:w-1/2 flex flex-col relative overflow-y-auto">
            <div className="p-6">
                <Button variant="ghost" onClick={() => navigate('/')} className="hover:bg-gray-100 rounded-full w-12 h-12 p-0 -ml-2">
                    <ArrowLeft className="w-6 h-6 text-gray-800" />
                </Button>
            </div>
 
-           <div className="flex-1 flex flex-col justify-center px-8 sm:px-16 max-w-xl mx-auto w-full">
+           <div className="flex-1 flex flex-col justify-center px-8 sm:px-16 max-w-xl mx-auto w-full py-10">
                <div className="mb-10 animate-in slide-in-from-bottom-4 duration-700">
                    <div className="lg:hidden mb-6 flex justify-center">
                        <img src="/logo-goldmobile-2.png" alt="Gold Mobile" className="w-48 h-auto" />
                    </div>
-                   <h2 className="text-2xl font-bold text-slate-800">{isSignUp ? "Comece sua jornada" : "Bem-vindo de volta"}</h2>
-                   <p className="text-gray-500 mt-2">{isSignUp ? "Preencha seus dados para criar uma conta gratuita." : "Faça login para solicitar sua próxima corrida."}</p>
+                   <h2 className="text-2xl font-bold text-slate-800">{isSignUp ? "Crie sua conta" : "Bem-vindo de volta"}</h2>
+                   <p className="text-gray-500 mt-2">{isSignUp ? "Preencha seus dados para começar a viajar." : "Faça login para solicitar sua próxima corrida."}</p>
                </div>
 
                <form onSubmit={handleAuth} className="space-y-5 animate-in slide-in-from-bottom-8 duration-700 delay-150">
+                   
+                   {/* Upload de Foto (Apenas Cadastro) */}
+                   {isSignUp && (
+                       <div className="flex justify-center mb-6">
+                           <div className="relative group">
+                               <div className="w-28 h-28 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden relative">
+                                   {avatarPreview ? (
+                                       <img src={avatarPreview} alt="Preview" className="w-full h-full object-cover" />
+                                   ) : (
+                                       <User className="w-10 h-10 text-gray-300" />
+                                   )}
+                                   
+                                   <label htmlFor="avatar-upload" className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                                       <Camera className="w-6 h-6 mb-1" />
+                                       <span className="text-[10px] font-bold uppercase">Alterar</span>
+                                   </label>
+                               </div>
+                               
+                               {!avatarPreview && (
+                                   <label htmlFor="avatar-upload" className="absolute -bottom-2 -right-2 bg-yellow-500 text-black p-2 rounded-full shadow-lg cursor-pointer hover:bg-yellow-400 transition-transform hover:scale-110">
+                                       <Plus className="w-4 h-4" />
+                                   </label>
+                               )}
+                               <input 
+                                   id="avatar-upload" 
+                                   type="file" 
+                                   accept="image/*" 
+                                   className="hidden" 
+                                   onChange={handleFileChange}
+                               />
+                           </div>
+                       </div>
+                   )}
+
                    {isSignUp && (
                        <div className="relative group">
                            <User className="absolute left-4 top-4 w-5 h-5 text-gray-400 group-focus-within:text-yellow-600 transition-colors" />
@@ -118,7 +187,9 @@ const LoginClient = () => {
                            {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                        </button>
                    </div>
+                   
                    {!isSignUp && <div className="flex justify-end"><span className="text-sm font-semibold text-gray-400 hover:text-yellow-600 cursor-pointer transition-colors">Esqueceu a senha?</span></div>}
+                   
                    <Button className="w-full h-14 text-lg font-bold rounded-2xl bg-slate-900 hover:bg-black text-white shadow-xl shadow-slate-200 transition-all hover:scale-[1.02] active:scale-[0.98]" disabled={loading}>
                        {loading ? <Loader2 className="animate-spin" /> : (isSignUp ? "Criar Conta Grátis" : "Entrar na Plataforma")}
                        {!loading && <ArrowRight className="ml-2 w-5 h-5" />}
