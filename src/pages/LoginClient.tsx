@@ -110,7 +110,7 @@ const LoginClient = () => {
            <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1496442226666-8d4a0e29f122?q=80&w=2576&auto=format&fit=crop')] bg-cover bg-center opacity-40" />
            <div className="absolute inset-0 bg-gradient-to-r from-zinc-950 to-transparent" />
            <div className="relative z-10 p-12 text-center">
-                <h1 className="text-6xl font-black text-white mb-4 tracking-tighter">GOLD <span className="text-yellow-500">MOBILE</span></h1>
+                <img src="/logo-goldmobile-2.png" alt="Gold Mobile" className="w-64 mx-auto mb-8" />
                 <p className="text-gray-300 text-xl font-light max-w-md mx-auto">Sua experiência premium de mobilidade urbana começa aqui.</p>
            </div>
        </div>
@@ -122,7 +122,7 @@ const LoginClient = () => {
                <Button variant="ghost" onClick={() => isSignUp && step > 1 ? setStep(1) : isSignUp ? setIsSignUp(false) : navigate('/')} className="hover:bg-zinc-800 text-white rounded-full w-12 h-12 p-0">
                    {isSignUp && step === 2 ? <ChevronLeft className="w-6 h-6" /> : <ArrowLeft className="w-6 h-6" />}
                </Button>
-               {/* Logo removida do header mobile para limpeza visual */}
+               {/* Logo no header mobile apenas se necessário, aqui mantendo limpo ou conforme anterior */}
                <div className="w-12 lg:hidden" />
            </div>
 
@@ -133,13 +133,8 @@ const LoginClient = () => {
                    <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-black via-zinc-800 to-yellow-500" />
 
                    <div className="mb-8 text-center">
-                       {/* LOGO EM TEXTO */}
-                       <div className="flex justify-center mb-6">
-                           <h1 className="text-4xl font-black text-slate-900 tracking-tighter">
-                               GOLD <span className="text-yellow-500">MOBILE</span>
-                           </h1>
-                       </div>
-
+                       {/* Logo removido daqui conforme solicitado */}
+                       
                        <h2 className="text-3xl font-black text-slate-900">{isSignUp ? "Criar Conta" : "Login Passageiro"}</h2>
                        <p className="text-gray-500 mt-2 text-sm">{isSignUp ? "Siga as etapas para começar." : "Entre para solicitar sua corrida."}</p>
                    </div>
