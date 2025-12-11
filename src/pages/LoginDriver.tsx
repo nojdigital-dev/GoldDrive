@@ -334,7 +334,7 @@ const LoginDriver = () => {
        </div>
 
        {/* Lado Direito - Form */}
-       <div className="w-full lg:w-1/2 flex flex-col relative bg-white">
+       <div className="w-full lg:w-1/2 flex flex-col relative bg-white overflow-y-auto">
            <div className="p-6">
                <Button variant="ghost" onClick={() => isSignUp && step > 1 ? prevStep() : isSignUp ? setIsSignUp(false) : navigate('/')} className="hover:bg-gray-100 rounded-full w-12 h-12 p-0 -ml-2">
                    {isSignUp && step > 1 ? <ChevronLeft className="w-6 h-6 text-gray-800" /> : <ArrowLeft className="w-6 h-6 text-gray-800" />}
@@ -392,9 +392,19 @@ const LoginDriver = () => {
                                {!loading && <ArrowRight className="ml-2 w-5 h-5" />}
                            </Button>
                        </form>
-                       <div className="mt-8 text-center">
-                           <p className="text-gray-500">Ainda não é parceiro? <button onClick={() => { setIsSignUp(true); setStep(1); }} className="font-bold text-yellow-600 hover:text-yellow-700 hover:underline">Cadastre-se agora</button></p>
-                       </div>
+
+                       {/* NOVO CALL TO ACTION DE CADASTRO */}
+                        <div className="mt-12 bg-yellow-50 border border-yellow-100 rounded-3xl p-6 text-center">
+                            <p className="text-yellow-800 font-medium text-sm mb-4">
+                                Ainda não tem conta? Clique no botão abaixo e crie em menos de 1 minuto.
+                            </p>
+                            <Button 
+                                onClick={() => { setIsSignUp(true); setStep(1); }} 
+                                className="w-full h-12 bg-yellow-500 hover:bg-yellow-400 text-black font-black rounded-xl shadow-lg shadow-yellow-500/20 text-base"
+                            >
+                                CRIAR CONTA GRÁTIS
+                            </Button>
+                        </div>
                    </div>
                ) : (
                    // --- SIGNUP FLOW ---

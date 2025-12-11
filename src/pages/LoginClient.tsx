@@ -4,8 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
-import { ArrowLeft, Loader2, ArrowRight, User, Lock, Mail, Eye, EyeOff, Camera, Plus } from "lucide-react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ArrowLeft, Loader2, ArrowRight, User, Lock, Mail, Eye, EyeOff, Camera, ShieldCheck, ChevronLeft } from "lucide-react";
 
 const LoginClient = () => {
   const navigate = useNavigate();
@@ -13,6 +12,7 @@ const LoginClient = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
+  const [step, setStep] = useState(1); // Controle de etapas
   const [name, setName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   
@@ -39,50 +39,73 @@ const LoginClient = () => {
     }
   };
 
-  const handleAuth = async (e: React.FormEvent) => {
+  const nextStep = () => {
+      if (!name || !email || !password) {
+          showError("Preencha todos os campos para continuar.");
+          return;
+      }
+      if (password.length < 6) {
+          showError("A senha deve ter no mínimo 6 caracteres.");
+          return;
+      }
+      setStep(2);
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if(!email || !password) return showError("Preencha todos os campos");
-    if(isSignUp && !name) return showError("Digite seu nome");
+    setLoading(true);
+    try {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if(error) throw error;
+        navigate('/client');
+    } catch (e: any) {
+        showError(e.message);
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  const handleSignUp = async () => {
+    if(!name) return showError("Digite seu nome");
+    
+    // Validação da foto (agora obrigatória ou fortemente sugerida)
+    if (!avatarFile) {
+        showError("Por favor, envie uma foto de perfil para sua segurança.");
+        return;
+    }
 
     setLoading(true);
     try {
-        if(isSignUp) {
-            // 1. Criar Usuário
-            const { data: authData, error: authError } = await supabase.auth.signUp({
-                email, password,
-                options: { data: { role: 'client', first_name: name.split(' ')[0], last_name: name.split(' ').slice(1).join(' ') } }
-            });
-            if(authError) throw authError;
+        // 1. Criar Usuário
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+            email, password,
+            options: { data: { role: 'client', first_name: name.split(' ')[0], last_name: name.split(' ').slice(1).join(' ') } }
+        });
+        if(authError) throw authError;
 
-            // 2. Upload da Foto (se houver)
-            if (authData.user && avatarFile) {
-                const fileExt = avatarFile.name.split('.').pop();
-                const filePath = `${authData.user.id}/avatar-${Date.now()}.${fileExt}`;
-                
-                const { error: uploadError } = await supabase.storage
-                    .from('avatars')
-                    .upload(filePath, avatarFile);
-                
-                if (!uploadError) {
-                    const { data: { publicUrl } } = supabase.storage
-                        .from('avatars')
-                        .getPublicUrl(filePath);
-                    
-                    // Atualiza o perfil com a URL da foto
-                    await supabase.from('profiles')
-                        .update({ avatar_url: publicUrl })
-                        .eq('id', authData.user.id);
-                }
-            }
-
-            showSuccess("Conta criada! Verifique seu email.");
-            // Opcional: Auto-login ou esperar confirmação de email
+        // 2. Upload da Foto
+        if (authData.user && avatarFile) {
+            const fileExt = avatarFile.name.split('.').pop();
+            const filePath = `${authData.user.id}/avatar-${Date.now()}.${fileExt}`;
             
-        } else {
-            const { error } = await supabase.auth.signInWithPassword({ email, password });
-            if(error) throw error;
-            navigate('/client');
+            const { error: uploadError } = await supabase.storage
+                .from('avatars')
+                .upload(filePath, avatarFile);
+            
+            if (!uploadError) {
+                const { data: { publicUrl } } = supabase.storage
+                    .from('avatars')
+                    .getPublicUrl(filePath);
+                
+                await supabase.from('profiles')
+                    .update({ avatar_url: publicUrl })
+                    .eq('id', authData.user.id);
+            }
         }
+
+        showSuccess("Conta criada! Verifique seu email.");
+        
     } catch (e: any) {
         showError(e.message);
     } finally {
@@ -111,94 +134,158 @@ const LoginClient = () => {
        {/* Lado Direito - Form */}
        <div className="w-full lg:w-1/2 flex flex-col relative overflow-y-auto">
            <div className="p-6">
-               <Button variant="ghost" onClick={() => navigate('/')} className="hover:bg-gray-100 rounded-full w-12 h-12 p-0 -ml-2">
-                   <ArrowLeft className="w-6 h-6 text-gray-800" />
+               <Button variant="ghost" onClick={() => {
+                   if (isSignUp && step === 2) setStep(1);
+                   else if (isSignUp) { setIsSignUp(false); setStep(1); }
+                   else navigate('/');
+               }} className="hover:bg-gray-100 rounded-full w-12 h-12 p-0 -ml-2">
+                   {isSignUp && step === 2 ? <ChevronLeft className="w-6 h-6 text-gray-800" /> : <ArrowLeft className="w-6 h-6 text-gray-800" />}
                </Button>
            </div>
 
            <div className="flex-1 flex flex-col justify-center px-8 sm:px-16 max-w-xl mx-auto w-full py-10">
-               <div className="mb-10 animate-in slide-in-from-bottom-4 duration-700">
-                   <div className="lg:hidden mb-6 flex justify-center">
-                       <img src="/logo-goldmobile-2.png" alt="Gold Mobile" className="w-48 h-auto" />
-                   </div>
-                   <h2 className="text-2xl font-bold text-slate-800">{isSignUp ? "Crie sua conta" : "Bem-vindo de volta"}</h2>
-                   <p className="text-gray-500 mt-2">{isSignUp ? "Preencha seus dados para começar a viajar." : "Faça login para solicitar sua próxima corrida."}</p>
-               </div>
+               
+               {/* LOGIN FORM */}
+               {!isSignUp && (
+                   <div className="animate-in fade-in slide-in-from-bottom-8 duration-700">
+                        <div className="mb-10">
+                            <h2 className="text-3xl font-bold text-slate-800">Bem-vindo de volta</h2>
+                            <p className="text-gray-500 mt-2">Faça login para solicitar sua próxima corrida.</p>
+                        </div>
 
-               <form onSubmit={handleAuth} className="space-y-5 animate-in slide-in-from-bottom-8 duration-700 delay-150">
-                   
-                   {/* Upload de Foto (Apenas Cadastro) */}
-                   {isSignUp && (
-                       <div className="flex justify-center mb-6">
-                           <div className="relative group">
-                               <div className="w-28 h-28 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden relative">
-                                   {avatarPreview ? (
-                                       <img src={avatarPreview} alt="Preview" className="w-full h-full object-cover" />
-                                   ) : (
-                                       <User className="w-10 h-10 text-gray-300" />
-                                   )}
-                                   
-                                   <label htmlFor="avatar-upload" className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                                       <Camera className="w-6 h-6 mb-1" />
-                                       <span className="text-[10px] font-bold uppercase">Alterar</span>
-                                   </label>
+                        <form onSubmit={handleLogin} className="space-y-5">
+                            <div className="relative group">
+                                <Mail className="absolute left-4 top-4 w-5 h-5 text-gray-400 group-focus-within:text-yellow-600 transition-colors" />
+                                <Input type="email" placeholder="Endereço de Email" className="h-14 pl-12 bg-gray-50 border-gray-200 text-base rounded-2xl focus:ring-2 focus:ring-yellow-500/20 focus:border-yellow-500 transition-all text-slate-900" value={email} onChange={e => setEmail(e.target.value)} />
+                            </div>
+                            <div className="relative group">
+                                <Lock className="absolute left-4 top-4 w-5 h-5 text-gray-400 group-focus-within:text-yellow-600 transition-colors" />
+                                <Input 
+                                    type={showPassword ? "text" : "password"} 
+                                    placeholder="Sua Senha" 
+                                    className="h-14 pl-12 pr-12 bg-gray-50 border-gray-200 text-base rounded-2xl focus:ring-2 focus:ring-yellow-500/20 focus:border-yellow-500 transition-all text-slate-900" 
+                                    value={password} 
+                                    onChange={e => setPassword(e.target.value)} 
+                                />
+                                <button 
+                                    type="button" 
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-4 top-4 text-gray-400 hover:text-gray-600 focus:outline-none"
+                                >
+                                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                </button>
+                            </div>
+                            
+                            <div className="flex justify-end"><span className="text-sm font-semibold text-gray-400 hover:text-yellow-600 cursor-pointer transition-colors">Esqueceu a senha?</span></div>
+                            
+                            <Button className="w-full h-14 text-lg font-bold rounded-2xl bg-slate-900 hover:bg-black text-white shadow-xl shadow-slate-200 transition-all hover:scale-[1.02] active:scale-[0.98]" disabled={loading}>
+                                {loading ? <Loader2 className="animate-spin" /> : "Entrar na Plataforma"}
+                                {!loading && <ArrowRight className="ml-2 w-5 h-5" />}
+                            </Button>
+                        </form>
+
+                        {/* NOVO CALL TO ACTION DE CADASTRO */}
+                        <div className="mt-12 bg-yellow-50 border border-yellow-100 rounded-3xl p-6 text-center">
+                            <p className="text-yellow-800 font-medium text-sm mb-4">
+                                Ainda não tem conta? Clique no botão abaixo e crie em menos de 1 minuto.
+                            </p>
+                            <Button 
+                                onClick={() => { setIsSignUp(true); setStep(1); }} 
+                                className="w-full h-12 bg-yellow-500 hover:bg-yellow-400 text-black font-black rounded-xl shadow-lg shadow-yellow-500/20 text-base"
+                            >
+                                CRIAR CONTA GRÁTIS
+                            </Button>
+                        </div>
+                   </div>
+               )}
+
+               {/* SIGNUP FLOW */}
+               {isSignUp && (
+                   <div className="animate-in slide-in-from-right fade-in duration-300">
+                       <div className="mb-8">
+                           <div className="flex items-center gap-2 mb-2">
+                               <span className="w-8 h-8 rounded-full bg-yellow-100 text-yellow-700 flex items-center justify-center font-bold text-sm">{step} de 2</span>
+                               <div className="h-1 flex-1 bg-gray-100 rounded-full overflow-hidden">
+                                   <div className={`h-full bg-yellow-500 transition-all duration-500 ${step === 1 ? 'w-1/2' : 'w-full'}`} />
+                               </div>
+                           </div>
+                           <h2 className="text-2xl font-bold text-slate-800">{step === 1 ? "Dados Pessoais" : "Foto de Identificação"}</h2>
+                           <p className="text-gray-500 mt-1">{step === 1 ? "Comece com o básico." : "Para sua segurança e dos motoristas."}</p>
+                       </div>
+
+                       {step === 1 && (
+                           <div className="space-y-5">
+                               <div className="relative group">
+                                   <User className="absolute left-4 top-4 w-5 h-5 text-gray-400 group-focus-within:text-yellow-600 transition-colors" />
+                                   <Input placeholder="Nome Completo" className="h-14 pl-12 bg-gray-50 border-gray-200 text-base rounded-2xl text-slate-900" value={name} onChange={e => setName(e.target.value)} />
+                               </div>
+                               <div className="relative group">
+                                   <Mail className="absolute left-4 top-4 w-5 h-5 text-gray-400 group-focus-within:text-yellow-600 transition-colors" />
+                                   <Input type="email" placeholder="Endereço de Email" className="h-14 pl-12 bg-gray-50 border-gray-200 text-base rounded-2xl text-slate-900" value={email} onChange={e => setEmail(e.target.value)} />
+                               </div>
+                               <div className="relative group">
+                                   <Lock className="absolute left-4 top-4 w-5 h-5 text-gray-400 group-focus-within:text-yellow-600 transition-colors" />
+                                   <Input 
+                                       type={showPassword ? "text" : "password"} 
+                                       placeholder="Crie uma Senha" 
+                                       className="h-14 pl-12 pr-12 bg-gray-50 border-gray-200 text-base rounded-2xl text-slate-900" 
+                                       value={password} 
+                                       onChange={e => setPassword(e.target.value)} 
+                                   />
                                </div>
                                
-                               {!avatarPreview && (
-                                   <label htmlFor="avatar-upload" className="absolute -bottom-2 -right-2 bg-yellow-500 text-black p-2 rounded-full shadow-lg cursor-pointer hover:bg-yellow-400 transition-transform hover:scale-110">
-                                       <Plus className="w-4 h-4" />
-                                   </label>
-                               )}
-                               <input 
-                                   id="avatar-upload" 
-                                   type="file" 
-                                   accept="image/*" 
-                                   className="hidden" 
-                                   onChange={handleFileChange}
-                               />
+                               <Button onClick={nextStep} className="w-full h-14 text-lg font-bold rounded-2xl bg-slate-900 hover:bg-black text-white mt-4">
+                                   Continuar <ArrowRight className="ml-2 w-5 h-5" />
+                               </Button>
                            </div>
-                       </div>
-                   )}
+                       )}
 
-                   {isSignUp && (
-                       <div className="relative group">
-                           <User className="absolute left-4 top-4 w-5 h-5 text-gray-400 group-focus-within:text-yellow-600 transition-colors" />
-                           <Input placeholder="Nome Completo" className="h-14 pl-12 bg-gray-50 border-gray-200 text-base rounded-2xl focus:ring-2 focus:ring-yellow-500/20 focus:border-yellow-500 transition-all text-slate-900" value={name} onChange={e => setName(e.target.value)} />
-                       </div>
-                   )}
-                   <div className="relative group">
-                       <Mail className="absolute left-4 top-4 w-5 h-5 text-gray-400 group-focus-within:text-yellow-600 transition-colors" />
-                       <Input type="email" placeholder="Endereço de Email" className="h-14 pl-12 bg-gray-50 border-gray-200 text-base rounded-2xl focus:ring-2 focus:ring-yellow-500/20 focus:border-yellow-500 transition-all text-slate-900" value={email} onChange={e => setEmail(e.target.value)} />
-                   </div>
-                   <div className="relative group">
-                       <Lock className="absolute left-4 top-4 w-5 h-5 text-gray-400 group-focus-within:text-yellow-600 transition-colors" />
-                       <Input 
-                           type={showPassword ? "text" : "password"} 
-                           placeholder="Sua Senha" 
-                           className="h-14 pl-12 pr-12 bg-gray-50 border-gray-200 text-base rounded-2xl focus:ring-2 focus:ring-yellow-500/20 focus:border-yellow-500 transition-all text-slate-900" 
-                           value={password} 
-                           onChange={e => setPassword(e.target.value)} 
-                       />
-                       <button 
-                           type="button" 
-                           onClick={() => setShowPassword(!showPassword)}
-                           className="absolute right-4 top-4 text-gray-400 hover:text-gray-600 focus:outline-none"
-                       >
-                           {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                       </button>
-                   </div>
-                   
-                   {!isSignUp && <div className="flex justify-end"><span className="text-sm font-semibold text-gray-400 hover:text-yellow-600 cursor-pointer transition-colors">Esqueceu a senha?</span></div>}
-                   
-                   <Button className="w-full h-14 text-lg font-bold rounded-2xl bg-slate-900 hover:bg-black text-white shadow-xl shadow-slate-200 transition-all hover:scale-[1.02] active:scale-[0.98]" disabled={loading}>
-                       {loading ? <Loader2 className="animate-spin" /> : (isSignUp ? "Criar Conta Grátis" : "Entrar na Plataforma")}
-                       {!loading && <ArrowRight className="ml-2 w-5 h-5" />}
-                   </Button>
-               </form>
+                       {step === 2 && (
+                           <div className="space-y-6">
+                               <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl flex gap-3 items-start">
+                                   <ShieldCheck className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                                   <p className="text-sm text-blue-700">Por favor, envie uma <strong>selfie</strong> nítida. Isso ajuda os motoristas a te identificarem com segurança.</p>
+                               </div>
 
-               <div className="mt-10 pt-6 border-t border-gray-100 text-center animate-in fade-in duration-1000 delay-300">
-                   <p className="text-gray-500">{isSignUp ? "Já possui cadastro?" : "Ainda não tem conta?"}<button onClick={() => setIsSignUp(!isSignUp)} className="ml-2 font-bold text-yellow-600 hover:text-yellow-700 hover:underline">{isSignUp ? "Fazer Login" : "Cadastre-se agora"}</button></p>
-               </div>
+                               <div className="flex justify-center">
+                                   <div className="relative group w-full max-w-xs">
+                                       <label 
+                                            htmlFor="avatar-upload"
+                                            className={`
+                                                w-full aspect-square rounded-[32px] border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all
+                                                ${avatarPreview ? 'border-yellow-500 bg-yellow-50' : 'border-gray-300 bg-gray-50 hover:bg-gray-100'}
+                                            `}
+                                       >
+                                           {avatarPreview ? (
+                                               <img src={avatarPreview} alt="Preview" className="w-full h-full object-cover rounded-[30px]" />
+                                           ) : (
+                                               <div className="flex flex-col items-center p-6 text-center">
+                                                   <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
+                                                       <Camera className="w-8 h-8 text-gray-400" />
+                                                   </div>
+                                                   <span className="font-bold text-slate-900">Toque para tirar foto</span>
+                                                   <span className="text-xs text-gray-500 mt-1">ou escolher da galeria</span>
+                                               </div>
+                                           )}
+                                       </label>
+                                       
+                                       <input 
+                                           id="avatar-upload" 
+                                           type="file" 
+                                           accept="image/*" 
+                                           className="hidden" 
+                                           onChange={handleFileChange}
+                                       />
+                                   </div>
+                               </div>
+
+                               <Button onClick={handleSignUp} disabled={loading} className="w-full h-14 text-lg font-bold rounded-2xl bg-yellow-500 hover:bg-yellow-400 text-black shadow-lg shadow-yellow-500/20">
+                                   {loading ? <Loader2 className="animate-spin" /> : "FINALIZAR CADASTRO"}
+                               </Button>
+                           </div>
+                       )}
+                   </div>
+               )}
            </div>
            
            <div className="p-6 text-center lg:hidden"><p className="text-xs text-gray-300 font-medium">Gold Mobile &copy; 2024</p></div>
