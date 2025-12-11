@@ -4,29 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
-import { ArrowLeft, Loader2, ArrowRight, Car, Camera, ShieldCheck, Mail, Lock, Phone, CreditCard, ChevronLeft, Eye, EyeOff, KeyRound, Ban } from "lucide-react";
+import { ArrowLeft, Loader2, ArrowRight, Car, Camera, ShieldCheck, Mail, Lock, Phone, CreditCard, ChevronLeft, Eye, EyeOff, KeyRound, Ban, User } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 // Tipos para o formulário
 interface FormData {
-  // Etapa 1
-  firstName: string;
-  lastName: string;
-  email: string;
-  password: string;
-  confirmPassword?: string; // Novo campo
-  cpf: string;
-  phone: string;
-  // Etapa 2 (Arquivos)
-  facePhoto: File | null;
-  cnhFront: File | null;
-  cnhBack: File | null;
-  // Etapa 3
-  carModel: string;
-  carPlate: string;
-  carYear: string;
-  carColor: string;
+  firstName: string; lastName: string; email: string; password: string; confirmPassword?: string; cpf: string; phone: string;
+  facePhoto: File | null; cnhFront: File | null; cnhBack: File | null;
+  carModel: string; carPlate: string; carYear: string; carColor: string;
 }
 
 const LoginDriver = () => {
@@ -36,504 +22,203 @@ const LoginDriver = () => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [step, setStep] = useState(1);
   const [isBlockedModalOpen, setIsBlockedModalOpen] = useState(false);
-  
-  // Controle de visibilidade de senha
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
   const [form, setForm] = useState<FormData>({
     firstName: "", lastName: "", email: "", password: "", confirmPassword: "", cpf: "", phone: "",
-    facePhoto: null, cnhFront: null, cnhBack: null,
-    carModel: "", carPlate: "", carYear: "", carColor: ""
+    facePhoto: null, cnhFront: null, cnhBack: null, carModel: "", carPlate: "", carYear: "", carColor: ""
   });
-
   const [previews, setPreviews] = useState({ face: "", cnhFront: "", cnhBack: "" });
 
   useEffect(() => {
-    // Checa se veio redirecionado por bloqueio
-    if (searchParams.get('blocked') === 'true') {
-      setIsBlockedModalOpen(true);
-    }
-
+    if (searchParams.get('blocked') === 'true') setIsBlockedModalOpen(true);
     const checkUser = async () => {
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
-            // Verificar status se já estiver logado
             const { data: profile } = await supabase.from('profiles').select('driver_status, role, is_blocked').eq('id', session.user.id).single();
-            
-            if (profile?.is_blocked) {
-                await supabase.auth.signOut();
-                setIsBlockedModalOpen(true);
-                return;
-            }
-
-            if (profile?.role === 'driver') {
-                if (profile.driver_status === 'PENDING') navigate('/driver-pending');
-                else navigate('/driver');
-            }
+            if (profile?.is_blocked) { await supabase.auth.signOut(); setIsBlockedModalOpen(true); return; }
+            if (profile?.role === 'driver') navigate(profile.driver_status === 'PENDING' ? '/driver-pending' : '/driver');
         }
     };
     checkUser();
   }, [navigate, searchParams]);
 
-  // --- MÁSCARAS DE INPUT ---
-  const formatCPF = (value: string) => {
-    return value
-      .replace(/\D/g, '')
-      .replace(/(\d{3})(\d)/, '$1.$2')
-      .replace(/(\d{3})(\d)/, '$1.$2')
-      .replace(/(\d{3})(\d{1,2})/, '$1-$2')
-      .replace(/(-\d{2})\d+?$/, '$1');
-  };
-
-  const formatPhone = (value: string) => {
-    return value
-      .replace(/\D/g, '')
-      .replace(/(\d{2})(\d)/, '($1) $2')
-      .replace(/(\d{5})(\d)/, '$1-$2')
-      .replace(/(-\d{4})\d+?$/, '$1');
-  };
-
-  const handleChange = (field: keyof FormData, value: string) => {
-    let formattedValue = value;
-    if (field === 'cpf') formattedValue = formatCPF(value);
-    if (field === 'phone') formattedValue = formatPhone(value);
-    
-    setForm(prev => ({ ...prev, [field]: formattedValue }));
-  };
-
+  const formatCPF = (v: string) => v.replace(/\D/g, '').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})/, '$1-$2').replace(/(-\d{2})\d+?$/, '$1');
+  const formatPhone = (v: string) => v.replace(/\D/g, '').replace(/(\d{2})(\d)/, '($1) $2').replace(/(\d{5})(\d)/, '$1-$2').replace(/(-\d{4})\d+?$/, '$1');
+  const handleChange = (f: keyof FormData, v: string) => setForm(p => ({ ...p, [f]: f === 'cpf' ? formatCPF(v) : f === 'phone' ? formatPhone(v) : v }));
+  
   const handleFileChange = (field: 'facePhoto' | 'cnhFront' | 'cnhBack', e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setForm(prev => ({ ...prev, [field]: file }));
-      const url = URL.createObjectURL(file);
-      setPreviews(prev => ({ ...prev, [field === 'facePhoto' ? 'face' : field]: url }));
+      setPreviews(prev => ({ ...prev, [field === 'facePhoto' ? 'face' : field]: URL.createObjectURL(file) }));
     }
   };
 
   const validateStep1 = () => {
-    if (!form.firstName || !form.lastName || !form.email || !form.password || !form.cpf || !form.phone || !form.confirmPassword) {
-      showError("Preencha todos os campos obrigatórios.");
-      return false;
-    }
-    if (form.password.length < 6) {
-      showError("A senha deve ter pelo menos 6 caracteres.");
-      return false;
-    }
-    if (form.password !== form.confirmPassword) {
-      showError("As senhas não coincidem.");
-      return false;
-    }
+    if (!form.firstName || !form.lastName || !form.email || !form.password || !form.cpf || !form.phone || !form.confirmPassword) return showError("Preencha todos os campos.");
+    if (form.password.length < 6) return showError("Senha curta.");
+    if (form.password !== form.confirmPassword) return showError("Senhas não coincidem.");
     return true;
   };
-
   const validateStep2 = () => {
-    if (!form.facePhoto || !form.cnhFront || !form.cnhBack) {
-      showError("Por favor, envie todas as fotos solicitadas.");
-      return false;
-    }
+    if (!form.facePhoto || !form.cnhFront || !form.cnhBack) return showError("Envie todas as fotos.");
     return true;
   };
-
-  const nextStep = () => {
-    if (step === 1 && validateStep1()) setStep(2);
-    else if (step === 2 && validateStep2()) setStep(3);
-  };
-
-  const prevStep = () => setStep(prev => prev - 1);
 
   const uploadFile = async (file: File, path: string) => {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${path}-${Date.now()}.${fileExt}`;
-    const filePath = `driver_docs/${fileName}`;
-    
-    const { error: uploadError } = await supabase.storage
-      .from('avatars')
-      .upload(filePath, file);
-
-    if (uploadError) throw uploadError;
-
-    const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
-    return data.publicUrl;
+    const fileName = `${path}-${Date.now()}.${file.name.split('.').pop()}`;
+    const { error } = await supabase.storage.from('avatars').upload(`driver_docs/${fileName}`, file);
+    if (error) throw error;
+    return supabase.storage.from('avatars').getPublicUrl(`driver_docs/${fileName}`).data.publicUrl;
   };
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+    e.preventDefault(); setLoading(true);
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: form.email,
-        password: form.password
-      });
+      const { data, error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.password });
       if (error) throw error;
-      
-      if (data.user) {
-          // Verificar status PENDING e BLOCKED
-          const { data: profile } = await supabase.from('profiles').select('driver_status, role, is_blocked').eq('id', data.user.id).single();
-          
-          if (profile?.is_blocked) {
-              await supabase.auth.signOut();
-              setIsBlockedModalOpen(true);
-              return;
-          }
-
-          if (profile?.role === 'driver') {
-             if (profile.driver_status === 'PENDING') {
-                 navigate('/driver-pending');
-             } else {
-                 navigate('/driver');
-             }
-          } else {
-             // Se não for driver, mas logou aqui, redireciona pro lugar certo
-             if (profile?.role === 'admin') navigate('/admin');
-             else navigate('/client');
-          }
-      }
-
-    } catch (e: any) {
-      showError(e.message);
-    } finally {
-      setLoading(false);
-    }
+      const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).single();
+      if (profile?.is_blocked) { await supabase.auth.signOut(); setIsBlockedModalOpen(true); return; }
+      navigate(profile?.role === 'driver' ? (profile.driver_status === 'PENDING' ? '/driver-pending' : '/driver') : '/client');
+    } catch (e: any) { showError(e.message); } finally { setLoading(false); }
   };
 
   const handleSignUp = async () => {
-    if (!form.carModel || !form.carPlate || !form.carYear || !form.carColor) {
-      showError("Preencha os dados do veículo.");
-      return;
-    }
-
+    if (!form.carModel || !form.carPlate || !form.carYear || !form.carColor) return showError("Preencha o veículo.");
     setLoading(true);
     try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: form.email,
-        password: form.password,
-        options: {
-          data: {
-            role: 'driver',
-            first_name: form.firstName,
-            last_name: form.lastName
-          }
-        }
-      });
-
-      if (authError) throw authError;
-      if (!authData.user) throw new Error("Erro ao criar usuário.");
-
-      const userId = authData.user.id;
-
-      const faceUrl = await uploadFile(form.facePhoto!, `${userId}/face`);
-      const cnhFrontUrl = await uploadFile(form.cnhFront!, `${userId}/cnh_front`);
-      const cnhBackUrl = await uploadFile(form.cnhBack!, `${userId}/cnh_back`);
-
-      const { error: profileError } = await supabase.from('profiles').update({
-        phone: form.phone,
-        cpf: form.cpf,
-        face_photo_url: faceUrl,
-        avatar_url: faceUrl,
-        cnh_front_url: cnhFrontUrl,
-        cnh_back_url: cnhBackUrl,
-        car_model: form.carModel,
-        car_plate: form.carPlate.toUpperCase(),
-        car_year: form.carYear,
-        car_color: form.carColor,
-        driver_status: 'PENDING'
-      }).eq('id', userId);
-
-      if (profileError) throw profileError;
-
-      // Cadastro bem sucedido -> Manda pra tela de pendência
-      navigate('/driver-pending'); 
-      
-    } catch (e: any) {
-      showError(e.message);
-    } finally {
-      setLoading(false);
-    }
+      const { data: auth, error } = await supabase.auth.signUp({ email: form.email, password: form.password, options: { data: { role: 'driver', first_name: form.firstName, last_name: form.lastName } } });
+      if (error || !auth.user) throw error || new Error("Erro auth");
+      const [face, cnhF, cnhB] = await Promise.all([uploadFile(form.facePhoto!, `${auth.user.id}/face`), uploadFile(form.cnhFront!, `${auth.user.id}/cnhF`), uploadFile(form.cnhBack!, `${auth.user.id}/cnhB`)]);
+      await supabase.from('profiles').update({ phone: form.phone, cpf: form.cpf, face_photo_url: face, avatar_url: face, cnh_front_url: cnhF, cnh_back_url: cnhB, car_model: form.carModel, car_plate: form.carPlate.toUpperCase(), car_year: form.carYear, car_color: form.carColor, driver_status: 'PENDING' }).eq('id', auth.user.id);
+      navigate('/driver-pending');
+    } catch (e: any) { showError(e.message); } finally { setLoading(false); }
   };
 
-  const UploadBox = ({ label, field, preview }: { label: string, field: 'facePhoto' | 'cnhFront' | 'cnhBack', preview: string }) => (
-    <div className="space-y-2">
-      <Label className="text-gray-500 text-xs font-bold uppercase tracking-wider">{label}</Label>
-      <label className={`
-        relative flex flex-col items-center justify-center w-full h-32 
-        border-2 border-dashed rounded-2xl cursor-pointer transition-all overflow-hidden
-        ${preview ? 'border-yellow-500 bg-yellow-50' : 'border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-gray-400'}
-      `}>
-        {preview ? (
-          <img src={preview} alt="Preview" className="w-full h-full object-cover" />
-        ) : (
-          <div className="flex flex-col items-center justify-center pt-5 pb-6">
-            <Camera className="w-8 h-8 text-gray-400 mb-2" />
-            <p className="text-xs text-gray-500 font-medium">Toque para enviar</p>
-          </div>
-        )}
+  const UploadBox = ({ label, field, preview }: any) => (
+    <div className="space-y-1 w-full">
+      <Label className="text-xs font-bold uppercase ml-2 text-slate-500">{label}</Label>
+      <label className={`relative flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-2xl cursor-pointer overflow-hidden transition-all ${preview ? 'border-yellow-500 bg-black' : 'border-gray-200 bg-gray-50 hover:bg-gray-100'}`}>
+        {preview ? <img src={preview} className="w-full h-full object-cover opacity-80" /> : <div className="text-center"><Camera className="w-8 h-8 text-gray-400 mx-auto mb-1" /><span className="text-xs font-bold text-gray-500">Enviar Foto</span></div>}
         <input type="file" className="hidden" accept="image/*" onChange={(e) => handleFileChange(field, e)} />
-        {preview && (
-          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-            <p className="text-white text-xs font-bold bg-black/50 px-2 py-1 rounded">Alterar</p>
-          </div>
-        )}
       </label>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-white flex font-sans">
-       {/* MODAL DE BLOQUEIO */}
-       <Dialog open={isBlockedModalOpen} onOpenChange={setIsBlockedModalOpen}>
-          <DialogContent className="sm:max-w-md bg-white border-0 shadow-2xl rounded-[32px] p-0 overflow-hidden text-center">
-              <div className="bg-red-500 h-32 flex items-center justify-center relative">
-                  <div className="absolute inset-0 bg-black/10 pattern-dots" />
-                  <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-xl animate-bounce">
-                      <Ban className="w-10 h-10 text-red-600" />
-                  </div>
-              </div>
-              <div className="p-8">
-                  <h2 className="text-2xl font-black text-slate-900 mb-2">Acesso Bloqueado</h2>
-                  <div className="bg-red-50 border border-red-100 p-4 rounded-xl mb-6">
-                      <p className="text-red-800 font-medium text-sm leading-relaxed">
-                          Detectamos pendências financeiras ou violações de termos em sua conta.
-                      </p>
-                  </div>
-                  <p className="text-gray-500 text-sm mb-8">
-                      Entre em contato imediatamente com a administração do Gold Mobile para regularizar sua situação.
-                  </p>
-                  <Button onClick={() => setIsBlockedModalOpen(false)} className="w-full h-12 bg-slate-900 text-white font-bold rounded-xl">
-                      Entendi
-                  </Button>
-              </div>
-          </DialogContent>
-       </Dialog>
+    <div className="min-h-screen bg-zinc-950 flex font-sans">
+       <Dialog open={isBlockedModalOpen} onOpenChange={setIsBlockedModalOpen}><DialogContent className="rounded-2xl border-0"><div className="text-center p-6"><Ban className="w-16 h-16 text-red-500 mx-auto mb-4" /><h2 className="text-2xl font-black">Bloqueado</h2><p className="text-gray-500 mt-2">Sua conta possui pendências.</p></div></DialogContent></Dialog>
 
-       {/* Lado Esquerdo - Visual (Desktop) */}
-       <div className="hidden lg:flex lg:w-1/2 bg-slate-900 relative items-center justify-center overflow-hidden">
-           <div 
-                className="absolute inset-0 opacity-40 bg-cover bg-center"
-                style={{ backgroundImage: `url('https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?q=80&w=2070&auto=format&fit=crop')` }}
-           />
-           <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent" />
-           <div className="relative z-10 text-center px-12 flex flex-col items-center">
-                <img src="/logo-goldmobile-2.png" alt="Gold Mobile" className="w-64 h-auto mb-8 drop-shadow-2xl" />
-                <h2 className="text-5xl font-black text-white mb-6 tracking-tight">Dirija e<br/>Lucre Mais.</h2>
-                <p className="text-gray-400 text-xl font-light leading-relaxed max-w-md mx-auto">
-                    A plataforma que valoriza o motorista. Taxas justas, pagamentos rápidos e suporte 24h.
-                </p>
-                
-                <div className="mt-12 grid grid-cols-2 gap-6 text-left">
-                     <div className="bg-white/5 p-4 rounded-xl border border-white/10 backdrop-blur-sm">
-                         <div className="text-yellow-500 font-bold text-2xl mb-1">95%</div>
-                         <div className="text-gray-400 text-sm">Ficam com o valor da corrida</div>
-                     </div>
-                     <div className="bg-white/5 p-4 rounded-xl border border-white/10 backdrop-blur-sm">
-                         <div className="text-yellow-500 font-bold text-2xl mb-1">24h</div>
-                         <div className="text-gray-400 text-sm">Suporte humanizado real</div>
-                     </div>
-                </div>
+       {/* Lado Esquerdo - Visual */}
+       <div className="hidden lg:flex lg:w-1/2 relative items-center justify-center overflow-hidden">
+           <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?q=80&w=2070&auto=format&fit=crop')] bg-cover bg-center opacity-40" />
+           <div className="absolute inset-0 bg-gradient-to-r from-zinc-950 via-zinc-900/80 to-transparent" />
+           <div className="relative z-10 px-12 text-center">
+                <img src="/logo-goldmobile-2.png" alt="Gold" className="w-64 mb-8 mx-auto" />
+                <h2 className="text-6xl font-black text-white tracking-tighter mb-4">SEJA <span className="text-yellow-500">GOLD</span>.</h2>
+                <p className="text-xl text-gray-300 font-light">Taxas justas. Pagamento rápido. Respeito real.</p>
            </div>
        </div>
 
        {/* Lado Direito - Form */}
-       <div className="w-full lg:w-1/2 flex flex-col relative bg-white overflow-y-auto">
-           <div className="p-6">
-               <Button variant="ghost" onClick={() => isSignUp && step > 1 ? prevStep() : isSignUp ? setIsSignUp(false) : navigate('/')} className="hover:bg-gray-100 rounded-full w-12 h-12 p-0 -ml-2">
-                   {isSignUp && step > 1 ? <ChevronLeft className="w-6 h-6 text-gray-800" /> : <ArrowLeft className="w-6 h-6 text-gray-800" />}
+       <div className="w-full lg:w-1/2 flex flex-col bg-zinc-950 relative overflow-y-auto">
+           {/* Header Mobile */}
+           <div className="p-6 flex justify-between items-center lg:absolute lg:top-0 lg:left-0 lg:z-20 lg:w-full">
+               <Button variant="ghost" onClick={() => isSignUp && step > 1 ? setStep(s => s - 1) : isSignUp ? setIsSignUp(false) : navigate('/')} className="hover:bg-zinc-800 text-white rounded-full w-12 h-12 p-0">
+                   {isSignUp && step > 1 ? <ChevronLeft className="w-6 h-6" /> : <ArrowLeft className="w-6 h-6" />}
                </Button>
+               <img src="/logo-goldmobile-2.png" alt="Logo" className="h-8 lg:hidden" />
+               <div className="w-12 lg:hidden" />
            </div>
 
-           <div className="flex-1 flex flex-col justify-center px-8 sm:px-16 max-w-xl mx-auto w-full pb-10">
-               
-               <div className="mb-8 animate-in slide-in-from-bottom-4 duration-700">
-                   <div className="lg:hidden mb-6 flex justify-center">
-                       <img src="/logo-goldmobile-2.png" alt="Gold Mobile" className="w-48 h-auto" />
+           <div className="flex-1 flex flex-col justify-center px-6 sm:px-12 md:px-24 py-10">
+               <div className="bg-white rounded-[40px] p-8 shadow-2xl animate-in slide-in-from-bottom-8 duration-700 relative overflow-hidden">
+                   <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-yellow-500 via-zinc-800 to-black" />
+                   
+                   <div className="mb-8 text-center">
+                       <h2 className="text-3xl font-black text-slate-900">{isSignUp ? "Cadastro Motorista" : "Login Motorista"}</h2>
+                       <p className="text-gray-500 mt-2 text-sm">{isSignUp ? "Junte-se à elite do transporte." : "Bem-vindo de volta, parceiro."}</p>
                    </div>
+
                    {!isSignUp ? (
-                       <>
-                           <h2 className="text-2xl font-bold text-slate-800">Acesse seu painel</h2>
-                           <p className="text-gray-500 mt-2">Gerencie suas corridas e acompanhe seus ganhos.</p>
-                       </>
+                       <div className="space-y-6">
+                           <form onSubmit={handleLogin} className="space-y-4">
+                               <div className="space-y-1">
+                                    <label className="text-xs font-bold text-slate-500 uppercase ml-3">Email</label>
+                                    <div className="relative group">
+                                        <Mail className="absolute left-4 top-4 w-5 h-5 text-gray-400 group-focus-within:text-black transition-colors" />
+                                        <Input type="email" placeholder="seu@email.com" className="h-14 pl-12 bg-gray-50 border-gray-200 rounded-2xl focus:border-black focus:ring-0 text-slate-900 font-medium" value={form.email} onChange={e => handleChange('email', e.target.value)} />
+                                    </div>
+                               </div>
+                               <div className="space-y-1">
+                                    <label className="text-xs font-bold text-slate-500 uppercase ml-3">Senha</label>
+                                    <div className="relative group">
+                                        <Lock className="absolute left-4 top-4 w-5 h-5 text-gray-400 group-focus-within:text-black transition-colors" />
+                                        <Input type={showPassword ? "text" : "password"} placeholder="******" className="h-14 pl-12 pr-12 bg-gray-50 border-gray-200 rounded-2xl focus:border-black focus:ring-0 text-slate-900 font-medium" value={form.password} onChange={e => handleChange('password', e.target.value)} />
+                                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-4 text-gray-400 hover:text-black"><Eye className="w-5 h-5" /></button>
+                                    </div>
+                               </div>
+                               <Button className="w-full h-14 text-lg font-bold rounded-2xl bg-black text-white hover:bg-zinc-800 mt-4 shadow-xl" disabled={loading}>{loading ? <Loader2 className="animate-spin" /> : "Acessar Painel"}</Button>
+                           </form>
+                           
+                           <div className="relative py-4"><div className="absolute inset-0 flex items-center"><span className="w-full border-t border-gray-100" /></div><div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-2 text-gray-400 font-bold">Ou</span></div></div>
+                           <Button onClick={() => { setIsSignUp(true); setStep(1); }} className="w-full h-14 bg-yellow-500 hover:bg-yellow-400 text-black font-black rounded-2xl shadow-lg shadow-yellow-500/20 text-base border-2 border-transparent hover:border-black/10 transition-all">QUERO SER MOTORISTA</Button>
+                       </div>
                    ) : (
-                       <>
-                           <h2 className="text-2xl font-bold text-slate-800">Cadastro de Parceiro</h2>
-                           <p className="text-gray-500 mt-2">Junte-se à frota mais exclusiva da cidade.</p>
-                       </>
+                       <div className="animate-in slide-in-from-right fade-in duration-300">
+                           <div className="flex items-center gap-2 mb-8 bg-gray-50 p-1.5 rounded-xl">
+                               {[1, 2, 3].map(i => (<div key={i} className={`flex-1 py-2 rounded-lg text-center text-xs font-bold transition-all ${step === i ? 'bg-black text-white shadow-md' : 'text-gray-400'}`}>{i === 1 ? 'Dados' : i === 2 ? 'Docs' : 'Veículo'}</div>))}
+                           </div>
+
+                           {step === 1 && (
+                               <div className="space-y-4">
+                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                       <div className="space-y-1"><Label className="text-xs font-bold text-slate-500 uppercase ml-2">Nome</Label><Input className="h-14 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.firstName} onChange={e => handleChange('firstName', e.target.value)} /></div>
+                                       <div className="space-y-1"><Label className="text-xs font-bold text-slate-500 uppercase ml-2">Sobrenome</Label><Input className="h-14 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.lastName} onChange={e => handleChange('lastName', e.target.value)} /></div>
+                                   </div>
+                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                       <div className="relative group"><CreditCard className="absolute left-4 top-4 w-5 h-5 text-gray-400"/><Input placeholder="CPF" className="h-14 pl-12 bg-gray-50 border-gray-200 rounded-2xl font-mono text-slate-900" value={form.cpf} onChange={e => handleChange('cpf', e.target.value)} /></div>
+                                       <div className="relative group"><Phone className="absolute left-4 top-4 w-5 h-5 text-gray-400"/><Input placeholder="WhatsApp" className="h-14 pl-12 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.phone} onChange={e => handleChange('phone', e.target.value)} /></div>
+                                   </div>
+                                   <div className="space-y-1"><Label className="text-xs font-bold text-slate-500 uppercase ml-2">Login</Label><div className="relative"><Mail className="absolute left-4 top-4 w-5 h-5 text-gray-400"/><Input placeholder="Email" className="h-14 pl-12 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.email} onChange={e => handleChange('email', e.target.value)} /></div></div>
+                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                       <div className="relative"><Lock className="absolute left-4 top-4 w-5 h-5 text-gray-400"/><Input type={showPassword ? "text" : "password"} placeholder="Senha" className="h-14 pl-12 pr-10 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.password} onChange={e => handleChange('password', e.target.value)} /><button onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-4 text-gray-400"><Eye className="w-5 h-5"/></button></div>
+                                       <div className="relative"><KeyRound className="absolute left-4 top-4 w-5 h-5 text-gray-400"/><Input type={showConfirmPassword ? "text" : "password"} placeholder="Confirmar" className="h-14 pl-12 pr-10 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.confirmPassword} onChange={e => handleChange('confirmPassword', e.target.value)} /><button onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-4 text-gray-400"><Eye className="w-5 h-5"/></button></div>
+                                   </div>
+                                   <Button onClick={() => validateStep1() && setStep(2)} className="w-full h-14 bg-black text-white hover:bg-zinc-800 rounded-2xl mt-4">Continuar</Button>
+                               </div>
+                           )}
+
+                           {step === 2 && (
+                               <div className="space-y-4">
+                                   <UploadBox label="Sua Foto (Selfie)" field="facePhoto" preview={previews.face} />
+                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                       <UploadBox label="CNH Frente" field="cnhFront" preview={previews.cnhFront} />
+                                       <UploadBox label="CNH Verso" field="cnhBack" preview={previews.cnhBack} />
+                                   </div>
+                                   <Button onClick={() => validateStep2() && setStep(3)} className="w-full h-14 bg-black text-white hover:bg-zinc-800 rounded-2xl mt-4">Continuar</Button>
+                               </div>
+                           )}
+
+                           {step === 3 && (
+                               <div className="space-y-4">
+                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                       <Input placeholder="Modelo (ex: Civic)" className="h-14 bg-gray-50 border-gray-200 rounded-2xl" value={form.carModel} onChange={e => handleChange('carModel', e.target.value)} />
+                                       <Input placeholder="Placa" className="h-14 bg-gray-50 border-gray-200 rounded-2xl uppercase" value={form.carPlate} onChange={e => handleChange('carPlate', e.target.value.toUpperCase())} maxLength={7} />
+                                   </div>
+                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                       <Input type="number" placeholder="Ano" className="h-14 bg-gray-50 border-gray-200 rounded-2xl" value={form.carYear} onChange={e => handleChange('carYear', e.target.value)} />
+                                       <Input placeholder="Cor" className="h-14 bg-gray-50 border-gray-200 rounded-2xl" value={form.carColor} onChange={e => handleChange('carColor', e.target.value)} />
+                                   </div>
+                                   <Button onClick={handleSignUp} disabled={loading} className="w-full h-14 bg-yellow-500 hover:bg-yellow-400 text-black font-black rounded-2xl mt-6 shadow-xl">{loading ? <Loader2 className="animate-spin"/> : "FINALIZAR CADASTRO"}</Button>
+                               </div>
+                           )}
+                       </div>
                    )}
                </div>
-
-               {!isSignUp ? (
-                   // --- LOGIN FORM ---
-                   <div className="animate-in fade-in slide-in-from-bottom-8 duration-700">
-                       <form onSubmit={handleLogin} className="space-y-5">
-                           <div className="relative group">
-                               <Mail className="absolute left-4 top-4 w-5 h-5 text-gray-400 group-focus-within:text-yellow-600 transition-colors" />
-                               <Input type="email" placeholder="Email cadastrado" className="h-14 pl-12 bg-gray-50 border-gray-200 text-base rounded-2xl focus:ring-2 focus:ring-yellow-500/20 focus:border-yellow-500 transition-all text-slate-900" value={form.email} onChange={e => handleChange('email', e.target.value)} />
-                           </div>
-                           
-                           <div className="relative group">
-                               <Lock className="absolute left-4 top-4 w-5 h-5 text-gray-400 group-focus-within:text-yellow-600 transition-colors" />
-                               <Input 
-                                  type={showPassword ? "text" : "password"} 
-                                  placeholder="Sua senha" 
-                                  className="h-14 pl-12 pr-12 bg-gray-50 border-gray-200 text-base rounded-2xl focus:ring-2 focus:ring-yellow-500/20 focus:border-yellow-500 transition-all text-slate-900" 
-                                  value={form.password} 
-                                  onChange={e => handleChange('password', e.target.value)} 
-                               />
-                               <button 
-                                  type="button" 
-                                  onClick={() => setShowPassword(!showPassword)}
-                                  className="absolute right-4 top-4 text-gray-400 hover:text-gray-600 focus:outline-none"
-                               >
-                                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                               </button>
-                           </div>
-
-                           <Button className="w-full h-14 text-lg font-bold rounded-2xl bg-slate-900 hover:bg-black text-white shadow-xl shadow-slate-200 transition-all hover:scale-[1.02] active:scale-[0.98] mt-4" disabled={loading}>
-                               {loading ? <Loader2 className="animate-spin" /> : "Entrar no Painel"}
-                               {!loading && <ArrowRight className="ml-2 w-5 h-5" />}
-                           </Button>
-                       </form>
-
-                       {/* NOVO CALL TO ACTION DE CADASTRO */}
-                        <div className="mt-12 bg-yellow-50 border border-yellow-100 rounded-3xl p-6 text-center">
-                            <p className="text-yellow-800 font-medium text-sm mb-4">
-                                Ainda não tem conta? Clique no botão abaixo e crie em menos de 1 minuto.
-                            </p>
-                            <Button 
-                                onClick={() => { setIsSignUp(true); setStep(1); }} 
-                                className="w-full h-12 bg-yellow-500 hover:bg-yellow-400 text-black font-black rounded-xl shadow-lg shadow-yellow-500/20 text-base"
-                            >
-                                CRIAR CONTA GRÁTIS
-                            </Button>
-                        </div>
-                   </div>
-               ) : (
-                   // --- SIGNUP FLOW ---
-                   <div className="flex flex-col h-full">
-                       {/* Barra de Progresso */}
-                       <div className="flex items-center gap-2 mb-8">
-                           {[1, 2, 3].map(i => (
-                               <div key={i} className={`h-2 flex-1 rounded-full transition-all duration-500 ${step >= i ? 'bg-yellow-500 shadow-md shadow-yellow-500/30' : 'bg-gray-100'}`} />
-                           ))}
-                       </div>
-
-                       {step === 1 && (
-                           <div className="space-y-5 animate-in slide-in-from-right fade-in duration-300">
-                               <div className="flex items-center gap-3 mb-2">
-                                   <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-700 font-bold">1</div>
-                                   <h3 className="font-bold text-lg text-slate-800">Dados Pessoais</h3>
-                               </div>
-                               
-                               <div className="grid grid-cols-2 gap-4">
-                                   <Input placeholder="Nome" className="h-14 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.firstName} onChange={e => handleChange('firstName', e.target.value)} />
-                                   <Input placeholder="Sobrenome" className="h-14 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.lastName} onChange={e => handleChange('lastName', e.target.value)} />
-                               </div>
-                               
-                               <div className="relative">
-                                    <CreditCard className="absolute left-4 top-4 w-5 h-5 text-gray-400" />
-                                    <Input placeholder="CPF (000.000.000-00)" className="h-14 pl-12 bg-gray-50 border-gray-200 rounded-2xl font-mono text-sm text-slate-900" value={form.cpf} onChange={e => handleChange('cpf', e.target.value)} maxLength={14} />
-                               </div>
-
-                               <div className="relative">
-                                    <Phone className="absolute left-4 top-4 w-5 h-5 text-gray-400" />
-                                    <Input placeholder="WhatsApp (00) 00000-0000" className="h-14 pl-12 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.phone} onChange={e => handleChange('phone', e.target.value)} maxLength={15} />
-                               </div>
-
-                               <Input type="email" placeholder="Email para login" className="h-14 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.email} onChange={e => handleChange('email', e.target.value)} />
-                               
-                               <div className="relative">
-                                  <Lock className="absolute left-4 top-4 w-5 h-5 text-gray-400" />
-                                  <Input 
-                                    type={showPassword ? "text" : "password"} 
-                                    placeholder="Crie uma senha forte" 
-                                    className="h-14 pl-12 pr-12 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" 
-                                    value={form.password} 
-                                    onChange={e => handleChange('password', e.target.value)} 
-                                  />
-                                  <button 
-                                      type="button" 
-                                      onClick={() => setShowPassword(!showPassword)}
-                                      className="absolute right-4 top-4 text-gray-400 hover:text-gray-600 focus:outline-none"
-                                  >
-                                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                                  </button>
-                               </div>
-
-                               <div className="relative">
-                                  <KeyRound className="absolute left-4 top-4 w-5 h-5 text-gray-400" />
-                                  <Input 
-                                    type={showConfirmPassword ? "text" : "password"} 
-                                    placeholder="Confirme sua senha" 
-                                    className="h-14 pl-12 pr-12 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" 
-                                    value={form.confirmPassword} 
-                                    onChange={e => handleChange('confirmPassword', e.target.value)} 
-                                  />
-                                  <button 
-                                      type="button" 
-                                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                                      className="absolute right-4 top-4 text-gray-400 hover:text-gray-600 focus:outline-none"
-                                  >
-                                      {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                                  </button>
-                               </div>
-                               
-                               <Button onClick={nextStep} className="w-full h-14 bg-slate-900 text-white hover:bg-black font-bold rounded-2xl mt-4 shadow-xl">
-                                   Continuar <ArrowRight className="ml-2 w-4 h-4" />
-                               </Button>
-                           </div>
-                       )}
-
-                       {step === 2 && (
-                           <div className="space-y-5 animate-in slide-in-from-right fade-in duration-300">
-                               <div className="flex items-center gap-3 mb-2">
-                                   <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-700 font-bold">2</div>
-                                   <h3 className="font-bold text-lg text-slate-800">Documentação</h3>
-                               </div>
-
-                               <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl mb-4">
-                                   <p className="text-sm text-blue-700 flex items-start gap-2">
-                                       <ShieldCheck className="w-5 h-5 shrink-0" />
-                                       Seus dados estão seguros e serão usados apenas para validação cadastral.
-                                   </p>
-                               </div>
-
-                               <UploadBox label="Foto de Perfil (Rosto visível)" field="facePhoto" preview={previews.face} />
-                               
-                               <div className="grid grid-cols-2 gap-4">
-                                   <UploadBox label="CNH Frente" field="cnhFront" preview={previews.cnhFront} />
-                                   <UploadBox label="CNH Verso" field="cnhBack" preview={previews.cnhBack} />
-                               </div>
-
-                               <Button onClick={nextStep} className="w-full h-14 bg-slate-900 text-white hover:bg-black font-bold rounded-2xl mt-4 shadow-xl">
-                                   Continuar <ArrowRight className="ml-2 w-4 h-4" />
-                               </Button>
-                           </div>
-                       )}
-
-                       {step === 3 && (
-                           <div className="space-y-5 animate-in slide-in-from-right fade-in duration-300">
-                               <div className="flex items-center gap-3 mb-2">
-                                   <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-700 font-bold">3</div>
-                                   <h3 className="font-bold text-lg text-slate-800">Seu Veículo</h3>
-                               </div>
-                               
-                               <Input placeholder="Modelo (ex: Honda Civic)" className="h-14 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.carModel} onChange={e => handleChange('carModel', e.target.value)} />
-                               <Input placeholder="Placa (ex: ABC-1234)" className="h-14 bg-gray-50 border-gray-200 rounded-2xl uppercase font-mono text-slate-900" value={form.carPlate} onChange={e => handleChange('carPlate', e.target.value.toUpperCase())} maxLength={7} />
-                               
-                               <div className="grid grid-cols-2 gap-4">
-                                   <Input type="number" placeholder="Ano (ex: 2020)" className="h-14 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.carYear} onChange={e => handleChange('carYear', e.target.value)} />
-                                   <Input placeholder="Cor (ex: Prata)" className="h-14 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.carColor} onChange={e => handleChange('carColor', e.target.value)} />
-                               </div>
-
-                               <Button onClick={handleSignUp} disabled={loading} className="w-full h-14 bg-yellow-500 hover:bg-yellow-400 text-black font-black rounded-2xl mt-6 shadow-xl shadow-yellow-500/20 text-lg">
-                                   {loading ? <Loader2 className="animate-spin" /> : "FINALIZAR CADASTRO"}
-                               </Button>
-                           </div>
-                       )}
-                   </div>
-               )}
+               <p className="text-center text-xs text-zinc-500 mt-8 font-medium">Gold Mobile Driver &copy; 2024</p>
            </div>
-           
-           <div className="p-6 text-center lg:hidden"><p className="text-xs text-gray-400 font-medium">Gold Mobile Driver &copy; 2024</p></div>
        </div>
     </div>
   );
