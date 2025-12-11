@@ -118,12 +118,13 @@ const LoginClient = () => {
        {/* Direita - Formulário */}
        <div className="w-full lg:w-1/2 flex flex-col relative overflow-y-auto bg-zinc-950">
            {/* Header Mobile */}
-           <div className="p-6 flex justify-between items-center lg:absolute lg:top-0 lg:left-0 lg:z-20 lg:w-full">
-               <Button variant="ghost" onClick={() => isSignUp && step > 1 ? setStep(1) : isSignUp ? setIsSignUp(false) : navigate('/')} className="hover:bg-zinc-800 text-white rounded-full w-12 h-12 p-0">
+           <div className="p-6 flex items-center lg:absolute lg:top-0 lg:left-0 lg:z-20 lg:w-full">
+               <Button variant="ghost" onClick={() => isSignUp && step > 1 ? setStep(1) : isSignUp ? setIsSignUp(false) : navigate('/')} className="hover:bg-zinc-800 text-white rounded-full w-12 h-12 p-0 shrink-0">
                    {isSignUp && step === 2 ? <ChevronLeft className="w-6 h-6" /> : <ArrowLeft className="w-6 h-6" />}
                </Button>
-               {/* Logo no header mobile apenas se necessário, aqui mantendo limpo ou conforme anterior */}
-               <div className="w-12 lg:hidden" />
+               
+               {/* Logo Mobile Header (Fora do Card) */}
+               <img src="/logo-goldmobile-2.png" alt="Gold Mobile" className="h-8 ml-4 lg:hidden" />
            </div>
 
            <div className="flex-1 flex flex-col justify-center px-6 sm:px-12 md:px-24 py-10">
@@ -133,10 +134,7 @@ const LoginClient = () => {
                    <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-black via-zinc-800 to-yellow-500" />
 
                    <div className="mb-8 text-center">
-                       {/* LOGO (Visível no mobile, onde a barra lateral some) */}
-                       <img src="/logo-goldmobile-2.png" alt="Gold Mobile" className="w-48 mx-auto mb-6 lg:hidden" />
-                       
-                       {/* Texto da Marca (Visível apenas Desktop para não duplicar com a img acima) */}
+                       {/* Texto da Marca (Visível apenas Desktop) */}
                        <div className="hidden lg:flex justify-center mb-6">
                            <h1 className="text-4xl font-black text-slate-900 tracking-tighter">
                                GOLD <span className="text-yellow-500">MOBILE</span>
