@@ -71,6 +71,18 @@ const LoginDriver = () => {
     else if (step === 2 && validateStep2()) setStep(3);
   };
 
+  const handleBack = () => {
+      if (isSignUp) {
+          if (step > 1) {
+              setStep(s => s - 1);
+          } else {
+              setIsSignUp(false);
+          }
+      } else {
+          navigate('/');
+      }
+  };
+
   const uploadFile = async (file: File, path: string) => {
     const fileName = `${path}-${Date.now()}.${file.name.split('.').pop()}`;
     const { error } = await supabase.storage.from('avatars').upload(`driver_docs/${fileName}`, file);
@@ -128,17 +140,21 @@ const LoginDriver = () => {
 
        {/* Lado Direito - Form */}
        <div className="w-full lg:w-1/2 flex flex-col bg-zinc-950 relative overflow-y-auto">
-           {/* Header Mobile */}
-           <div className="p-6 flex items-center lg:absolute lg:top-0 lg:left-0 lg:z-20 lg:w-full">
-               <Button variant="ghost" onClick={() => isSignUp && step > 1 ? setStep(s => s - 1) : isSignUp ? setIsSignUp(false) : navigate('/')} className="hover:bg-zinc-800 text-white rounded-full w-12 h-12 p-0 shrink-0">
+           {/* Header Mobile - Com Z-Index e Posição Corrigidos */}
+           <div className="p-6 flex items-center w-full z-50 relative lg:absolute lg:top-0 lg:left-0 lg:z-20">
+               <Button 
+                    variant="ghost" 
+                    onClick={handleBack} 
+                    className="bg-white/10 hover:bg-white/20 text-white rounded-full w-12 h-12 p-0 shrink-0 cursor-pointer z-50"
+                >
                    {isSignUp && step > 1 ? <ChevronLeft className="w-6 h-6" /> : <ArrowLeft className="w-6 h-6" />}
                </Button>
                
-               {/* Logo Mobile Header (Fora do Card) */}
+               {/* Logo Mobile Header */}
                <img src="/logo-goldmobile-2.png" alt="Gold" className="h-8 ml-4 lg:hidden" />
            </div>
 
-           <div className="flex-1 flex flex-col justify-center px-6 sm:px-12 md:px-24 py-10">
+           <div className="flex-1 flex flex-col justify-center px-6 sm:px-12 md:px-24 py-10 relative z-10">
                <div className="bg-white rounded-[40px] p-8 shadow-2xl animate-in slide-in-from-bottom-8 duration-700 relative overflow-hidden">
                    <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-yellow-500 via-zinc-800 to-black" />
                    
@@ -226,12 +242,13 @@ const LoginDriver = () => {
                            {step === 3 && (
                                <div className="space-y-4 animate-in fade-in slide-in-from-right duration-300">
                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                       <Input placeholder="Modelo (ex: Civic)" className="h-14 bg-gray-50 border-gray-200 rounded-2xl" value={form.carModel} onChange={e => handleChange('carModel', e.target.value)} />
-                                       <Input placeholder="Placa" className="h-14 bg-gray-50 border-gray-200 rounded-2xl uppercase" value={form.carPlate} onChange={e => handleChange('carPlate', e.target.value.toUpperCase())} maxLength={7} />
+                                       {/* ADICIONANDO text-slate-900 EXPLICITAMENTE */}
+                                       <Input placeholder="Modelo (ex: Civic)" className="h-14 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.carModel} onChange={e => handleChange('carModel', e.target.value)} />
+                                       <Input placeholder="Placa" className="h-14 bg-gray-50 border-gray-200 rounded-2xl uppercase text-slate-900" value={form.carPlate} onChange={e => handleChange('carPlate', e.target.value.toUpperCase())} maxLength={7} />
                                    </div>
                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                       <Input type="number" placeholder="Ano" className="h-14 bg-gray-50 border-gray-200 rounded-2xl" value={form.carYear} onChange={e => handleChange('carYear', e.target.value)} />
-                                       <Input placeholder="Cor" className="h-14 bg-gray-50 border-gray-200 rounded-2xl" value={form.carColor} onChange={e => handleChange('carColor', e.target.value)} />
+                                       <Input type="number" placeholder="Ano" className="h-14 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.carYear} onChange={e => handleChange('carYear', e.target.value)} />
+                                       <Input placeholder="Cor" className="h-14 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.carColor} onChange={e => handleChange('carColor', e.target.value)} />
                                    </div>
                                    <Button onClick={handleSignUp} disabled={loading} className="w-full h-14 bg-yellow-500 hover:bg-yellow-400 text-black font-black rounded-2xl mt-6 shadow-xl">{loading ? <Loader2 className="animate-spin"/> : "FINALIZAR CADASTRO"}</Button>
                                </div>

@@ -57,6 +57,18 @@ const LoginClient = () => {
       setStep(2);
   };
 
+  const handleBack = () => {
+      if (isSignUp) {
+          if (step > 1) {
+              setStep(s => s - 1);
+          } else {
+              setIsSignUp(false);
+          }
+      } else {
+          navigate('/');
+      }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if(!email || !password) return showError("Preencha todos os campos");
@@ -117,17 +129,21 @@ const LoginClient = () => {
 
        {/* Direita - Formulário */}
        <div className="w-full lg:w-1/2 flex flex-col relative overflow-y-auto bg-zinc-950">
-           {/* Header Mobile */}
-           <div className="p-6 flex items-center lg:absolute lg:top-0 lg:left-0 lg:z-20 lg:w-full">
-               <Button variant="ghost" onClick={() => isSignUp && step > 1 ? setStep(1) : isSignUp ? setIsSignUp(false) : navigate('/')} className="hover:bg-zinc-800 text-white rounded-full w-12 h-12 p-0 shrink-0">
+           {/* Header Mobile - Com Z-index e botão corrigidos */}
+           <div className="p-6 flex items-center w-full z-50 relative lg:absolute lg:top-0 lg:left-0 lg:z-20">
+               <Button 
+                    variant="ghost" 
+                    onClick={handleBack} 
+                    className="bg-white/10 hover:bg-white/20 text-white rounded-full w-12 h-12 p-0 shrink-0 cursor-pointer z-50"
+                >
                    {isSignUp && step === 2 ? <ChevronLeft className="w-6 h-6" /> : <ArrowLeft className="w-6 h-6" />}
                </Button>
                
-               {/* Logo Mobile Header (Fora do Card) */}
+               {/* Logo Mobile Header */}
                <img src="/logo-goldmobile-2.png" alt="Gold Mobile" className="h-8 ml-4 lg:hidden" />
            </div>
 
-           <div className="flex-1 flex flex-col justify-center px-6 sm:px-12 md:px-24 py-10">
+           <div className="flex-1 flex flex-col justify-center px-6 sm:px-12 md:px-24 py-10 relative z-10">
                {/* Container Branco */}
                <div className="bg-white rounded-[40px] p-8 shadow-2xl animate-in slide-in-from-bottom-8 duration-700 relative overflow-hidden">
                    {/* Barra Decorativa Superior */}
