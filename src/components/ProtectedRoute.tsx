@@ -16,6 +16,23 @@ const ProtectedRoute = ({ children, allowedRoles }: Props) => {
 
   useEffect(() => {
     let mounted = true;
+    let timeoutId: NodeJS.Timeout;
+
+    // Função de Timeout de Segurança (Fail-safe)
+    // Se por algum motivo a verificação travar, libera erro após 15s
+    timeoutId = setTimeout(() => {
+      if (mounted) {
+        // CORREÇÃO CRÍTICA: Usa callback (prev) para ler o estado ATUAL e não o inicial
+        setStatus((currentStatus) => {
+             // Só muda para unauthorized se AINDA estiver carregando
+             if (currentStatus === 'loading') {
+                 console.warn("Timeout de verificação de segurança atingido.");
+                 return 'unauthorized';
+             }
+             return currentStatus;
+        });
+      }
+    }, 15000);
 
     const verifyAccess = async () => {
       try {
@@ -23,7 +40,10 @@ const ProtectedRoute = ({ children, allowedRoles }: Props) => {
         const { data: { session } } = await supabase.auth.getSession();
 
         if (!session) {
-          if (mounted) setStatus('unauthenticated');
+          if (mounted) {
+              clearTimeout(timeoutId); // Cancela o timeout pois já decidimos
+              setStatus('unauthenticated');
+          }
           return;
         }
 
@@ -33,6 +53,7 @@ const ProtectedRoute = ({ children, allowedRoles }: Props) => {
         if (userError || !user) {
           console.warn("Sessão inválida ou expirada no servidor.");
           if (mounted) {
+             clearTimeout(timeoutId);
              localStorage.clear();
              setStatus('unauthenticated');
           }
@@ -47,6 +68,8 @@ const ProtectedRoute = ({ children, allowedRoles }: Props) => {
           .maybeSingle();
 
         if (mounted) {
+          clearTimeout(timeoutId); // SUCESSO! Cancela o timeout imediatamente
+          
           if (profileError || !profile) {
             console.error('Erro ao buscar perfil:', profileError);
             setStatus('unauthorized');
@@ -57,22 +80,18 @@ const ProtectedRoute = ({ children, allowedRoles }: Props) => {
         }
       } catch (error) {
         console.error('Erro crítico na verificação:', error);
-        if (mounted) setStatus('unauthorized');
+        if (mounted) {
+            clearTimeout(timeoutId);
+            setStatus('unauthorized');
+        }
       }
     };
 
     verifyAccess();
 
-    // Timeout aumentado para 15 segundos para evitar falsos positivos no painel admin
-    const timeout = setTimeout(() => {
-        if (mounted && status === 'loading') {
-            setStatus('unauthorized');
-        }
-    }, 15000);
-
     return () => {
       mounted = false;
-      clearTimeout(timeout);
+      clearTimeout(timeoutId);
     };
   }, [allowedRoles]);
 
