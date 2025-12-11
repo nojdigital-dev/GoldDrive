@@ -133,7 +133,7 @@ const LoginDriver = () => {
                <Button variant="ghost" onClick={() => isSignUp && step > 1 ? setStep(s => s - 1) : isSignUp ? setIsSignUp(false) : navigate('/')} className="hover:bg-zinc-800 text-white rounded-full w-12 h-12 p-0">
                    {isSignUp && step > 1 ? <ChevronLeft className="w-6 h-6" /> : <ArrowLeft className="w-6 h-6" />}
                </Button>
-               <img src="/logo-goldmobile-2.png" alt="Logo" className="h-8 lg:hidden" />
+               {/* Logo removida do header mobile */}
                <div className="w-12 lg:hidden" />
            </div>
 
@@ -142,6 +142,13 @@ const LoginDriver = () => {
                    <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-yellow-500 via-zinc-800 to-black" />
                    
                    <div className="mb-8 text-center">
+                       {/* LOGO EM TEXTO */}
+                       <div className="flex justify-center mb-6">
+                           <h1 className="text-4xl font-black text-slate-900 tracking-tighter">
+                               GOLD <span className="text-yellow-500">MOBILE</span>
+                           </h1>
+                       </div>
+
                        <h2 className="text-3xl font-black text-slate-900">{isSignUp ? "Cadastro Motorista" : "Login Motorista"}</h2>
                        <p className="text-gray-500 mt-2 text-sm">{isSignUp ? "Junte-se à elite do transporte." : "Bem-vindo de volta, parceiro."}</p>
                    </div>
@@ -160,7 +167,8 @@ const LoginDriver = () => {
                                <Button className="w-full h-14 text-lg font-bold rounded-2xl bg-slate-900 hover:bg-black text-white shadow-xl mt-4" disabled={loading}>{loading ? <Loader2 className="animate-spin" /> : "Acessar Painel"}</Button>
                            </form>
                            
-                           <div className="mt-8 bg-yellow-50 border border-yellow-200 rounded-3xl p-6 text-center space-y-3">
+                           {/* DESTAQUE DE CADASTRO */}
+                            <div className="mt-8 bg-yellow-50 border border-yellow-200 rounded-3xl p-6 text-center space-y-3">
                                 <p className="text-slate-800 font-bold text-sm">
                                     Ainda não tem conta? <br/>
                                     <span className="font-normal text-slate-600">Clique no botão abaixo e crie em menos de 1 minuto.</span>
