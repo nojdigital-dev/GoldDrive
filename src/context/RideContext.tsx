@@ -30,7 +30,6 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
   const [userRole, setUserRole] = useState<'client' | 'driver' | null>(null);
   
   const rejectedIdsRef = useRef<string[]>([]);
-  
   const { toast } = useToast();
 
   useEffect(() => {
@@ -40,7 +39,6 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
 
   const fetchActiveRide = async (userId: string) => {
     try {
-      // Se não soubermos a role ainda, descobrimos
       let role = userRole;
       if (!role) {
           const { data: profile } = await supabase.from('profiles').select('role').eq('id', userId).maybeSingle();
@@ -58,8 +56,13 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
         .maybeSingle();
 
       if (data) {
-          // Atualiza o estado da corrida
-          setRide(data);
+          // Só atualiza se houver mudança de status ou se não tivermos dados ainda
+          setRide(prev => {
+              if (!prev || prev.status !== data.status || prev.id !== data.id) {
+                  return data;
+              }
+              return prev; 
+          });
       } else {
           setRide(null);
       }
@@ -96,7 +99,7 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
       }
   };
 
-  // 1. Inicialização de Auth
+  // 1. Inicialização
   useEffect(() => {
     const init = async () => {
         const { data: { session } } = await supabase.auth.getSession();
@@ -123,30 +126,39 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
     };
   }, []);
 
-  // 2. Polling de Segurança para Passageiro (CRUCIAL PARA O FIX)
-  // Se o passageiro estiver esperando (SEARCHING), verifica a cada 3s se alguém aceitou
+  // 2. POLLING UNIVERSAL DE SEGURANÇA (A CORREÇÃO PRINCIPAL)
+  // Verifica o status da corrida a cada 3 segundos se houver uma corrida ativa ou buscando
   useEffect(() => {
       let interval: NodeJS.Timeout;
       
-      if (currentUserId && userRole === 'client' && ride?.status === 'SEARCHING') {
+      const shouldPoll = currentUserId && (
+          // Se sou cliente e estou buscando ou em corrida
+          (userRole === 'client' && ride) ||
+          // Se sou cliente e estou na tela de busca (para pegar o aceite rápido)
+          (userRole === 'client' && !ride) || 
+          // Se sou motorista e estou em corrida
+          (userRole === 'driver' && ride)
+      );
+
+      if (shouldPoll) {
+          // Intervalo curto (2s) para sensação de tempo real
           interval = setInterval(() => {
-              console.log("Polling passenger status...");
-              fetchActiveRide(currentUserId);
-          }, 3000);
+              if (currentUserId) fetchActiveRide(currentUserId);
+          }, 2000);
       }
 
       return () => {
           if (interval) clearInterval(interval);
       };
-  }, [currentUserId, userRole, ride?.status]);
+  }, [currentUserId, userRole, ride?.status]); // Re-executa se o status mudar
 
-  // 3. Polling para Motorista (Lista de corridas)
+  // 3. Polling separado para lista de disponíveis (Motorista)
   useEffect(() => {
       let interval: NodeJS.Timeout;
       
       if (currentUserId && userRole === 'driver' && !ride) {
           fetchAvailableRides();
-          interval = setInterval(fetchAvailableRides, 4000);
+          interval = setInterval(fetchAvailableRides, 3000);
       }
 
       return () => {
@@ -154,14 +166,12 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
       };
   }, [currentUserId, userRole, ride]);
 
-  // 4. Realtime Unificado (Mais robusto)
+  // 4. Realtime Channel (Mantido como "camada rápida")
   useEffect(() => {
     if (!currentUserId) return;
 
-    console.log("Iniciando Realtime Channel Único");
-
     const channel = supabase
-      .channel('global_ride_updates')
+      .channel('global_ride_sync')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'rides' },
@@ -169,21 +179,17 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
             const newRecord = payload.new as any;
             const oldRecord = payload.old as any;
             
-            // Verificações para atualizar a corrida ativa (Passageiro ou Motorista)
-            const isMyRide = 
+            const isRelatedToMe = 
                 (newRecord?.customer_id === currentUserId) ||
                 (newRecord?.driver_id === currentUserId) ||
                 (oldRecord?.customer_id === currentUserId) ||
                 (oldRecord?.driver_id === currentUserId);
 
-            if (isMyRide) {
-                console.log("Realtime: Atualização na minha corrida detectada.");
+            if (isRelatedToMe) {
                 await fetchActiveRide(currentUserId);
             }
 
-            // Verificação para lista de disponíveis (Motorista)
             if (userRole === 'driver' && !ride) {
-                 // Se houver qualquer mudança em corridas SEARCHING, atualiza a lista
                  if (newRecord?.status === 'SEARCHING' || oldRecord?.status === 'SEARCHING') {
                      await fetchAvailableRides();
                  }
@@ -195,7 +201,7 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentUserId, userRole, ride]); // Dependências mantidas para recriar se o estado crítico mudar
+  }, [currentUserId, userRole, ride]);
 
   // --- ACTIONS ---
 
@@ -214,7 +220,6 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
         }).select().single();
       if (error) throw error;
       setRide(data);
-      // Força fetch imediato para garantir estado sincronizado
       await fetchActiveRide(currentUserId);
     } catch (e: any) { toast({ title: "Erro", description: e.message, variant: "destructive" }); }
   };
@@ -269,6 +274,7 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
           const { error } = await supabase.from('rides').update({ status: 'ARRIVED' }).eq('id', rideId);
           if (error) throw error;
           await fetchActiveRide(currentUserId!);
+          toast({ title: "Status Atualizado", description: "Passageiro notificado da chegada." });
       } catch (e: any) { toast({ title: "Erro", description: e.message }); }
   };
 
@@ -277,6 +283,7 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
           const { error } = await supabase.from('rides').update({ status: 'IN_PROGRESS' }).eq('id', rideId);
           if (error) throw error;
           await fetchActiveRide(currentUserId!);
+          toast({ title: "Iniciada", description: "Boa viagem!" });
       } catch (e: any) { toast({ title: "Erro", description: e.message }); }
   };
 
@@ -285,6 +292,7 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
           const { error } = await supabase.from('rides').update({ status: 'COMPLETED' }).eq('id', rideId);
           if (error) throw error;
           setRide(prev => prev ? ({...prev, status: 'COMPLETED'}) : null);
+          toast({ title: "Finalizada", description: "Corrida concluída com sucesso." });
       } catch (e: any) { toast({ title: "Erro", description: e.message }); }
   };
 
@@ -294,7 +302,6 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
           const { error } = await supabase.from('rides').update(updateData).eq('id', rideId);
           if (error) throw error;
           setRide(null);
-          toast({ title: "Obrigado", description: "Avaliação enviada." });
       } catch (e: any) { toast({ title: "Erro", description: e.message }); }
   };
 

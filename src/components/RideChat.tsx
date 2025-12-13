@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Send, X } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { showError } from "@/utils/toast"; // Importação adicionada
+import { showError } from "@/utils/toast";
 
 interface Message {
   id: string;
@@ -32,21 +32,32 @@ const RideChat = ({ rideId, currentUserId, otherUserName, otherUserAvatar, role,
   const [newMessage, setNewMessage] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Realtime Subscription para mensagens instantâneas
+  // Busca inicial e Polling de Segurança
   useEffect(() => {
     fetchMessages();
 
+    // Polling a cada 3 segundos para garantir sincronia
+    const interval = setInterval(fetchMessages, 3000);
+
+    return () => clearInterval(interval);
+  }, [rideId]);
+
+  // Realtime Subscription
+  useEffect(() => {
     const channel = supabase
-      .channel(`chat:${rideId}`)
+      .channel(`chat_room:${rideId}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `ride_id=eq.${rideId}` },
         (payload) => {
           const newMsg = payload.new as Message;
-          // Adiciona a nova mensagem apenas se não for do próprio usuário (que já foi adicionado otimisticamente)
-          if (newMsg.sender_id !== currentUserId) {
-            setMessages(prev => [...prev, newMsg]);
-          }
+          // Evita duplicidade se o ID já existir (ex: envio otimista que já foi confirmado)
+          setMessages(prev => {
+             if (prev.some(m => m.id === newMsg.id)) return prev;
+             // Se for minha mensagem, já devo ter adicionado otimisticamente, mas vamos garantir
+             if (newMsg.sender_id === currentUserId) return prev; 
+             return [...prev, newMsg];
+          });
         }
       )
       .subscribe();
@@ -56,7 +67,7 @@ const RideChat = ({ rideId, currentUserId, otherUserName, otherUserAvatar, role,
     };
   }, [rideId, currentUserId]);
 
-  // Scroll automático para a última mensagem
+  // Scroll automático
   useEffect(() => {
     if (scrollRef.current) {
         scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -72,7 +83,11 @@ const RideChat = ({ rideId, currentUserId, otherUserName, otherUserAvatar, role,
         .order('created_at', { ascending: true });
         
         if (data) {
-             setMessages(data);
+             // Atualiza apenas se houver diferença para evitar re-renders desnecessários
+             setMessages(prev => {
+                 if (prev.length === data.length) return prev;
+                 return data;
+             });
         }
     } catch (err) {
         console.error("Erro ao buscar mensagens do chat", err);
@@ -82,8 +97,8 @@ const RideChat = ({ rideId, currentUserId, otherUserName, otherUserAvatar, role,
   const handleSend = async (text: string = newMessage) => {
     if (!text.trim()) return;
     
-    // Envio Otimista
-    const tempId = Math.random().toString();
+    // ID temporário para envio otimista
+    const tempId = `temp-${Date.now()}`;
     const tempMsg = {
         id: tempId,
         sender_id: currentUserId,
@@ -101,11 +116,10 @@ const RideChat = ({ rideId, currentUserId, otherUserName, otherUserAvatar, role,
     }).select().single();
 
     if (error) {
-        // Se der erro, remove a mensagem otimista e avisa o usuário
         setMessages(prev => prev.filter(m => m.id !== tempId));
         showError("Não foi possível enviar a mensagem.");
     } else if (data) {
-        // Atualiza a mensagem otimista com os dados reais do banco (ID correto, etc)
+        // Substitui a mensagem temporária pela real
         setMessages(prev => prev.map(m => m.id === tempId ? data : m));
     }
   };
@@ -190,7 +204,6 @@ const RideChat = ({ rideId, currentUserId, otherUserName, otherUserAvatar, role,
                     onChange={(e) => setNewMessage(e.target.value)} 
                     onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                     placeholder="Digite sua mensagem..." 
-                    // CORREÇÃO AQUI: Forçando texto escuro e fundo claro
                     className="h-12 rounded-xl border-gray-200 bg-gray-50 focus:bg-white text-slate-900 placeholder:text-gray-400 focus:ring-1 focus:ring-slate-900 transition-all text-base font-medium"
                 />
                 <Button 
