@@ -137,7 +137,7 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
       if (!uid || !role) return;
       const queryField = role === 'client' ? 'customer_id' : 'driver_id';
       
-      const { data } = await supabase.from('rides')
+      const { data, error } = await supabase.from('rides')
         .select('*')
         .eq(queryField, uid)
         .in('status', ['SEARCHING', 'ACCEPTED', 'ARRIVED', 'IN_PROGRESS', 'COMPLETED'])
@@ -145,11 +145,27 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
         .limit(1)
         .maybeSingle();
       
+      if (error) {
+          console.error("Error fetching current ride:", error);
+          setRide(null);
+          return;
+      }
+
       if (data) {
-          const isActive = ['SEARCHING', 'ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(data.status);
-          const isPendingRating = data.status === 'COMPLETED' && (role === 'client' ? data.customer_rating === null : data.driver_rating === null);
-          
-          if (isActive || isPendingRating) {
+          let shouldSetRide = false;
+          if (['SEARCHING', 'ACCEPTED', 'ARRIVED', 'IN_PROGRESS'].includes(data.status)) {
+              shouldSetRide = true; // Active ride
+          } else if (data.status === 'COMPLETED') {
+              // Check if rating is still pending for the current user's role
+              if (role === 'client' && data.driver_rating === null) { // Client needs to rate driver
+                  shouldSetRide = true;
+              } else if (role === 'driver' && data.customer_rating === null) { // Driver needs to rate customer
+                  shouldSetRide = true;
+              }
+              // If both ratings are present, or the relevant one is present, it's not an active ride anymore.
+          }
+
+          if (shouldSetRide) {
               let rideData = { ...data } as RideData;
               if (data.driver_id) rideData.driver_details = await fetchDriverFullInfo(data.driver_id);
               if (data.customer_id) rideData.client_details = await fetchClientFullInfo(data.customer_id);
@@ -157,6 +173,8 @@ export const RideProvider = ({ children }: { children: ReactNode }) => {
           } else {
               setRide(null);
           }
+      } else {
+          setRide(null);
       }
   };
 
