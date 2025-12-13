@@ -24,7 +24,7 @@ const DriverDashboard = () => {
   // Tabs & State
   const [activeTab, setActiveTab] = useState('home');
   const [isOnline, setIsOnline] = useState(false);
-  const [incomingRide, setIncomingRide] = useState<RideData | null>(null);
+  const [incomingRide, setIncomingRide] = useState<any | null>(null);
   const [timer, setTimer] = useState(30);
   const [driverProfile, setDriverProfile] = useState<any>(null);
   const [showChat, setShowChat] = useState(false);
@@ -144,7 +144,13 @@ const DriverDashboard = () => {
   }, [incomingRide, timer]);
 
   const handleAccept = async () => { if (incomingRide) { await acceptRide(incomingRide.id); setIncomingRide(null); } };
-  const handleReject = async () => { if (incomingRide) { await rejectRide(incomingRide.id); setIncomingRide(null); } };
+  
+  const handleReject = async () => { 
+      if (incomingRide) { 
+          await rejectRide(incomingRide.id); 
+          setIncomingRide(null); 
+      } 
+  };
   
   const handleCancelClick = () => setShowCancelAlert(true);
   
@@ -258,10 +264,12 @@ const DriverDashboard = () => {
                         <div className="flex items-center gap-3 bg-white/10 p-3 rounded-2xl mb-4">
                              <Avatar className="h-10 w-10 border border-white/30">
                                  <AvatarImage src={incomingRide.client_details?.avatar_url} />
-                                 <AvatarFallback>{incomingRide.client_details?.name?.[0]}</AvatarFallback>
+                                 <AvatarFallback>{incomingRide.client_details?.first_name?.[0]}</AvatarFallback>
                              </Avatar>
                              <div>
-                                 <p className="font-bold text-sm">{incomingRide.client_details?.name || 'Passageiro'}</p>
+                                 <p className="font-bold text-sm">
+                                     {incomingRide.client_details?.first_name ? `${incomingRide.client_details.first_name} ${incomingRide.client_details.last_name || ''}` : 'Passageiro'}
+                                 </p>
                                  <div className="flex items-center gap-1 text-xs text-gray-300">
                                      <Phone className="w-3 h-3" /> 
                                      {incomingRide.client_details?.phone || 'Sem telefone'}
@@ -292,7 +300,7 @@ const DriverDashboard = () => {
                         <div className="flex justify-between items-center mb-6">
                             <div>
                                 <Badge className="mb-2 bg-black text-white hover:bg-black">{ride?.status === 'ACCEPTED' ? 'A CAMINHO' : ride?.status === 'ARRIVED' ? 'NO LOCAL' : 'EM VIAGEM'}</Badge>
-                                <h3 className="text-2xl font-bold text-slate-900">{ride?.client_details?.name}</h3>
+                                <h3 className="text-2xl font-bold text-slate-900">{ride?.client_details?.first_name} {ride?.client_details?.last_name}</h3>
                                 {ride?.client_details?.phone && <p className="text-sm text-gray-500 flex items-center gap-1"><Phone className="w-3 h-3" /> {ride.client_details.phone}</p>}
                             </div>
                             <div className="text-right"><h3 className="text-3xl font-black text-green-600">R$ {ride?.driver_earnings?.toFixed(2)}</h3><p className="text-gray-400 text-xs uppercase font-bold tracking-wider">Ganhos</p></div>
@@ -470,7 +478,7 @@ const DriverDashboard = () => {
             rideId={ride.id} 
             currentUserId={currentUserId} 
             role="driver"
-            otherUserName={ride.client_details?.name || 'Passageiro'}
+            otherUserName={ride.client_details?.first_name || 'Passageiro'}
             otherUserAvatar={ride.client_details?.avatar_url}
             onClose={() => setShowChat(false)}
           />
