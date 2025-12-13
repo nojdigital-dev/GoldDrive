@@ -30,13 +30,16 @@ const App = () => {
       console.error("Promise Rejection:", event.reason);
       if (event.reason?.message?.includes("ResizeObserver")) return;
       const msg = event.reason?.message || event.reason || "Erro de conexão ou lógica";
-      showError(`Sistema: ${msg}`);
+      // Evita spam de erro se for algo trivial
+      if (typeof msg === 'string' && !msg.includes("useRide")) {
+          showError(`Sistema: ${msg}`);
+      }
     };
 
     const handleError = (event: ErrorEvent) => {
       console.error("Global Error:", event.error);
       if (event.message?.includes("ResizeObserver")) return;
-      showError(`Erro: ${event.message}`);
+      // showToast é melhor aqui para não bloquear a tela com alertas
     };
 
     window.addEventListener("unhandledrejection", handleUnhandledRejection);
@@ -64,7 +67,7 @@ const App = () => {
                 <Route path="/login/driver" element={<LoginDriver />} />
                 <Route path="/login/admin" element={<LoginAdmin />} />
                 
-                {/* Rota de Pendência (Acessível se autenticado, mas status pending) */}
+                {/* Rota de Pendência */}
                 <Route path="/driver-pending" element={<DriverPending />} />
 
                 {/* Rotas Protegidas */}
