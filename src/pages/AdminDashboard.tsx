@@ -541,8 +541,63 @@ const AdminDashboard = () => {
 
                               {/* Tabs de Categories e Values (Mantidas sem alteração para brevidade) */}
                               <TabsContent value="categories">
-                                  {/* ... Conteúdo de categorias mantido ... */}
-                                  <div className="flex flex-col gap-8"><div className="space-y-4"><h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2"><Star className="w-5 h-5 text-yellow-500 fill-yellow-500" /> Categorias Fixas</h3>{goldDriverCategory ? (<Card className="border-0 shadow-lg bg-gradient-to-r from-yellow-50 to-white dark:from-slate-800 dark:to-slate-900 border-l-4 border-l-yellow-500 overflow-hidden w-full"><CardContent className="p-6 flex flex-col md:flex-row items-center justify-between gap-6"><div className="flex items-center gap-4"><div className="w-16 h-16 bg-yellow-500 rounded-2xl flex items-center justify-center shadow-lg text-black"><Car className="w-8 h-8" /></div><div><h4 className="text-2xl font-black text-slate-900 dark:text-white mb-1">Gold Driver</h4><p className="text-sm text-slate-600 dark:text-slate-400 max-w-md">Esta é a categoria principal do aplicativo. Os preços são definidos pela tabela fixa na aba <strong>Valores & Tabela</strong>.</p></div></div><div className="flex items-center gap-4 bg-white/50 dark:bg-black/20 p-4 rounded-xl border border-yellow-500/20"><div className="text-right mr-2"><p className="font-bold text-sm">Status no App</p><p className="text-xs text-muted-foreground">{goldDriverCategory.active ? 'Visível para passageiros' : 'Oculto'}</p></div><Switch checked={goldDriverCategory.active} onCheckedChange={(val) => updateCategory(goldDriverCategory.id, 'active', val)} className="data-[state=checked]:bg-yellow-500 scale-125"/></div></CardContent><CardFooter className="bg-yellow-500/10 border-t border-yellow-500/20 p-4"><Button onClick={handleSaveGoldDriver} disabled={isSavingGold} className="ml-auto bg-yellow-500 hover:bg-yellow-400 text-black font-bold h-10 rounded-xl">{isSavingGold ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Save className="w-4 h-4 mr-2" /> Salvar Status Gold Driver</>}</Button></CardFooter></Card>) : (<div className="p-8 text-center border-2 border-dashed border-slate-200 rounded-2xl"><p className="text-muted-foreground">Categoria Gold Driver não encontrada.</p></div>)}</div><Separator className="bg-slate-200 dark:bg-slate-800" /><div className="space-y-4"><h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2"><Activity className="w-5 h-5 text-blue-500" /> Categorias Dinâmicas</h3><div className="flex flex-col gap-4">{dynamicCategories.map(cat => (<Card key={cat.id} className={`border-0 shadow-sm transition-all w-full ${cat.active ? 'bg-white dark:bg-slate-800 ring-1 ring-slate-200 dark:ring-slate-700' : 'bg-slate-50 dark:bg-slate-900/50 opacity-70'}`}><CardContent className="p-5 flex items-center justify-between"><div className="flex items-center gap-3"><div className={`w-10 h-10 rounded-xl flex items-center justify-center ${cat.active ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-slate-200 text-slate-500'}`}><Car className="w-5 h-5" /></div><div><p className="font-bold text-slate-900 dark:text-white">{cat.name}</p><p className="text-xs text-muted-foreground">Preço base + KM</p></div></div><Switch checked={cat.active} onCheckedChange={(val) => updateCategory(cat.id, 'active', val)} /></CardContent></Card>))}</div><div className="pt-2"><Button onClick={handleSaveConfig} className="w-full bg-slate-900 text-white font-bold h-14 rounded-2xl shadow-xl hover:bg-black transition-all hover:scale-[1.01]"><Save className="w-5 h-5 mr-2" /> Salvar Status das Dinâmicas</Button></div></div>
+                                  <> {/* Adicionado React.Fragment aqui */}
+                                      <div className="flex flex-col gap-8">
+                                          <div className="space-y-4">
+                                              <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2"><Star className="w-5 h-5 text-yellow-500 fill-yellow-500" /> Categorias Fixas</h3>
+                                              {goldDriverCategory ? (
+                                                  <Card className="border-0 shadow-lg bg-gradient-to-r from-yellow-50 to-white dark:from-slate-800 dark:to-slate-900 border-l-4 border-l-yellow-500 overflow-hidden w-full">
+                                                      <CardContent className="p-6 flex flex-col md:flex-row items-center justify-between gap-6">
+                                                          <div className="flex items-center gap-4">
+                                                              <div className="w-16 h-16 bg-yellow-500 rounded-2xl flex items-center justify-center shadow-lg text-black"><Car className="w-8 h-8" /></div>
+                                                              <div>
+                                                                  <h4 className="text-2xl font-black text-slate-900 dark:text-white mb-1">Gold Driver</h4>
+                                                                  <p className="text-sm text-slate-600 dark:text-slate-400 max-w-md">Esta é a categoria principal do aplicativo. Os preços são definidos pela tabela fixa na aba <strong>Valores & Tabela</strong>.</p>
+                                                              </div>
+                                                          </div>
+                                                          <div className="flex items-center gap-4 bg-white/50 dark:bg-black/20 p-4 rounded-xl border border-yellow-500/20">
+                                                              <div className="text-right mr-2">
+                                                                  <p className="font-bold text-sm">Status no App</p>
+                                                                  <p className="text-xs text-muted-foreground">{goldDriverCategory.active ? 'Visível para passageiros' : 'Oculto'}</p>
+                                                              </div>
+                                                              <Switch checked={goldDriverCategory.active} onCheckedChange={(val) => updateCategory(goldDriverCategory.id, 'active', val)} className="data-[state=checked]:bg-yellow-500 scale-125"/>
+                                                          </div>
+                                                      </CardContent>
+                                                      <CardFooter className="bg-yellow-500/10 border-t border-yellow-500/20 p-4">
+                                                          <Button onClick={handleSaveGoldDriver} disabled={isSavingGold} className="ml-auto bg-yellow-500 hover:bg-yellow-400 text-black font-bold h-10 rounded-xl">{isSavingGold ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Save className="w-4 h-4 mr-2" /> Salvar Status Gold Driver</>}</Button>
+                                                      </CardFooter>
+                                                  </Card>
+                                              ) : (
+                                                  <div className="p-8 text-center border-2 border-dashed border-slate-200 rounded-2xl">
+                                                      <p className="text-muted-foreground">Categoria Gold Driver não encontrada.</p>
+                                                  </div>
+                                              )}
+                                          </div>
+                                          <Separator className="bg-slate-200 dark:bg-slate-800" />
+                                          <div className="space-y-4">
+                                              <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2"><Activity className="w-5 h-5 text-blue-500" /> Categorias Dinâmicas</h3>
+                                              <div className="flex flex-col gap-4">
+                                                  {dynamicCategories.map(cat => (
+                                                      <Card key={cat.id} className={`border-0 shadow-sm transition-all w-full ${cat.active ? 'bg-white dark:bg-slate-800 ring-1 ring-slate-200 dark:ring-slate-700' : 'bg-slate-50 dark:bg-slate-900/50 opacity-70'}`}>
+                                                          <CardContent className="p-5 flex items-center justify-between">
+                                                              <div className="flex items-center gap-3">
+                                                                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${cat.active ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-slate-200 text-slate-500'}`}><Car className="w-5 h-5" /></div>
+                                                                  <div>
+                                                                      <p className="font-bold text-slate-900 dark:text-white">{cat.name}</p>
+                                                                      <p className="text-xs text-muted-foreground">Preço base + KM</p>
+                                                                  </div>
+                                                              </div>
+                                                              <Switch checked={cat.active} onCheckedChange={(val) => updateCategory(cat.id, 'active', val)} />
+                                                          </CardContent>
+                                                      </Card>
+                                                  ))}
+                                              </div>
+                                              <div className="pt-2">
+                                                  <Button onClick={handleSaveConfig} className="w-full bg-slate-900 text-white font-bold h-14 rounded-2xl shadow-xl hover:bg-black transition-all hover:scale-[1.01]"><Save className="w-5 h-5 mr-2" /> Salvar Status das Dinâmicas</Button>
+                                              </div>
+                                          </div>
+                                      </div>
+                                  </> {/* Fechamento do React.Fragment */}
                               </TabsContent>
 
                               <TabsContent value="values">
