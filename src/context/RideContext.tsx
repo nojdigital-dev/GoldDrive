@@ -30,9 +30,8 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<'client' | 'driver' | null>(null);
   
-  // Usamos Ref para manter controle local imediato das rejeições
-  // Isso sobrevive a re-renders e garante que o filtro sempre tenha os dados mais recentes
-  const rejectedIdsRef = useRef<Set<string>>(new Set());
+  // Voltamos para Array para evitar erros de HMR (Hot Module Replacement)
+  const rejectedIdsRef = useRef<string[]>([]);
   
   const { toast } = useToast();
 
@@ -77,13 +76,11 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
 
           if (data) {
               const validRides = data.filter(r => {
-                  // 1. Filtrar corridas criadas por mim mesmo (teste)
                   if (r.customer_id === currentUserId) return false;
                   
-                  // 2. Filtrar IDs que estão na lista local de rejeição (Ref)
-                  if (rejectedIdsRef.current.has(r.id)) return false;
+                  // Verificação com Array (includes)
+                  if (rejectedIdsRef.current.includes(r.id)) return false;
 
-                  // 3. Filtrar IDs que estão na lista de rejeição do banco (rejected_by)
                   if (r.rejected_by && Array.isArray(r.rejected_by) && r.rejected_by.includes(currentUserId)) {
                       return false;
                   }
@@ -114,7 +111,7 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
         setCurrentUserId(null);
         setRide(null);
         setAvailableRides([]);
-        rejectedIdsRef.current.clear();
+        rejectedIdsRef.current = []; // Limpa Array
       }
     });
 
@@ -126,13 +123,11 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
       if (currentUserId && userRole === 'driver' && !ride) {
           fetchAvailableRides();
-          // Polling para garantir sincronia
           const interval = setInterval(fetchAvailableRides, 5000);
           return () => clearInterval(interval);
       }
   }, [currentUserId, userRole, ride]);
 
-  // Realtime updates
   useEffect(() => {
     if (!currentUserId) return;
 
@@ -202,8 +197,12 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
          const { data: check } = await supabase.from('rides').select('driver_id').eq('id', rideId).single();
          if (check?.driver_id) {
              toast({ title: "Aviso", description: "Esta corrida já foi aceita.", variant: "destructive" });
-             // Se já foi aceita, rejeita localmente para não aparecer mais
-             rejectedIdsRef.current.add(rideId);
+             
+             // Adiciona ao Array se não existir
+             if (!rejectedIdsRef.current.includes(rideId)) {
+                 rejectedIdsRef.current.push(rideId);
+             }
+             
              setAvailableRides(prev => prev.filter(r => r.id !== rideId));
              return;
          }
@@ -217,21 +216,16 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const rejectRide = async (rideId: string) => {
-      // 1. Atualização visual imediata (Otimista)
-      rejectedIdsRef.current.add(rideId);
+      // 1. Atualização local (Array push)
+      if (!rejectedIdsRef.current.includes(rideId)) {
+          rejectedIdsRef.current.push(rideId);
+      }
       setAvailableRides(prev => prev.filter(r => r.id !== rideId));
 
-      // 2. Persistência no banco de dados para garantir que não volte em futuras sessões ou queries
+      // 2. Persistência
       try {
           const { error } = await supabase.rpc('reject_ride', { ride_id_param: rideId });
-          if (error) {
-              console.error("Erro ao salvar rejeição no banco:", error);
-              // Fallback: se a RPC falhar, tenta update direto (menos seguro se houver concorrência, mas melhor que nada)
-              await supabase.from('rides').update({ 
-                  // @ts-ignore
-                  rejected_by: supabase.sql`array_append(COALESCE(rejected_by, '{}'), ${currentUserId})`
-              }).eq('id', rideId);
-          }
+          if (error) console.error("Erro ao salvar rejeição no banco:", error);
       } catch (err) {
           console.error("Erro ao chamar reject_ride:", err);
       }
