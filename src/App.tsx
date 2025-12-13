@@ -54,8 +54,8 @@ const App = () => {
         <TooltipProvider>
           <Toaster />
           <Sonner position="top-right" closeButton richColors theme="light" />
-          <RideProvider>
-            <BrowserRouter>
+          <BrowserRouter>
+            <RideProvider>
               <Routes>
                 <Route path="/" element={<Index />} />
                 
@@ -101,8 +101,8 @@ const App = () => {
 
                 <Route path="*" element={<NotFound />} />
               </Routes>
-            </BrowserRouter>
-          </RideProvider>
+            </RideProvider>
+          </BrowserRouter>
         </TooltipProvider>
       </QueryClientProvider>
     </GlobalErrorBoundary>
