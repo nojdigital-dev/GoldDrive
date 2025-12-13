@@ -1,35 +1,33 @@
 # Estágio de Build
-# Usamos 'slim' (Debian) em vez de 'alpine' para evitar erros de binários do Rollup/Vite
 FROM node:20-slim AS build
 
 WORKDIR /app
 
-# Copia apenas os arquivos de dependência primeiro para aproveitar o cache do Docker
-COPY package.json package-lock.json* ./
+# Copia APENAS o package.json (ignoramos o lockfile de propósito para evitar conflito de SO)
+COPY package.json ./
 
-# Instala dependências
+# Instala as dependências do zero baseadas no package.json
+# Isso garante que o pacote @rollup/rollup-linux-x64-gnu seja baixado corretamente
 RUN npm install
 
-# Copia o restante do código fonte
+# Copia o restante do código
 COPY . .
 
-# Executa o build (cria a pasta dist)
+# Executa o build
 RUN npm run build
 
-# Estágio de Produção (Servidor Web Leve)
+# Estágio de Produção (Servidor Web)
 FROM nginx:alpine
 
-# Remove a configuração padrão do Nginx
+# Limpa configuração padrão
 RUN rm -rf /etc/nginx/conf.d/default.conf
 
-# Copia nossa configuração personalizada do Nginx
+# Copia nossa configuração personalizada
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copia os arquivos estáticos gerados no build anterior para a pasta do Nginx
+# Copia o build final
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Expõe a porta 80
 EXPOSE 80
 
-# Inicia o Nginx
 CMD ["nginx", "-g", "daemon off;"]
