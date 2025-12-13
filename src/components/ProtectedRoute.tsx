@@ -16,151 +16,69 @@ const ProtectedRoute = ({ children, allowedRoles }: Props) => {
 
   useEffect(() => {
     let mounted = true;
-    let timeoutId: NodeJS.Timeout;
 
-    // Função de Timeout de Segurança (Fail-safe)
-    // Se por algum motivo a verificação travar, libera erro após 15s
-    timeoutId = setTimeout(() => {
-      if (mounted) {
-        // CORREÇÃO CRÍTICA: Usa callback (prev) para ler o estado ATUAL e não o inicial
-        setStatus((currentStatus) => {
-             // Só muda para unauthorized se AINDA estiver carregando
-             if (currentStatus === 'loading') {
-                 console.warn("Timeout de verificação de segurança atingido.");
-                 return 'unauthorized';
-             }
-             return currentStatus;
-        });
-      }
-    }, 15000);
-
-    const verifyAccess = async () => {
-      try {
-        // 1. Tenta pegar a sessão local
+    const check = async () => {
+        // Tenta pegar a sessão do cache local primeiro (instantâneo)
         const { data: { session } } = await supabase.auth.getSession();
-
+        
         if (!session) {
-          if (mounted) {
-              clearTimeout(timeoutId); // Cancela o timeout pois já decidimos
-              setStatus('unauthenticated');
-          }
-          return;
+            if(mounted) setStatus('unauthenticated');
+            return;
         }
 
-        // 2. Valida usuário no servidor
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-        if (userError || !user) {
-          console.warn("Sessão inválida ou expirada no servidor.");
-          if (mounted) {
-             clearTimeout(timeoutId);
-             localStorage.clear();
-             setStatus('unauthenticated');
-          }
-          return;
+        // Se já temos a role no metadata do usuário (cache do JWT), usamos ela para evitar bate-volta no banco
+        // Isso acelera drasticamente a navegação
+        const userRole = session.user.user_metadata?.role;
+        
+        if (userRole && allowedRoles.includes(userRole)) {
+            if(mounted) setStatus('authorized');
+            // Mesmo autorizado via cache, podemos validar no banco em background se necessário, 
+            // mas para UX fluida, confiamos no JWT por enquanto.
+            return;
         }
 
-        // 3. Busca perfil
-        const { data: profile, error: profileError } = await supabase
+        // Fallback: Se não tiver no metadata, busca no banco (mais lento, mas seguro)
+        const { data: profile } = await supabase
           .from('profiles')
           .select('role')
-          .eq('id', user.id)
+          .eq('id', session.user.id)
           .maybeSingle();
-
+        
         if (mounted) {
-          clearTimeout(timeoutId); // SUCESSO! Cancela o timeout imediatamente
-          
-          if (profileError || !profile) {
-            console.error('Erro ao buscar perfil:', profileError);
-            setStatus('unauthorized');
-          } else {
-            const hasAccess = allowedRoles.includes(profile.role);
-            setStatus(hasAccess ? 'authorized' : 'unauthorized');
-          }
+            if (profile && allowedRoles.includes(profile.role)) {
+                setStatus('authorized');
+            } else {
+                // Se o perfil não corresponde, desloga para segurança
+                await supabase.auth.signOut();
+                setStatus('unauthenticated');
+            }
         }
-      } catch (error) {
-        console.error('Erro crítico na verificação:', error);
-        if (mounted) {
-            clearTimeout(timeoutId);
-            setStatus('unauthorized');
-        }
-      }
     };
 
-    verifyAccess();
+    check();
 
-    return () => {
-      mounted = false;
-      clearTimeout(timeoutId);
-    };
+    return () => { mounted = false; };
   }, [allowedRoles]);
 
-  const handleForceLogout = () => {
-      // Fire and forget logout
-      try { supabase.auth.signOut(); } catch (e) { console.error(e); }
-
-      // Limpeza brutal e imediata
-      localStorage.clear();
-      sessionStorage.clear();
-      
-      // Redirecionamento inteligente baseado na permissão da rota
-      let redirectUrl = '/login';
-      if (allowedRoles.includes('admin')) {
-          redirectUrl = '/login/admin';
-      } else if (allowedRoles.includes('driver')) {
-          redirectUrl = '/login/driver';
-      }
-
-      window.location.replace(redirectUrl);
-  };
-
   if (status === 'loading') {
+    // Loader mínimo para evitar piscar a tela, mas rápido o suficiente para não ser notado
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-950">
-        <div className="text-center space-y-4">
-          <Loader2 className="animate-spin h-12 w-12 text-yellow-500 mx-auto" />
-          <p className="text-white font-medium text-sm animate-pulse">Verificando credenciais...</p>
-        </div>
+        <Loader2 className="animate-spin h-8 w-8 text-yellow-500" />
       </div>
     );
   }
 
   if (status === 'unauthenticated') {
-    // Redirecionamento inteligente também para casos não autenticados
     let redirectUrl = '/login';
     if (allowedRoles.includes('admin')) redirectUrl = '/login/admin';
     else if (allowedRoles.includes('driver')) redirectUrl = '/login/driver';
-    
     return <Navigate to={redirectUrl} replace />;
   }
 
   if (status === 'unauthorized') {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 p-4 text-center animate-in fade-in">
-        <div className="w-24 h-24 bg-red-500/10 rounded-full flex items-center justify-center mb-6 ring-1 ring-red-500/20">
-            <AlertTriangle className="w-12 h-12 text-red-500" />
-        </div>
-        <h1 className="text-3xl font-black text-white mb-2">Acesso Negado</h1>
-        <p className="text-gray-400 max-w-md mb-8 leading-relaxed">
-            Não foi possível recuperar suas credenciais. Isso pode ocorrer por falha na conexão ou sessão expirada.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-4 w-full max-w-sm">
-            <Button 
-                onClick={() => window.location.reload()} 
-                className="flex-1 h-14 bg-white text-black hover:bg-gray-200 font-bold rounded-2xl"
-            >
-                <RefreshCw className="mr-2 h-5 w-5" /> Tentar Novamente
-            </Button>
-            <Button 
-                variant="destructive"
-                onClick={handleForceLogout}
-                className="flex-1 h-14 rounded-2xl font-bold bg-red-600 hover:bg-red-700 shadow-lg shadow-red-900/20"
-            >
-                <LogOut className="mr-2 h-5 w-5" /> Sair Agora
-            </Button>
-        </div>
-      </div>
-    );
+    // Se não autorizado, manda para a home, que redirecionará corretamente
+    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;

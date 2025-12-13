@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, X, RefreshCw } from "lucide-react";
+import { Send, X } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface Message {
@@ -31,14 +31,29 @@ const RideChat = ({ rideId, currentUserId, otherUserName, otherUserAvatar, role,
   const [newMessage, setNewMessage] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Polling de 1 segundo agressivo para garantir tempo real
+  // Realtime Subscription para mensagens instantâneas
   useEffect(() => {
     fetchMessages();
-    const interval = setInterval(() => {
-        fetchMessages();
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [rideId]);
+
+    const channel = supabase
+      .channel(`chat:${rideId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `ride_id=eq.${rideId}` },
+        (payload) => {
+          const newMsg = payload.new as Message;
+          // Adiciona a nova mensagem apenas se não for do próprio usuário (que já foi adicionado otimisticamente)
+          if (newMsg.sender_id !== currentUserId) {
+            setMessages(prev => [...prev, newMsg]);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [rideId, currentUserId]);
 
   // Scroll automático para a última mensagem
   useEffect(() => {
@@ -49,21 +64,17 @@ const RideChat = ({ rideId, currentUserId, otherUserName, otherUserAvatar, role,
 
   const fetchMessages = async () => {
     try {
-        const { data, error } = await supabase
+        const { data } = await supabase
         .from('messages')
         .select('*')
         .eq('ride_id', rideId)
         .order('created_at', { ascending: true });
         
         if (data) {
-             // Compara se mudou para evitar re-render visual desnecessário
-             setMessages(prev => {
-                 if (prev.length !== data.length) return data;
-                 return prev;
-             });
+             setMessages(data);
         }
     } catch (err) {
-        console.error("Erro chat", err);
+        console.error("Erro ao buscar mensagens do chat", err);
     }
   };
 
@@ -71,27 +82,35 @@ const RideChat = ({ rideId, currentUserId, otherUserName, otherUserAvatar, role,
     if (!text.trim()) return;
     
     // Envio Otimista
+    const tempId = Math.random().toString();
     const tempMsg = {
-        id: Math.random().toString(),
+        id: tempId,
         sender_id: currentUserId,
         content: text,
         created_at: new Date().toISOString()
     };
+    
     setMessages(prev => [...prev, tempMsg]);
     setNewMessage("");
 
-    await supabase.from('messages').insert({
+    const { data, error } = await supabase.from('messages').insert({
         ride_id: rideId,
         sender_id: currentUserId,
         content: text
-    });
-    
-    // Força fetch logo após envio
-    setTimeout(fetchMessages, 200);
+    }).select().single();
+
+    if (error) {
+        // Se der erro, remove a mensagem otimista e avisa o usuário
+        setMessages(prev => prev.filter(m => m.id !== tempId));
+        showError("Não foi possível enviar a mensagem.");
+    } else if (data) {
+        // Atualiza a mensagem otimista com os dados reais do banco (ID correto, etc)
+        setMessages(prev => prev.map(m => m.id === tempId ? data : m));
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/20 backdrop-blur-sm animate-in fade-in">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in">
         <div className="w-full max-w-sm bg-white rounded-[32px] shadow-2xl overflow-hidden flex flex-col h-[600px] border border-gray-200">
             {/* Header */}
             <div className="bg-slate-900 p-4 flex items-center justify-between text-white shadow-md z-10">
@@ -114,10 +133,10 @@ const RideChat = ({ rideId, currentUserId, otherUserName, otherUserAvatar, role,
             </div>
 
             {/* Messages Area */}
-            <div className="flex-1 bg-gray-100 p-4 overflow-y-auto" ref={scrollRef}>
+            <div className="flex-1 bg-slate-50 p-4 overflow-y-auto" ref={scrollRef}>
                 <div className="space-y-3">
                     <div className="text-center py-4">
-                        <span className="bg-gray-200 text-gray-500 text-[10px] px-3 py-1 rounded-full font-bold uppercase tracking-wide">Início do Chat</span>
+                        <span className="bg-slate-200 text-slate-600 text-[10px] px-3 py-1 rounded-full font-bold uppercase tracking-wide">Início do Chat</span>
                     </div>
                     
                     {messages.length === 0 && (
@@ -131,10 +150,10 @@ const RideChat = ({ rideId, currentUserId, otherUserName, otherUserAvatar, role,
                         return (
                             <div key={msg.id} className={`flex w-full ${isMe ? 'justify-end' : 'justify-start'}`}>
                                 <div 
-                                    className={`max-w-[75%] px-4 py-2.5 rounded-2xl text-sm shadow-sm relative group ${
+                                    className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-sm shadow-sm relative group ${
                                         isMe 
                                         ? 'bg-slate-900 text-white rounded-br-sm' 
-                                        : 'bg-white text-slate-800 border border-gray-200 rounded-bl-sm'
+                                        : 'bg-white text-slate-900 border border-gray-200 rounded-bl-sm'
                                     }`}
                                 >
                                     {msg.content}
@@ -154,7 +173,7 @@ const RideChat = ({ rideId, currentUserId, otherUserName, otherUserAvatar, role,
                     {QUICK_MESSAGES[role].map((txt) => (
                         <button 
                             key={txt} 
-                            className="bg-gray-100 hover:bg-yellow-100 text-gray-600 hover:text-black px-4 py-2 rounded-xl text-xs font-medium transition-all border border-transparent hover:border-yellow-200 whitespace-nowrap"
+                            className="bg-gray-100 hover:bg-yellow-100 text-gray-700 hover:text-black px-4 py-2 rounded-xl text-xs font-medium transition-all border border-transparent hover:border-yellow-200 whitespace-nowrap"
                             onClick={() => handleSend(txt)}
                         >
                             {txt}
@@ -170,7 +189,8 @@ const RideChat = ({ rideId, currentUserId, otherUserName, otherUserAvatar, role,
                     onChange={(e) => setNewMessage(e.target.value)} 
                     onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                     placeholder="Digite sua mensagem..." 
-                    className="h-12 rounded-xl border-gray-200 bg-gray-50 focus:bg-white focus:ring-1 focus:ring-slate-900 transition-all text-base"
+                    // CORREÇÃO AQUI: Forçando texto escuro e fundo claro
+                    className="h-12 rounded-xl border-gray-200 bg-gray-50 focus:bg-white text-slate-900 placeholder:text-gray-400 focus:ring-1 focus:ring-slate-900 transition-all text-base font-medium"
                 />
                 <Button 
                     onClick={() => handleSend()} 
