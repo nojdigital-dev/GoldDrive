@@ -30,7 +30,7 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<'client' | 'driver' | null>(null);
   
-  // Usamos Ref para garantir que os callbacks de realtime/intervalo sempre vejam a lista atualizada
+  // Usamos Ref para manter controle local imediato das rejeições
   const rejectedIdsRef = useRef<string[]>([]);
   
   const { toast } = useToast();
@@ -67,6 +67,7 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
       if (userRole !== 'driver' || !currentUserId) return;
 
       try {
+          // Busca corridas SEARCHING que NÃO têm motorista definido ainda
           const { data } = await supabase
             .from('rides')
             .select(`*, client_details:profiles!public_rides_customer_id_fkey(*)`)
@@ -75,11 +76,21 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
             .order('created_at', { ascending: false });
 
           if (data) {
-              // Usa o .current do ref para filtrar corretamente
-              const validRides = data.filter(r => 
-                  !rejectedIdsRef.current.includes(r.id) && 
-                  r.customer_id !== currentUserId
-              );
+              const validRides = data.filter(r => {
+                  // 1. Não pode ser uma corrida criada por mim mesmo (teste)
+                  if (r.customer_id === currentUserId) return false;
+                  
+                  // 2. Não pode estar na minha lista local de rejeitados recente
+                  if (rejectedIdsRef.current.includes(r.id)) return false;
+
+                  // 3. Não pode estar na lista de rejeitados do banco de dados (persistente)
+                  // O campo rejected_by é um array de UUIDs
+                  if (r.rejected_by && Array.isArray(r.rejected_by) && r.rejected_by.includes(currentUserId)) {
+                      return false;
+                  }
+
+                  return true;
+              });
               setAvailableRides(validRides);
           }
       } catch (err) {
@@ -104,7 +115,7 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
         setCurrentUserId(null);
         setRide(null);
         setAvailableRides([]);
-        rejectedIdsRef.current = []; // Limpa rejeições ao sair
+        rejectedIdsRef.current = [];
       }
     });
 
@@ -119,7 +130,7 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
           const interval = setInterval(fetchAvailableRides, 5000);
           return () => clearInterval(interval);
       }
-  }, [currentUserId, userRole, ride]); // Removemos rejectedIdsRef da dependência pois usamos ref
+  }, [currentUserId, userRole, ride]); 
 
   useEffect(() => {
     if (!currentUserId) return;
@@ -190,7 +201,6 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
          const { data: check } = await supabase.from('rides').select('driver_id').eq('id', rideId).single();
          if (check?.driver_id) {
              toast({ title: "Aviso", description: "Esta corrida já foi aceita.", variant: "destructive" });
-             // Se já foi aceita, adiciona aos rejeitados localmente para sumir da tela
              rejectedIdsRef.current = [...rejectedIdsRef.current, rideId];
              setAvailableRides(prev => prev.filter(r => r.id !== rideId));
              return;
@@ -205,10 +215,17 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const rejectRide = async (rideId: string) => {
-      // Atualiza o Ref imediatamente
+      // 1. Atualização visual imediata (Otimista)
       rejectedIdsRef.current = [...rejectedIdsRef.current, rideId];
-      // Atualiza o estado visual
       setAvailableRides(prev => prev.filter(r => r.id !== rideId));
+
+      // 2. Persistência no banco de dados para não voltar mais
+      try {
+          const { error } = await supabase.rpc('reject_ride', { ride_id_param: rideId });
+          if (error) console.error("Erro ao salvar rejeição no banco:", error);
+      } catch (err) {
+          console.error("Erro ao chamar reject_ride:", err);
+      }
   };
 
   const confirmArrival = async (rideId: string) => {
