@@ -57,21 +57,16 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
         .maybeSingle();
 
       if (data) {
-          // Lógica de "Expiração" e "Já Avaliado"
           const isFinished = ['CANCELLED', 'COMPLETED'].includes(data.status);
           
           if (isFinished) {
-              // Se já avaliei, não mostro mais a corrida como ativa
-              // Se sou motorista, vejo se customer_rating (nota que dei pro cliente) existe
-              // Se sou cliente, vejo se driver_rating (nota que dei pro motorista) existe
               const hasRated = role === 'driver' ? !!data.customer_rating : !!data.driver_rating;
               
               if (hasRated) {
-                  setRide(null); // Remove do estado ativo
+                  setRide(null); 
                   return;
               }
 
-              // Se não avaliei, mostro por até 1 hora
               const updatedAt = new Date(data.created_at).getTime();
               const now = new Date().getTime();
               const diffMinutes = (now - updatedAt) / 1000 / 60;
@@ -120,7 +115,6 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
       }
   };
 
-  // Inicialização
   useEffect(() => {
     const init = async () => {
         const { data: { session } } = await supabase.auth.getSession();
@@ -147,7 +141,6 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
     };
   }, []);
 
-  // Polling Universal
   useEffect(() => {
       let interval: NodeJS.Timeout;
       
@@ -168,7 +161,6 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
       };
   }, [currentUserId, userRole, ride?.status, ride?.id]);
 
-  // Polling Lista Motorista
   useEffect(() => {
       let interval: NodeJS.Timeout;
       if (currentUserId && userRole === 'driver' && !ride) {
@@ -178,7 +170,6 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
       return () => { if (interval) clearInterval(interval); };
   }, [currentUserId, userRole, ride]);
 
-  // Realtime Channel
   useEffect(() => {
     if (!currentUserId) return;
 
@@ -215,10 +206,11 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
     };
   }, [currentUserId, userRole, ride]);
 
-  // --- ACTIONS ---
-
   const requestRide = async (pickup: string, destination: string, price: number, distance: string, category: string, paymentMethod: string) => {
-    if (!currentUserId) return toast({ title: "Erro", description: "Faça login.", variant: "destructive" });
+    if (!currentUserId) {
+        toast({ title: "Erro", description: "Faça login.", variant: "destructive" });
+        return;
+    }
     try {
       const { data, error } = await supabase.from('rides').insert({
           customer_id: currentUserId,
@@ -233,7 +225,9 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
       if (error) throw error;
       setRide(data);
       await fetchActiveRide(currentUserId);
-    } catch (e: any) { toast({ title: "Erro", description: e.message, variant: "destructive" }); }
+    } catch (e: any) { 
+        toast({ title: "Erro", description: e.message, variant: "destructive" }); 
+    }
   };
 
   const cancelRide = async (rideId: string, reason?: string) => {
@@ -305,7 +299,6 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
           const updateData = isDriver ? { customer_rating: rating } : { driver_rating: rating, review_comment: comment };
           const { error } = await supabase.from('rides').update(updateData).eq('id', rideId);
           if (error) throw error;
-          // Após avaliar, o fetchActiveRide vai detectar a nota e limpar a ride
           await fetchActiveRide(currentUserId!);
           toast({ title: "Obrigado", description: "Avaliação enviada." });
       } catch (e: any) { toast({ title: "Erro", description: e.message }); }
