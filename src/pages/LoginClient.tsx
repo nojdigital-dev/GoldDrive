@@ -1,14 +1,15 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
 import { ArrowLeft, Loader2, ArrowRight, User, Lock, Mail, Eye, EyeOff, Camera, ShieldCheck, ChevronLeft, KeyRound } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 const LoginClient = () => {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
+  const { loading, handleSignIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -16,21 +17,12 @@ const LoginClient = () => {
   const [step, setStep] = useState(1); 
   const [name, setName] = useState("");
   
-  // Visibility Toggles
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
-  // Estados para foto
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string>("");
-
-  useEffect(() => {
-    const checkUser = async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) navigate('/client');
-    };
-    checkUser();
-  }, [navigate]);
+  const [signUpLoading, setSignUpLoading] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -59,17 +51,7 @@ const LoginClient = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if(!email || !password) return showError("Preencha todos os campos");
-    setLoading(true);
-    try {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if(error) throw error;
-        navigate('/client');
-    } catch (e: any) {
-        showError(e.message);
-    } finally {
-        setLoading(false);
-    }
+    await handleSignIn(email, password);
   };
 
   const handleSignUp = async () => {
@@ -78,7 +60,7 @@ const LoginClient = () => {
         return;
     }
 
-    setLoading(true);
+    setSignUpLoading(true);
     try {
         const { data: authData, error: authError } = await supabase.auth.signUp({
             email, password,
@@ -95,17 +77,18 @@ const LoginClient = () => {
                 await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', authData.user.id);
             }
         }
-        showSuccess("Conta criada! Verifique seu email.");
+        showSuccess("Conta criada! Verifique seu email para confirmar.");
+        setIsSignUp(false);
+        setStep(1);
     } catch (e: any) {
         showError(e.message);
     } finally {
-        setLoading(false);
+        setSignUpLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-zinc-950 flex font-sans">
-       {/* Esquerda - Imagem (Desktop) */}
        <div className="hidden lg:flex lg:w-1/2 relative items-center justify-center overflow-hidden">
            <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1496442226666-8d4a0e29f122?q=80&w=2576&auto=format&fit=crop')] bg-cover bg-center opacity-40" />
            <div className="absolute inset-0 bg-gradient-to-r from-zinc-950 to-transparent" />
@@ -115,22 +98,17 @@ const LoginClient = () => {
            </div>
        </div>
 
-       {/* Direita - Formulário */}
        <div className="w-full lg:w-1/2 flex flex-col relative overflow-y-auto bg-zinc-950">
-           {/* Header Mobile */}
            <div className="p-6 flex items-center lg:absolute lg:top-0 lg:left-0 lg:z-20 lg:w-full">
                <Button variant="ghost" onClick={() => isSignUp && step > 1 ? setStep(1) : isSignUp ? setIsSignUp(false) : navigate('/')} className="hover:bg-zinc-800 text-white rounded-full w-12 h-12 p-0 shrink-0">
                    {isSignUp && step === 2 ? <ChevronLeft className="w-6 h-6" /> : <ArrowLeft className="w-6 h-6" />}
                </Button>
                
-               {/* Logo Mobile Header (Fora do Card) */}
                <img src="/logo-goldmobile-2.png" alt="Gold Mobile" className="h-8 ml-4 lg:hidden" />
            </div>
 
            <div className="flex-1 flex flex-col justify-center px-6 sm:px-12 md:px-24 py-10">
-               {/* Container Branco */}
                <div className="bg-white rounded-[40px] p-8 shadow-2xl animate-in slide-in-from-bottom-8 duration-700 relative overflow-hidden">
-                   {/* Barra Decorativa Superior */}
                    <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-black via-zinc-800 to-yellow-500" />
 
                    <div className="mb-8 text-center">
@@ -138,7 +116,6 @@ const LoginClient = () => {
                        <p className="text-gray-500 mt-2 text-sm">{isSignUp ? "Siga as etapas para começar." : "Entre para solicitar sua corrida."}</p>
                    </div>
 
-                   {/* LOGIN FORM */}
                    {!isSignUp && (
                        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                             <form onSubmit={handleLogin} className="space-y-4">
@@ -173,7 +150,6 @@ const LoginClient = () => {
                                 </Button>
                             </form>
 
-                            {/* DESTAQUE DE CADASTRO */}
                             <div className="mt-8 bg-yellow-50 border border-yellow-200 rounded-3xl p-6 text-center space-y-3">
                                 <p className="text-slate-800 font-bold text-sm">
                                     Ainda não tem conta? <br/>
@@ -186,15 +162,11 @@ const LoginClient = () => {
                        </div>
                    )}
 
-                   {/* SIGNUP FLOW */}
                    {isSignUp && (
                        <div className="animate-in slide-in-from-right fade-in duration-300">
                            
-                           {/* Stepper Visual */}
                            <div className="flex items-center justify-between px-8 mb-8 relative">
-                               {/* Linha de fundo */}
                                <div className="absolute left-0 right-0 top-1/2 h-1 bg-gray-100 -z-10 mx-12"></div>
-                               {/* Progresso Ativo */}
                                <div className={`absolute left-0 top-1/2 h-1 bg-yellow-500 -z-10 mx-12 transition-all duration-500 ${step === 2 ? 'right-0' : 'right-1/2'}`}></div>
 
                                <div className="flex flex-col items-center gap-1">
@@ -244,7 +216,7 @@ const LoginClient = () => {
                                             <div className="relative group">
                                                 <KeyRound className="absolute left-4 top-4 w-5 h-5 text-gray-400 group-focus-within:text-black transition-colors" />
                                                 <Input type={showConfirmPassword ? "text" : "password"} placeholder="******" className="h-14 pl-12 pr-10 bg-gray-50 border-gray-200 rounded-2xl focus:border-black focus:ring-0 text-slate-900 font-medium" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} />
-                                                <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-4 text-gray-400 hover:text-black"><Eye className="w-5 h-5" /></button>
+                                                <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-4 text-gray-400 hover:text-black"><Eye className="w-5 h-5"/></button>
                                             </div>
                                        </div>
                                    </div>
@@ -279,8 +251,8 @@ const LoginClient = () => {
                                        </label>
                                    </div>
 
-                                   <Button onClick={handleSignUp} disabled={loading} className="w-full h-14 text-lg font-black rounded-2xl bg-yellow-500 hover:bg-yellow-400 text-black shadow-xl shadow-yellow-500/20">
-                                       {loading ? <Loader2 className="animate-spin" /> : "FINALIZAR CADASTRO"}
+                                   <Button onClick={handleSignUp} disabled={signUpLoading} className="w-full h-14 text-lg font-black rounded-2xl bg-yellow-500 hover:bg-yellow-400 text-black shadow-xl shadow-yellow-500/20">
+                                       {signUpLoading ? <Loader2 className="animate-spin" /> : "FINALIZAR CADASTRO"}
                                    </Button>
                                </div>
                            )}

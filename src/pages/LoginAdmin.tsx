@@ -1,71 +1,23 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { supabase } from "@/integrations/supabase/client";
 import { showError } from "@/utils/toast";
 import { Shield, Loader2, ArrowLeft, KeyRound, Eye, EyeOff } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { useAuth } from "@/hooks/useAuth";
 
 const LoginAdmin = () => {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
-  const [checkingSession, setCheckingSession] = useState(true);
+  const { loading, handleSignIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  useEffect(() => {
-    const checkExistingSession = async () => {
-        try {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session) {
-                 const { data } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
-                 if (data?.role === 'admin') {
-                     // Usuário já é admin, redirecionar direto
-                     navigate('/admin', { replace: true });
-                     return;
-                 }
-            }
-        } catch (e) {
-            console.error("Erro check session admin:", e);
-        } finally {
-            setCheckingSession(false);
-        }
-    };
-    checkExistingSession();
-  }, [navigate]);
-
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    
-    try {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if(error) throw error;
-        
-        const { data: { user } } = await supabase.auth.getUser();
-        if(user) {
-            const { data } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-            if(data?.role !== 'admin') {
-                await supabase.auth.signOut();
-                throw new Error("Acesso negado: Este usuário não é um administrador.");
-            }
-            navigate('/admin', { replace: true });
-        }
-    } catch (e: any) {
-        showError(e.message);
-        setLoading(false);
-    }
+    await handleSignIn(email, password, 'admin');
   };
-
-  if (checkingSession) {
-      return (
-        <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-            <Loader2 className="w-8 h-8 text-yellow-500 animate-spin" />
-        </div>
-      );
-  }
 
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden font-sans">

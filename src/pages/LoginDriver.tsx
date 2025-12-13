@@ -7,8 +7,8 @@ import { showError, showSuccess } from "@/utils/toast";
 import { ArrowLeft, Loader2, ArrowRight, Car, Camera, ShieldCheck, Mail, Lock, Phone, CreditCard, ChevronLeft, Eye, EyeOff, KeyRound, Ban, User, FileText } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { useAuth } from "@/hooks/useAuth";
 
-// Tipos para o formulário
 interface FormData {
   firstName: string; lastName: string; email: string; password: string; confirmPassword?: string; cpf: string; phone: string;
   facePhoto: File | null; cnhFront: File | null; cnhBack: File | null;
@@ -18,7 +18,8 @@ interface FormData {
 const LoginDriver = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [loading, setLoading] = useState(false);
+  const { loading: authLoading, handleSignIn } = useAuth();
+  const [signUpLoading, setSignUpLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [step, setStep] = useState(1);
   const [isBlockedModalOpen, setIsBlockedModalOpen] = useState(false);
@@ -32,16 +33,7 @@ const LoginDriver = () => {
 
   useEffect(() => {
     if (searchParams.get('blocked') === 'true') setIsBlockedModalOpen(true);
-    const checkUser = async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-            const { data: profile } = await supabase.from('profiles').select('driver_status, role, is_blocked').eq('id', session.user.id).single();
-            if (profile?.is_blocked) { await supabase.auth.signOut(); setIsBlockedModalOpen(true); return; }
-            if (profile?.role === 'driver') navigate(profile.driver_status === 'PENDING' ? '/driver-pending' : '/driver');
-        }
-    };
-    checkUser();
-  }, [navigate, searchParams]);
+  }, [searchParams]);
 
   const formatCPF = (v: string) => v.replace(/\D/g, '').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})/, '$1-$2').replace(/(-\d{2})\d+?$/, '$1');
   const formatPhone = (v: string) => v.replace(/\D/g, '').replace(/(\d{2})(\d)/, '($1) $2').replace(/(\d{5})(\d)/, '$1-$2').replace(/(-\d{4})\d+?$/, '$1');
@@ -79,29 +71,21 @@ const LoginDriver = () => {
   };
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault(); setLoading(true);
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.password });
-      if (error) throw error;
-      // Otimização: Seleciona apenas campos necessários para decisão de roteamento
-      const { data: profile } = await supabase.from('profiles').select('role, driver_status, is_blocked').eq('id', data.user.id).single();
-      
-      if (profile?.is_blocked) { await supabase.auth.signOut(); setIsBlockedModalOpen(true); return; }
-      
-      navigate(profile?.role === 'driver' ? (profile.driver_status === 'PENDING' ? '/driver-pending' : '/driver') : '/client');
-    } catch (e: any) { showError(e.message); } finally { setLoading(false); }
+    e.preventDefault(); 
+    await handleSignIn(form.email, form.password);
   };
 
   const handleSignUp = async () => {
     if (!form.carModel || !form.carPlate || !form.carYear || !form.carColor) { showError("Preencha o veículo."); return; }
-    setLoading(true);
+    setSignUpLoading(true);
     try {
       const { data: auth, error } = await supabase.auth.signUp({ email: form.email, password: form.password, options: { data: { role: 'driver', first_name: form.firstName, last_name: form.lastName } } });
       if (error || !auth.user) throw error || new Error("Erro auth");
       const [face, cnhF, cnhB] = await Promise.all([uploadFile(form.facePhoto!, `${auth.user.id}/face`), uploadFile(form.cnhFront!, `${auth.user.id}/cnhF`), uploadFile(form.cnhBack!, `${auth.user.id}/cnhB`)]);
       await supabase.from('profiles').update({ phone: form.phone, cpf: form.cpf, face_photo_url: face, avatar_url: face, cnh_front_url: cnhF, cnh_back_url: cnhB, car_model: form.carModel, car_plate: form.carPlate.toUpperCase(), car_year: form.carYear, car_color: form.carColor, driver_status: 'PENDING' }).eq('id', auth.user.id);
+      showSuccess("Cadastro enviado! Verifique seu email para confirmar e aguarde a aprovação.");
       navigate('/driver-pending');
-    } catch (e: any) { showError(e.message); } finally { setLoading(false); }
+    } catch (e: any) { showError(e.message); } finally { setSignUpLoading(false); }
   };
 
   const UploadBox = ({ label, field, preview }: any) => (
@@ -118,7 +102,6 @@ const LoginDriver = () => {
     <div className="min-h-screen bg-zinc-950 flex font-sans">
        <Dialog open={isBlockedModalOpen} onOpenChange={setIsBlockedModalOpen}><DialogContent className="rounded-2xl border-0"><div className="text-center p-6"><Ban className="w-16 h-16 text-red-500 mx-auto mb-4" /><h2 className="text-2xl font-black">Bloqueado</h2><p className="text-gray-500 mt-2">Sua conta possui pendências.</p></div></DialogContent></Dialog>
 
-       {/* Lado Esquerdo - Visual */}
        <div className="hidden lg:flex lg:w-1/2 relative items-center justify-center overflow-hidden">
            <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?q=80&w=2070&auto=format&fit=crop')] bg-cover bg-center opacity-40" />
            <div className="absolute inset-0 bg-gradient-to-r from-zinc-950 via-zinc-900/80 to-transparent" />
@@ -129,15 +112,12 @@ const LoginDriver = () => {
            </div>
        </div>
 
-       {/* Lado Direito - Form */}
        <div className="w-full lg:w-1/2 flex flex-col bg-zinc-950 relative overflow-y-auto">
-           {/* Header Mobile */}
            <div className="p-6 flex items-center lg:absolute lg:top-0 lg:left-0 lg:z-20 lg:w-full">
                <Button variant="ghost" onClick={() => isSignUp && step > 1 ? setStep(s => s - 1) : isSignUp ? setIsSignUp(false) : navigate('/')} className="hover:bg-zinc-800 text-white rounded-full w-12 h-12 p-0 shrink-0">
                    {isSignUp && step > 1 ? <ChevronLeft className="w-6 h-6" /> : <ArrowLeft className="w-6 h-6" />}
                </Button>
                
-               {/* Logo Mobile Header (Fora do Card) */}
                <img src="/logo-goldmobile-2.png" alt="Gold" className="h-8 ml-4 lg:hidden" />
            </div>
 
@@ -161,10 +141,9 @@ const LoginDriver = () => {
                                    <Lock className="absolute left-4 top-4 w-5 h-5 text-gray-400 group-focus-within:text-yellow-600 transition-colors" />
                                    <Input type={showPassword ? "text" : "password"} placeholder="Sua senha" className="h-14 pl-12 pr-12 bg-gray-50 border-gray-200 text-base rounded-2xl focus:ring-2 focus:ring-yellow-500/20 focus:border-yellow-500 transition-all text-slate-900" value={form.password} onChange={e => handleChange('password', e.target.value)} /><button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-4 text-gray-400 hover:text-gray-600"><Eye className="w-5 h-5" /></button>
                                </div>
-                               <Button className="w-full h-14 text-lg font-bold rounded-2xl bg-slate-900 hover:bg-black text-white shadow-xl mt-4" disabled={loading}>{loading ? <Loader2 className="animate-spin" /> : "Acessar Painel"}</Button>
+                               <Button className="w-full h-14 text-lg font-bold rounded-2xl bg-slate-900 hover:bg-black text-white shadow-xl mt-4" disabled={authLoading}>{authLoading ? <Loader2 className="animate-spin" /> : "Acessar Painel"}</Button>
                            </form>
                            
-                           {/* DESTAQUE DE CADASTRO */}
                             <div className="mt-8 bg-yellow-50 border border-yellow-200 rounded-3xl p-6 text-center space-y-3">
                                 <p className="text-slate-800 font-bold text-sm">
                                     Ainda não tem conta? <br/>
@@ -177,7 +156,6 @@ const LoginDriver = () => {
                        </div>
                    ) : (
                        <div className="animate-in slide-in-from-right fade-in duration-300">
-                           {/* STEPPER VISUAL */}
                            <div className="flex items-center justify-between px-6 mb-8 relative">
                                <div className="absolute left-0 right-0 top-1/2 h-1 bg-gray-100 -z-10 mx-10"></div>
                                <div className={`absolute left-0 top-1/2 h-1 bg-yellow-500 -z-10 mx-10 transition-all duration-500 ${step === 1 ? 'w-[0%]' : step === 2 ? 'w-[50%]' : 'w-[100%]'}`}></div>
@@ -236,7 +214,7 @@ const LoginDriver = () => {
                                        <Input type="number" placeholder="Ano" className="h-14 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.carYear} onChange={e => handleChange('carYear', e.target.value)} />
                                        <Input placeholder="Cor" className="h-14 bg-gray-50 border-gray-200 rounded-2xl text-slate-900" value={form.carColor} onChange={e => handleChange('carColor', e.target.value)} />
                                    </div>
-                                   <Button onClick={handleSignUp} disabled={loading} className="w-full h-14 bg-yellow-500 hover:bg-yellow-400 text-black font-black rounded-2xl mt-6 shadow-xl">{loading ? <Loader2 className="animate-spin"/> : "FINALIZAR CADASTRO"}</Button>
+                                   <Button onClick={handleSignUp} disabled={signUpLoading} className="w-full h-14 bg-yellow-500 hover:bg-yellow-400 text-black font-black rounded-2xl mt-6 shadow-xl">{signUpLoading ? <Loader2 className="animate-spin"/> : "FINALIZAR CADASTRO"}</Button>
                                </div>
                            )}
                        </div>
