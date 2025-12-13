@@ -1,30 +1,34 @@
 # Estágio de Build
-FROM node:20-alpine as build
+# Usamos 'slim' (Debian) em vez de 'alpine' para evitar erros de binários do Rollup/Vite
+FROM node:20-slim AS build
 
 WORKDIR /app
 
-# Copia arquivos de dependência
-COPY package*.json ./
+# Copia apenas os arquivos de dependência primeiro para aproveitar o cache do Docker
+COPY package.json package-lock.json* ./
 
 # Instala dependências
 RUN npm install
 
-# Copia o resto do código
+# Copia o restante do código fonte
 COPY . .
 
-# Cria a build de produção
+# Executa o build (cria a pasta dist)
 RUN npm run build
 
-# Estágio de Produção (Nginx)
+# Estágio de Produção (Servidor Web Leve)
 FROM nginx:alpine
 
-# Copia os arquivos da build para o diretório do Nginx
-COPY --from=build /app/dist /usr/share/nginx/html
+# Remove a configuração padrão do Nginx
+RUN rm -rf /etc/nginx/conf.d/default.conf
 
-# Copia a configuração personalizada do Nginx
+# Copia nossa configuração personalizada do Nginx
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Expoe a porta 80
+# Copia os arquivos estáticos gerados no build anterior para a pasta do Nginx
+COPY --from=build /app/dist /usr/share/nginx/html
+
+# Expõe a porta 80
 EXPOSE 80
 
 # Inicia o Nginx
