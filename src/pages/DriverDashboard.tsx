@@ -484,7 +484,7 @@ const DriverDashboard = () => {
                   </div>
 
                   <div className="pt-2">
-                      <Button className="w-full h-12 bg-gray-100 hover:bg-gray-200 text-slate-900 font-bold rounded-xl" onClick={() => setSelectedHistoryItem(null)}>Fechar Detalhes</Button>
+                      <Button className="w-full h-12 bg-gray-100 hover:bg-gray-200 text-slate-900 font-bold rounded-xl" onClick={() => { setShowHistoryDetail(false); setSelectedHistoryItem(null); }}>Fechar Detalhes</Button>
                   </div>
               </div>
           </DialogContent>
