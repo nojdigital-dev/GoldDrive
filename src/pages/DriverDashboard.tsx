@@ -25,13 +25,16 @@ const DriverDashboard = () => {
   const [activeTab, setActiveTab] = useState('home');
   const [isOnline, setIsOnline] = useState(false);
   const [incomingRide, setIncomingRide] = useState<any | null>(null);
-  const [timer, setTimer] = useState(30);
+  
+  // TIMER ALTERADO PARA 60 SEGUNDOS
+  const [timer, setTimer] = useState(60);
+  
   const [driverProfile, setDriverProfile] = useState<any>(null);
   const [showChat, setShowChat] = useState(false);
   
   // Modals Control
   const [showCancelAlert, setShowCancelAlert] = useState(false);
-  const [showFinishConfirmation, setShowFinishConfirmation] = useState(false); // Nova confirmação
+  const [showFinishConfirmation, setShowFinishConfirmation] = useState(false);
   const [showFinishScreen, setShowFinishScreen] = useState(false);
   const [finishedRideData, setFinishedRideData] = useState<any>(null);
   const [showHistoryDetail, setShowHistoryDetail] = useState(false);
@@ -136,7 +139,8 @@ const DriverDashboard = () => {
         if (nextRide) {
             if (!incomingRide || incomingRide.id !== nextRide.id) {
                 setIncomingRide(nextRide);
-                setTimer(30); 
+                // TIMER RESETADO PARA 60 SEGUNDOS
+                setTimer(60); 
             }
         } else {
             if (incomingRide) setIncomingRide(null);
@@ -205,19 +209,11 @@ const DriverDashboard = () => {
       else setActiveTab(tab);
   };
 
-  // Função ajustada para mostrar mais informações, mas sem o lixo técnico
   const cleanAddress = (address: string) => {
       if (!address) return "Endereço desconhecido";
-      
       const parts = address.split(',').map(p => p.trim());
-      
-      // Se for muito curto, retorna tudo
       if (parts.length <= 2) return address;
-
-      // Pega as primeiras 4 partes (Rua, Número, Bairro, Cidade geralmente)
-      // Isso remove "Região Geográfica...", "Brasil", "CEP" que costumam vir no final
       const relevantParts = parts.slice(0, 4);
-      
       return relevantParts.join(', ');
   };
 
@@ -273,22 +269,24 @@ const DriverDashboard = () => {
       return val.toFixed(2);
   };
 
-  const NavigationCard = ({ target }: { target: 'pickup' | 'dest' }) => (
-      <div className="flex gap-2 mb-2">
-          <Button 
+  const NavigationCards = ({ target }: { target: 'pickup' | 'dest' }) => (
+      <div className="grid grid-cols-2 gap-3 mb-4">
+          <div 
             onClick={() => handleNavigate('waze', target)}
-            className="flex-1 bg-blue-400 hover:bg-blue-500 text-white font-bold rounded-xl h-12 relative overflow-hidden group shadow-lg shadow-blue-400/20"
+            className="bg-blue-500 hover:bg-blue-600 text-white rounded-2xl p-3 flex flex-col items-center justify-center cursor-pointer transition-all shadow-md active:scale-95 group relative overflow-hidden"
           >
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
-              <Navigation className="w-5 h-5 mr-2" /> Waze
-          </Button>
-          <Button 
+              <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+              <Navigation className="w-6 h-6 mb-1" />
+              <span className="font-bold text-sm">Abrir Waze</span>
+          </div>
+          <div 
             onClick={() => handleNavigate('maps', target)}
-            className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold rounded-xl h-12 relative overflow-hidden group shadow-lg shadow-green-500/20"
+            className="bg-green-600 hover:bg-green-700 text-white rounded-2xl p-3 flex flex-col items-center justify-center cursor-pointer transition-all shadow-md active:scale-95 group relative overflow-hidden"
           >
-               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
-               <MapIcon className="w-5 h-5 mr-2" /> Maps
-          </Button>
+               <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+               <MapIcon className="w-6 h-6 mb-1" />
+               <span className="font-bold text-sm">Abrir Maps</span>
+          </div>
       </div>
   );
 
@@ -354,7 +352,7 @@ const DriverDashboard = () => {
                 )}
 
                 {!ride && incomingRide && (
-                    <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 p-6 rounded-[32px] shadow-2xl animate-in slide-in-from-bottom text-white">
+                    <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 p-6 rounded-[32px] shadow-2xl animate-in slide-in-from-bottom text-white max-h-[80vh] overflow-y-auto custom-scrollbar">
                         <div className="flex justify-between items-center mb-4">
                             <Badge className="bg-green-500 text-black font-bold hover:bg-green-400 px-3 py-1 animate-pulse">NOVA CORRIDA</Badge>
                             <div className="w-10 h-10 rounded-full border-2 border-white/20 flex items-center justify-center font-bold text-lg">{timer}</div>
@@ -382,18 +380,34 @@ const DriverDashboard = () => {
                             <div className="flex justify-center gap-3 mt-4"><Badge variant="outline" className="border-white/20 text-slate-300">{incomingRide.distance}</Badge><Badge variant="outline" className="border-white/20 text-slate-300">{incomingRide.category}</Badge></div>
                         </div>
 
-                        {/* Botões de Navegação Antecipada */}
-                        <div className="mb-4">
-                            <p className="text-[10px] text-slate-400 font-bold uppercase mb-2">Ver local de embarque:</p>
-                            <NavigationCard target="pickup" />
+                        <div className="space-y-6 mb-8">
+                            {/* Bloco Embarque */}
+                            <div>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase mb-2 flex items-center gap-1">
+                                    <MapPin className="w-3 h-3 text-white" /> Local de Embarque
+                                </p>
+                                <p className="text-sm font-medium text-white/90 mb-3 bg-white/5 p-3 rounded-xl border border-white/10">
+                                    {cleanAddress(incomingRide.pickup_address)}
+                                </p>
+                                <NavigationCards target="pickup" />
+                            </div>
+
+                            {/* Divisor */}
+                            <div className="w-full h-px bg-white/10" />
+
+                            {/* Bloco Destino */}
+                            <div>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase mb-2 flex items-center gap-1">
+                                    <Compass className="w-3 h-3 text-green-500" /> Destino Final
+                                </p>
+                                <p className="text-sm font-medium text-white/90 mb-3 bg-white/5 p-3 rounded-xl border border-white/10">
+                                    {cleanAddress(incomingRide.destination_address)}
+                                </p>
+                                <NavigationCards target="dest" />
+                            </div>
                         </div>
 
-                        <div className="space-y-4 mb-8 bg-white/5 p-4 rounded-2xl border border-white/10">
-                             <div className="flex items-start gap-3"><div className="w-2 h-2 mt-2 bg-white rounded-full"/><div><p className="text-xs text-slate-400 font-bold uppercase">Embarque</p><p className="font-medium text-sm leading-tight text-white/90">{cleanAddress(incomingRide.pickup_address)}</p></div></div>
-                             <div className="flex items-start gap-3"><div className="w-2 h-2 mt-2 bg-green-500 rounded-full"/><div><p className="text-xs text-slate-400 font-bold uppercase">Destino</p><p className="font-medium text-sm leading-tight text-white/90">{cleanAddress(incomingRide.destination_address)}</p></div></div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-2 gap-4 sticky bottom-0 bg-slate-900/90 pt-4 border-t border-white/10">
                             <Button variant="ghost" className="h-14 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold" onClick={handleReject}>Recusar</Button>
                             <Button className="h-14 rounded-xl bg-green-500 hover:bg-green-400 text-black font-black animate-pulse shadow-lg shadow-green-500/20" onClick={handleAccept}>ACEITAR</Button>
                         </div>
@@ -412,53 +426,16 @@ const DriverDashboard = () => {
                         </div>
 
                         <div className="bg-slate-50 rounded-2xl p-4 mb-4 border border-slate-100">
+                             <p className="text-[10px] text-slate-400 font-bold uppercase mb-3 flex items-center gap-1">
+                                 <Compass className="w-3 h-3" />
+                                 {ride?.status === 'IN_PROGRESS' ? 'Navegar para Destino' : 'Navegar para Embarque'}
+                             </p>
                              
-                             {/* NAVEGAÇÃO DINÂMICA (A CAMINHO) */}
-                             {ride?.status === 'ACCEPTED' && (
-                                 <>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase mb-2 flex items-center gap-1">
-                                        <Compass className="w-3 h-3" /> Navegar para Embarque
-                                    </p>
-                                    <NavigationCard target="pickup" />
-                                    <p className="text-sm font-medium text-slate-900 leading-tight mt-2 text-center bg-white p-2 rounded-lg border border-slate-100 shadow-sm">
-                                        {cleanAddress(ride?.pickup_address)}
-                                    </p>
-                                 </>
-                             )}
-
-                             {/* NAVEGAÇÃO DUPLA (NO LOCAL) */}
-                             {ride?.status === 'ARRIVED' && (
-                                 <div className="space-y-4">
-                                     <div>
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase mb-2 flex items-center gap-1">
-                                            <MapPin className="w-3 h-3" /> Local de Embarque (Atual)
-                                        </p>
-                                        <NavigationCard target="pickup" />
-                                        <p className="text-xs text-slate-600 truncate">{cleanAddress(ride?.pickup_address)}</p>
-                                     </div>
-                                     <div className="w-full h-px bg-slate-200" />
-                                     <div>
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase mb-2 flex items-center gap-1">
-                                            <Compass className="w-3 h-3" /> Destino (Próximo)
-                                        </p>
-                                        <NavigationCard target="dest" />
-                                        <p className="text-xs text-slate-600 truncate">{cleanAddress(ride?.destination_address)}</p>
-                                     </div>
-                                 </div>
-                             )}
-
-                             {/* NAVEGAÇÃO DESTINO (EM VIAGEM) */}
-                             {ride?.status === 'IN_PROGRESS' && (
-                                 <>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase mb-2 flex items-center gap-1">
-                                        <Compass className="w-3 h-3" /> Navegar para Destino
-                                    </p>
-                                    <NavigationCard target="dest" />
-                                    <p className="text-sm font-medium text-slate-900 leading-tight mt-2 text-center bg-white p-2 rounded-lg border border-slate-100 shadow-sm">
-                                        {cleanAddress(ride?.destination_address)}
-                                    </p>
-                                 </>
-                             )}
+                             <NavigationCards target={ride?.status === 'IN_PROGRESS' ? 'dest' : 'pickup'} />
+                             
+                             <p className="text-sm font-medium text-slate-900 leading-tight mt-2 text-center bg-white p-2 rounded-lg border border-slate-100 shadow-sm">
+                                 {cleanAddress(ride?.status === 'IN_PROGRESS' ? ride?.destination_address : ride?.pickup_address)}
+                             </p>
                         </div>
 
                         <div className="flex flex-col gap-3">
@@ -470,8 +447,8 @@ const DriverDashboard = () => {
                                     <MessageCircle className="w-5 h-5" />
                                 </div>
                                 <div className="flex-1 text-left">
-                                    <p className="text-xs font-bold text-gray-500 uppercase">Mensagem para Passageiro</p>
-                                    <p className="text-sm font-medium text-slate-900">Abrir chat...</p>
+                                    <p className="text-xs font-bold text-gray-500 uppercase">Mensagem</p>
+                                    <p className="text-sm font-medium text-slate-900">Abrir chat com passageiro</p>
                                 </div>
                                 <ArrowUpRight className="w-4 h-4 text-gray-400" />
                              </div>

@@ -67,53 +67,36 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
 
       const queryField = role === 'driver' ? 'driver_id' : 'customer_id';
       
-      // Busca simplificada primeiro para garantir a corrida
-      const { data: rideData, error } = await supabase
+      const { data } = await supabase
         .from('rides')
-        .select('*')
+        .select(`*, driver_details:profiles!public_rides_driver_id_fkey(*), client_details:profiles!public_rides_customer_id_fkey(*)`)
         .eq(queryField, userId)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
 
-      if (rideData) {
-          // Se encontrou corrida, busca os detalhes do outro participante manualmente
-          const otherUserId = role === 'driver' ? rideData.customer_id : rideData.driver_id;
-          let otherUserProfile = null;
-          
-          if (otherUserId) {
-              const { data: profile } = await supabase.from('profiles').select('*').eq('id', otherUserId).maybeSingle();
-              otherUserProfile = profile;
-          }
-
-          // Monta o objeto completo
-          const fullRide = {
-              ...rideData,
-              driver_details: role === 'client' ? otherUserProfile : null, // Se eu sou cliente, o outro é motorista
-              client_details: role === 'driver' ? otherUserProfile : null  // Se eu sou motorista, o outro é cliente
-          };
-
-          if (dismissedRidesRef.current.includes(fullRide.id)) {
+      if (data) {
+          if (dismissedRidesRef.current.includes(data.id)) {
               setRide(null);
               return;
           }
 
-          const isFinished = ['CANCELLED', 'COMPLETED'].includes(fullRide.status);
+          const isFinished = ['CANCELLED', 'COMPLETED'].includes(data.status);
           if (isFinished) {
-              const hasRated = role === 'driver' ? !!fullRide.customer_rating : !!fullRide.driver_rating;
+              const hasRated = role === 'driver' ? !!data.customer_rating : !!data.driver_rating;
               if (hasRated) {
                   setRide(null); 
                   return;
               }
-              const updatedAt = new Date(fullRide.created_at).getTime();
+              const updatedAt = new Date(data.created_at).getTime();
               const now = new Date().getTime();
               if ((now - updatedAt) / 1000 / 60 < 60) {
-                  setRide(fullRide);
+                  setRide(data);
               } else {
                   setRide(null);
               }
           } else {
-              setRide(fullRide);
+              setRide(data);
           }
       } else {
           setRide(null);
@@ -127,11 +110,9 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
       const role = userRoleRef.current;
       const uid = currentUserIdRef.current;
       
-      // Só busca se for motorista logado
       if (role !== 'driver' || !uid) return;
 
       try {
-          // 1. Busca corridas SEARCHING sem motorista (Query Simples e Rápida)
           const { data: ridesData, error: ridesError } = await supabase
             .from('rides')
             .select('*')
@@ -142,10 +123,7 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
           if (ridesError) throw ridesError;
 
           if (ridesData && ridesData.length > 0) {
-              // 2. Busca os perfis dos passageiros dessas corridas
               const clientIds = ridesData.map(r => r.customer_id);
-              
-              // Remove duplicatas de IDs para otimizar query
               const uniqueClientIds = [...new Set(clientIds)];
               
               const { data: profilesData, error: profilesError } = await supabase
@@ -155,20 +133,18 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
                 
               if (profilesError) throw profilesError;
 
-              // 3. Junta os dados manualmente (Manual Join)
               const enrichedRides = ridesData.map(r => {
                   const clientProfile = profilesData?.find(p => p.id === r.customer_id);
                   return {
                       ...r,
-                      client_details: clientProfile || { first_name: 'Passageiro', last_name: '' } // Fallback se perfil não carregar
+                      client_details: clientProfile || { first_name: 'Passageiro', last_name: '' }
                   };
               });
 
-              // 4. Filtra corridas inválidas ( rejeitadas ou do próprio usuário )
               const validRides = enrichedRides.filter(r => {
-                  if (r.customer_id === uid) return false; // Não mostrar minhas próprias solicitações
-                  if (rejectedIdsRef.current.includes(r.id)) return false; // Rejeitada na sessão atual
-                  if (r.rejected_by && Array.isArray(r.rejected_by) && r.rejected_by.includes(uid)) return false; // Rejeitada no banco
+                  if (r.customer_id === uid) return false;
+                  if (rejectedIdsRef.current.includes(r.id)) return false; 
+                  if (r.rejected_by && Array.isArray(r.rejected_by) && r.rejected_by.includes(uid)) return false; 
                   return true;
               });
               
@@ -186,7 +162,6 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
             setCurrentUserId(session.user.id);
-            // Pequeno delay para garantir que o role foi setado antes de buscar
             setTimeout(() => fetchActiveRide(session.user.id), 500);
         }
     };
@@ -206,7 +181,6 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
     return () => { authListener.subscription.unsubscribe(); };
   }, []);
 
-  // Polling para Active Ride (Status da viagem atual)
   useEffect(() => {
       let interval: NodeJS.Timeout;
       const shouldPoll = currentUserId; 
@@ -216,20 +190,17 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
           }, 4000);
       }
       return () => { if (interval) clearInterval(interval); };
-  }, [currentUserId, userRole]); // Removido ride dependency para evitar loops, polling constante é mais seguro
+  }, [currentUserId, userRole]); 
 
-  // Polling para Available Rides (Apenas motorista livre)
   useEffect(() => {
       let interval: NodeJS.Timeout;
-      // Se sou motorista E não estou em corrida
       if (currentUserId && userRole === 'driver' && !ride) {
-          fetchAvailableRides(); // Busca imediata ao ficar livre
+          fetchAvailableRides(); 
           interval = setInterval(fetchAvailableRides, 5000); 
       }
       return () => { if (interval) clearInterval(interval); };
-  }, [currentUserId, userRole, ride]); // Se 'ride' mudar (ficar null), ativa o polling
+  }, [currentUserId, userRole, ride]); 
 
-  // Realtime Subscription OTIMIZADA
   useEffect(() => {
     const channel = supabase
       .channel('global_ride_sync')
@@ -238,27 +209,18 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
         { event: '*', schema: 'public', table: 'rides' },
         async (payload) => {
             const newRecord = payload.new as any;
-            const oldRecord = payload.old as any;
             const uid = currentUserIdRef.current;
             const role = userRoleRef.current;
             
-            // 1. Nova solicitação criada (INSERT)
             if (payload.eventType === 'INSERT' && role === 'driver' && newRecord.status === 'SEARCHING' && !newRecord.driver_id) {
-                console.log("Realtime: Nova corrida detectada!");
                 await fetchAvailableRides();
             }
-            
-            // 2. Atualização de status (UPDATE)
             else if (payload.eventType === 'UPDATE') {
-                // Se sou motorista e a corrida que estava disponível mudou (foi aceita por outro ou cancelada)
                 if (role === 'driver') {
-                    // Se a corrida não está mais SEARCHING ou ganhou motorista, remove da lista
                     if (newRecord.status !== 'SEARCHING' || newRecord.driver_id) {
                         setAvailableRides(prev => prev.filter(r => r.id !== newRecord.id));
                     }
                 }
-                
-                // Se a atualização é relevante para mim (sou passageiro ou motorista dessa corrida)
                 const isRelatedToMe = (newRecord?.customer_id === uid) || (newRecord?.driver_id === uid);
                 if (isRelatedToMe && uid) {
                     await fetchActiveRide(uid);
@@ -307,7 +269,6 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
       if (dismissedRidesRef.current.length > 50) dismissedRidesRef.current = [];
       
       setRide(data);
-      // Força atualização imediata
       await fetchActiveRide(currentUserId);
     } catch (e: any) { 
         console.error("Request Error", e);
@@ -317,15 +278,11 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
 
   const cancelRide = async (rideId: string, reason?: string) => {
     try {
-        // Tenta RPC primeiro (mais seguro para transações financeiras)
         const { error } = await supabase.rpc('cancel_ride_as_user', { ride_id_to_cancel: rideId });
-        
         if (error) {
             console.warn("RPC falhou, tentando update direto:", error);
-            // Fallback: Update direto
             await supabase.from('rides').update({ status: 'CANCELLED' }).eq('id', rideId);
         }
-        
         if(currentUserId) await fetchActiveRide(currentUserId); 
         toast({ title: "Cancelado", description: reason || "Corrida cancelada." });
     } catch (e: any) { 
@@ -336,18 +293,35 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
   const acceptRide = async (rideId: string) => {
      if (!currentUserId) return;
      try {
-         // Verifica se já não foi aceita por outro
-         const { data: check } = await supabase.from('rides').select('driver_id').eq('id', rideId).single();
-         if (check?.driver_id) {
-             toast({ title: "Perdeu!", description: "Outro motorista aceitou antes.", variant: "destructive" });
+         // --- TRAVA ATÔMICA (ANTI-CONFLITO) ---
+         // Tentamos atualizar a corrida APENAS SE o driver_id for null.
+         // Se alguém já tiver aceitado, 'data' virá vazio porque a condição .is('driver_id', null) falhará.
+         const { data, error } = await supabase
+            .from('rides')
+            .update({ status: 'ACCEPTED', driver_id: currentUserId })
+            .eq('id', rideId)
+            .is('driver_id', null) // <--- O SEGREDO ESTÁ AQUI
+            .select();
+
+         if (error) throw error;
+
+         // Verificação de Sucesso
+         if (!data || data.length === 0) {
+             // Se entrou aqui, é porque a condição .is('driver_id', null) falhou
+             // Significa que outro motorista aceitou milissegundos antes
+             toast({ 
+                 title: "Corrida Indisponível", 
+                 description: "Outro motorista aceitou esta corrida.", 
+                 variant: "destructive" 
+             });
+             
+             // Remove da lista para não tentar de novo
+             if (!rejectedIdsRef.current.includes(rideId)) rejectedIdsRef.current.push(rideId);
              setAvailableRides(prev => prev.filter(r => r.id !== rideId));
              return;
          }
          
-         const { error } = await supabase.from('rides').update({ status: 'ACCEPTED', driver_id: currentUserId }).eq('id', rideId);
-         if (error) throw error;
-         
-         toast({ title: "Corrida Aceita!", description: "Dirija-se ao passageiro." });
+         toast({ title: "Sucesso!", description: "Corrida aceita. Dirija-se ao local." });
          await fetchActiveRide(currentUserId);
      } catch (e: any) { 
          toast({ title: "Erro", description: "Falha ao aceitar corrida." }); 
@@ -355,10 +329,8 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const rejectRide = async (rideId: string) => {
-      // Remove visualmente na hora
       if (!rejectedIdsRef.current.includes(rideId)) rejectedIdsRef.current.push(rideId);
       setAvailableRides(prev => prev.filter(r => r.id !== rideId));
-      
       try { await supabase.rpc('reject_ride', { ride_id_param: rideId }); } catch (err) { console.error(err); }
   };
 
@@ -398,7 +370,7 @@ export const RideProvider = ({ children }: { children: React.ReactNode }) => {
           dismissedRidesRef.current.push(rideId);
           setRide(null); 
           
-          toast({ title: "Avaliado", description: "Obrigado pelo feedback!" });
+          toast({ title: "Obrigado", description: "Avaliação enviada." });
       } catch (e: any) { toast({ title: "Erro", description: e.message }); }
   };
 
