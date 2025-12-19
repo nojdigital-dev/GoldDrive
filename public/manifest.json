@@ -1,0 +1,23 @@
+{
+  "name": "Gold Mobile",
+  "short_name": "Gold Mobile",
+  "description": "Sua plataforma premium de mobilidade urbana.",
+  "theme_color": "#EAB308",
+  "background_color": "#ffffff",
+  "display": "standalone",
+  "orientation": "portrait",
+  "scope": "/",
+  "start_url": "/",
+  "icons": [
+    {
+      "src": "/logo-goldmobile-2.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/logo-goldmobile-2.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
