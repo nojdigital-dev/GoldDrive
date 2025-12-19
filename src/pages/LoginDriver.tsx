@@ -4,10 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
-import { ArrowLeft, Loader2, ArrowRight, Car, Camera, ShieldCheck, Mail, Lock, Phone, CreditCard, ChevronLeft, Eye, EyeOff, KeyRound, Ban, User, FileText } from "lucide-react";
+import { ArrowLeft, Loader2, ArrowRight, Car, Camera, ShieldCheck, Mail, Lock, Phone, CreditCard, ChevronLeft, Eye, EyeOff, KeyRound, Ban, User, FileText, Smartphone } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/useAuth";
+import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 
 interface FormData {
   firstName: string; lastName: string; email: string; password: string; confirmPassword?: string; cpf: string; phone: string;
@@ -25,6 +26,10 @@ const LoginDriver = () => {
   const [isBlockedModalOpen, setIsBlockedModalOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  
+  // Controle do PWA
+  const [showPwa, setShowPwa] = useState(false);
+
   const [form, setForm] = useState<FormData>({
     firstName: "", lastName: "", email: "", password: "", confirmPassword: "", cpf: "", phone: "",
     facePhoto: null, cnhFront: null, cnhBack: null, carModel: "", carPlate: "", carYear: "", carColor: ""
@@ -100,6 +105,8 @@ const LoginDriver = () => {
 
   return (
     <div className="min-h-screen bg-zinc-950 flex font-sans">
+       <PWAInstallPrompt openForce={showPwa} onCloseForce={() => setShowPwa(false)} />
+
        <Dialog open={isBlockedModalOpen} onOpenChange={setIsBlockedModalOpen}><DialogContent className="rounded-2xl border-0"><div className="text-center p-6"><Ban className="w-16 h-16 text-red-500 mx-auto mb-4" /><h2 className="text-2xl font-black">Bloqueado</h2><p className="text-gray-500 mt-2">Sua conta possui pendências.</p></div></DialogContent></Dialog>
 
        <div className="hidden lg:flex lg:w-1/2 relative items-center justify-center overflow-hidden">
@@ -220,7 +227,19 @@ const LoginDriver = () => {
                        </div>
                    )}
                </div>
-               <p className="text-center text-xs text-zinc-500 mt-8 font-medium">Gold Mobile Driver &copy; 2025</p>
+
+               {/* Footer com botão de Instalar App */}
+               <div className="text-center mt-6">
+                   <Button 
+                        variant="ghost" 
+                        size="sm"
+                        className="text-xs text-zinc-500 hover:text-white hover:bg-zinc-800 gap-2 rounded-full px-4"
+                        onClick={() => setShowPwa(true)}
+                   >
+                        <Smartphone className="w-3 h-3" /> Instalar Aplicativo
+                   </Button>
+                   <p className="text-[10px] text-zinc-600 mt-2 font-medium">Gold Mobile Driver &copy; 2025</p>
+               </div>
            </div>
        </div>
     </div>

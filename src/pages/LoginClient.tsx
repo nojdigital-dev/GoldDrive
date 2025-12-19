@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { showError, showSuccess } from "@/utils/toast";
-import { ArrowLeft, Loader2, ArrowRight, User, Lock, Mail, Eye, EyeOff, Camera, ShieldCheck, ChevronLeft, KeyRound } from "lucide-react";
+import { ArrowLeft, Loader2, ArrowRight, User, Lock, Mail, Eye, EyeOff, Camera, ShieldCheck, ChevronLeft, KeyRound, Smartphone } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 
 const LoginClient = () => {
   const navigate = useNavigate();
@@ -23,6 +24,9 @@ const LoginClient = () => {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string>("");
   const [signUpLoading, setSignUpLoading] = useState(false);
+  
+  // Controle do PWA
+  const [showPwa, setShowPwa] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -89,6 +93,8 @@ const LoginClient = () => {
 
   return (
     <div className="min-h-screen bg-zinc-950 flex font-sans">
+       <PWAInstallPrompt openForce={showPwa} onCloseForce={() => setShowPwa(false)} />
+
        <div className="hidden lg:flex lg:w-1/2 relative items-center justify-center overflow-hidden">
            <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1496442226666-8d4a0e29f122?q=80&w=2576&auto=format&fit=crop')] bg-cover bg-center opacity-40" />
            <div className="absolute inset-0 bg-gradient-to-r from-zinc-950 to-transparent" />
@@ -259,7 +265,19 @@ const LoginClient = () => {
                        </div>
                    )}
                </div>
-               <p className="text-center text-xs text-zinc-500 mt-8 font-medium">Gold Mobile &copy; 2025</p>
+               
+               {/* Footer com botão de Instalar App */}
+               <div className="text-center mt-6">
+                   <Button 
+                        variant="ghost" 
+                        size="sm"
+                        className="text-xs text-zinc-500 hover:text-white hover:bg-zinc-800 gap-2 rounded-full px-4"
+                        onClick={() => setShowPwa(true)}
+                   >
+                        <Smartphone className="w-3 h-3" /> Instalar Aplicativo
+                   </Button>
+                   <p className="text-[10px] text-zinc-600 mt-2 font-medium">Gold Mobile &copy; 2025</p>
+               </div>
            </div>
        </div>
     </div>
